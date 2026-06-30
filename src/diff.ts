@@ -11,6 +11,16 @@
 const FILE_HEADER = "diff --git ";
 const HUNK_HEADER = "@@";
 
+/**
+ * Minimum per-piece character budget (after the repeated file header) below
+ * which we stop trying to subdivide a section. This guards against a
+ * misconfigured tiny `maxChars`, or a pathologically large file header,
+ * driving the line-splitter's budget to zero and shattering a hunk into
+ * one-character pieces — which would otherwise spawn a model request per
+ * character.
+ */
+const MIN_SPLIT_BUDGET = 64;
+
 /** Split a full diff into per-file sections. */
 function splitFileSections(diff: string): string[] {
   const lines = diff.split("\n");
@@ -86,6 +96,11 @@ function breakSection(section: string, maxChars: number): string[] {
 
   const header = lines.slice(0, firstHunk).join("\n");
   const headerLen = header.length + 1; // account for the joining newline
+
+  // If there isn't room for a meaningful piece after repeating the header,
+  // keep the section whole rather than exploding it into tiny fragments.
+  if (maxChars - headerLen < MIN_SPLIT_BUDGET) return [section];
+
   const hunks = groupHunks(lines.slice(firstHunk));
   const units: string[] = [];
 

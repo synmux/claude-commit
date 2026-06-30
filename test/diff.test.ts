@@ -70,7 +70,7 @@ index aaa..bbb 100644
       (_, i) => `@@ -${i},1 +${i},1 @@\n-line ${i} old\n+line ${i} new`,
     );
     const diff = `${header}\n${hunks.join("\n")}`;
-    const budget = header.length + 60;
+    const budget = header.length + 80;
     const chunks = splitDiff(diff, budget);
 
     expect(chunks.length).toBeGreaterThan(1);
@@ -110,5 +110,19 @@ index 000..fff 100644
 Binary files a/img.png and b/img.png differ`;
     const chunks = splitDiff(binary, 10);
     expect(chunks).toEqual([binary]);
+  });
+
+  test("does not explode into tiny pieces when the budget is pathologically small", () => {
+    const header = `diff --git a/x.txt b/x.txt
+--- a/x.txt
++++ b/x.txt`;
+    const hunk =
+      "@@ -1,50 +1,50 @@\n" +
+      Array.from({ length: 50 }, (_, i) => `+line ${i}`).join("\n");
+    const diff = `${header}\n${hunk}`;
+    // Budget smaller than the header itself — splitting per-line would otherwise
+    // shatter the hunk into ~one fragment per character.
+    const chunks = splitDiff(diff, 10);
+    expect(chunks).toEqual([diff]);
   });
 });

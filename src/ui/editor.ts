@@ -4,6 +4,7 @@
  */
 import { spawn } from "node:child_process";
 import { readFile, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
@@ -17,11 +18,10 @@ function resolveEditor(): string {
 
 /** Open `initial` in the user's editor and return the saved contents. */
 export async function editInEditor(initial: string): Promise<string> {
-  const file = join(
-    tmpdir(),
-    `claudecommit-edit-${process.pid}-${Date.now()}.txt`,
-  );
-  await writeFile(file, initial);
+  // Unpredictable name + exclusive create (`wx`) + owner-only perms (0o600)
+  // so the temp file can't be pre-created as a symlink or read by other users.
+  const file = join(tmpdir(), `claudecommit-edit-${randomUUID()}.txt`);
+  await writeFile(file, initial, { mode: 0o600, flag: "wx" });
   try {
     await runEditor(resolveEditor(), file);
     const edited = await readFile(file, "utf8");

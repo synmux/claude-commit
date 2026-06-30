@@ -2,9 +2,6 @@
  * Git operations, implemented with Bun's shell (`Bun.$`).
  */
 import { $ } from "bun";
-import { unlink } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import type { FileChange } from "./types";
 
 export class GitError extends Error {
@@ -66,17 +63,21 @@ export async function getStagedStat(): Promise<string> {
 }
 
 /**
- * Create a commit with the given message. The message is written to a temp file
- * and passed via `git commit -F` so arbitrary content (leading dashes, multiple
- * lines, special characters) is handled safely.
+ * Create a commit with the given message. The message is piped to
+ * `git commit -F -` over stdin, so arbitrary content (leading dashes, multiple
+ * lines, special characters) is handled safely — and nothing touches disk, so
+ * there is no temp file to be raced or read by another user.
  */
 export async function commit(message: string): Promise<void> {
-  const file = join(tmpdir(), `claudecommit-${process.pid}-${Date.now()}.txt`);
-  await Bun.write(file, message);
-  try {
-    await git(["commit", "-F", file]);
-  } finally {
-    await unlink(file).catch(() => {});
+  const proc = Bun.spawn(["git", "commit", "-F", "-"], {
+    stdin: new TextEncoder().encode(message),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    const stderr = (await new Response(proc.stderr).text()).trim();
+    throw new GitError(stderr || `git commit exited with code ${exitCode}`);
   }
 }
 

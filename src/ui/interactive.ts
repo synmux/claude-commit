@@ -159,6 +159,7 @@ async function selectWithTui(
       renderer.root.add(root);
 
       onKey = (key) => {
+        if (!key) return; // some terminals can emit empty/unknown key events
         switch (key.name) {
           case "up":
           case "k":

@@ -97,8 +97,10 @@ async function findConfigFile(
 ): Promise<string | undefined> {
   let dir = resolve(startDir);
   const stop = resolve(rootDir);
-  // Guard against an infinite loop if startDir is not under rootDir.
-  for (let i = 0; i < 64; i++) {
+  // Always terminates: we stop at `rootDir`, and `dirname` of the filesystem
+  // root returns itself (`parent === dir`), so even when `startDir` is not under
+  // `rootDir` the walk halts at the root regardless of directory depth.
+  for (;;) {
     for (const name of CONFIG_FILENAMES) {
       const candidate = join(dir, name);
       if (await Bun.file(candidate).exists()) return candidate;
