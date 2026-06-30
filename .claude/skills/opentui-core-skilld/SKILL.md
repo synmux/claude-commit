@@ -1,6 +1,6 @@
 ---
 name: opentui-core-skilld
-description: "ALWAYS use when writing code importing \"@opentui/core\". Consult for debugging, best practices, or modifying @opentui/core, opentui/core, opentui core, opentui."
+description: 'ALWAYS use when writing code importing "@opentui/core". Consult for debugging, best practices, or modifying @opentui/core, opentui/core, opentui core, opentui.'
 metadata:
   version: 0.4.2
   generated_by: Anthropic · Haiku 4.5
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # anomalyco/opentui `@opentui/core@0.4.2`
+
 **Tags:** latest: 0.4.2, snapshot: 0.0.0-20260616-38ae4bd9
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p @opentui/core` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @opentui/core` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## API Changes
 
 This section documents version-specific API changes in @opentui/core v0.4.2 — prioritise recent major/minor releases when working with newer code.
@@ -52,9 +54,11 @@ This section documents version-specific API changes in @opentui/core v0.4.2 — 
 - Clipboard OSC 52 probing — v0.4.2 now probes `OSC 52` clipboard support at startup, changing clipboard availability detection [source](./.skilld/releases/v0.4.2.md#whats-changed:L13)
 
 **Also changed:** QR code component in v0.2.15 · Shell detection (zellij, remote shells) in v0.3.0 · Markdown block spacing fixes across v0.2.x–v0.3.x · CJK text rendering fixes
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Best Practices
 
 - Forward environment variables to renderer on remote sessions — `config.forwardEnvKeys` or explicit `config.remote` control over auto-detection. Without explicit forwarding, remote processes lose local terminal environment needed for capability heuristics [source](./.skilld/docs/src/specs/terminal-startup.md#current-gaps)
@@ -84,4 +88,5 @@ This section documents version-specific API changes in @opentui/core v0.4.2 — 
 - Configure `bufferedOutput` for custom stdout routing — pass a `NativeBufferedOutput` to handle backpressure and capture output in non-terminal contexts (e.g., SSH or custom pipelines) [source](./.skilld/node_modules/@opentui/core/renderer.d.ts:L21)
 
 - Listen for `FRAME` events to drive custom render loops — emit after native render completes; use `gatherStats: true` to collect frame timing data for performance profiling [source](./.skilld/node_modules/@opentui/core/renderer.d.ts:L72:74)
+
 <!-- /skilld:best-practices -->

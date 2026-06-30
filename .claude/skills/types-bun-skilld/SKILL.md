@@ -1,6 +1,6 @@
 ---
 name: types-bun-skilld
-description: "TypeScript definitions for bun. ALWAYS use when writing code importing \"@types/bun\". Consult for debugging, best practices, or modifying @types/bun, types/bun, types bun, DefinitelyTyped."
+description: 'TypeScript definitions for bun. ALWAYS use when writing code importing "@types/bun". Consult for debugging, best practices, or modifying @types/bun, types/bun, types bun, DefinitelyTyped.'
 metadata:
   version: 1.3.14
   generated_by: cached
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # DefinitelyTyped/DefinitelyTyped `@types/bun@1.3.14`
+
 **Tags:** ts4.6: 1.0.8, ts4.7: 1.1.5, ts4.8: 1.1.13
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Issues](./.skilld/issues/_INDEX.md) • [Discussions](./.skilld/discussions/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p @types/bun` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @types/bun` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## API Changes
 
 This section documents version-specific API changes in @types/bun v1.3.14 — prioritize recent breaking changes and migrations.
@@ -48,9 +50,11 @@ This section documents version-specific API changes in @types/bun v1.3.14 — pr
 - DEPRECATED: `Database.exec()` — method alias, prefer `Database.run()` instead [source](./.skilld/pkg/sqlite.d.ts:L191)
 
 **Also changed:** `Bun.Spawn` import deprecated · `readableStreamToBlob.formData()` on Blob · `CustomEvent.initCustomEvent()` deprecated · `DOMException.code` deprecated · `Platform` type unused · `Architecture` type unused · `ShellFunction` type unused · `ReadableIO` type unused · `Process.assert()` use "node:assert" instead · `BunMessageEvent.initMessageEvent()` deprecated
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Best Practices
 
 - Include `"types": ["bun"]` in `compilerOptions` for TypeScript 6.0+ — enables proper type inference for the Bun global [source](./.skilld/docs/typescript.mdx:L43)
@@ -82,4 +86,5 @@ const buffer = Bun.allocUnsafe(1024);
 - Use `"jsx": "react-jsx"` for automatic JSX element transformation — Bun's type definitions assume this setting for JSX support [source](./.skilld/docs/typescript.mdx:L40)
 
 - Set `"lib": ["ESNext"]` and `"target": "ESNext"` — Bun supports all modern JavaScript features (top-level await, decorators, etc.) and type definitions target ESNext [source](./.skilld/docs/typescript.mdx:L37,L38)
+
 <!-- /skilld:best-practices -->

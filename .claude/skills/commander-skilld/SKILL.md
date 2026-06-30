@@ -1,6 +1,6 @@
 ---
 name: commander-skilld
-description: "ALWAYS use when writing code importing \"commander\". Consult for debugging, best practices, or modifying commander, commander.js."
+description: 'ALWAYS use when writing code importing "commander". Consult for debugging, best practices, or modifying commander, commander.js.'
 metadata:
   version: 15.0.0
   generated_by: Anthropic · Haiku 4.5
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # tj/commander.js `commander@15.0.0`
+
 **Tags:** 2_x: 2.20.3, latest: 15.0.0, next: 15.0.0-0
 
 **References:** [package.json](./.skilld/pkg/package.json) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p commander` instead of grepping `.skilld/` directories. Run `skilld search --guide -p commander` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## Commander API Changes
 
 This section documents version-specific API changes in commander, focusing on breaking changes, newly introduced APIs, and deprecated functionality that LLMs trained on older data will get wrong.
@@ -47,10 +49,10 @@ The explicit ESM entry point `commander/esm.mjs` has been removed. Import direct
 
 ```js
 // OLD (no longer works)
-import { Command } from 'commander/esm.mjs';
+import { Command } from "commander/esm.mjs";
 
 // NEW (use this)
-import { Command } from 'commander';
+import { Command } from "commander";
 ```
 
 ### NEW: `.helpGroup()`, `.optionsGroup()`, and `.commandsGroup()` for grouping
@@ -58,17 +60,17 @@ import { Command } from 'commander';
 v14 introduced support for grouping options and commands in the help output. Use `.helpGroup()` on individual `Option` and `Command` objects, or chain `.optionsGroup()` and `.commandsGroup()` to set the group for following options/commands [source](./.skilld/releases/v14.0.0.md:L11-L13).
 
 ```ts
-const option = new Option('--flag', 'description');
-option.helpGroup('Advanced Options');
+const option = new Option("--flag", "description");
+option.helpGroup("Advanced Options");
 program.addOption(option);
 
 // or chain style:
 program
-  .optionsGroup('Common Options')
-  .option('--port <number>', 'port')
-  .option('--host <string>', 'host')
-  .optionsGroup('Advanced')
-  .option('--debug', 'debug mode');
+  .optionsGroup("Common Options")
+  .option("--port <number>", "port")
+  .option("--host <string>", "host")
+  .optionsGroup("Advanced")
+  .option("--debug", "debug mode");
 ```
 
 ### NEW: Support for unescaped negative numbers
@@ -77,8 +79,8 @@ v14 added support for negative numbers as option and command arguments without r
 
 ```js
 // This now works directly in v14+
-program.option('--count <number>');
-program.parse(['-5', '--count', '-10']);
+program.option("--count <number>");
+program.parse(["-5", "--count", "-10"]);
 ```
 
 ### NEW: `Argument.parseArg` TypeScript property
@@ -87,7 +89,7 @@ TypeScript now properly reflects the `parseArg` property on the `Argument` class
 
 ```ts
 // Type-safe in v14+
-const arg = new Argument('<value>');
+const arg = new Argument("<value>");
 arg.parseArg = (value: string, previous: any) => parseInt(value, 10);
 ```
 
@@ -99,14 +101,14 @@ Old code that relied on catching excess arguments will break:
 
 ```js
 // v12 and earlier: excess args silently allowed
-program.option('-p, --port <number>');
+program.option("-p, --port <number>");
 program.action((options) => {
   console.log(program.args); // ['a', 'b', 'c'] when called with "a b c"
 });
 
 // v13+: throws "error: too many arguments. Expected 0 arguments but got 3"
 // Fix: declare the expected arguments
-program.argument('[args...]', 'variadic arguments');
+program.argument("[args...]", "variadic arguments");
 program.action((args, options) => {
   console.log(args); // ['a', 'b', 'c']
 });
@@ -118,6 +120,7 @@ program.allowExcessArguments();
 ### NEW: Help formatting methods in v13
 
 v13 added new public methods to the `Help` class for styling and layout:
+
 - `.displayWidth()` — display width of string, ignoring ANSI escapes
 - `.styleTitle()`, `.styleUsage()`, `.styleCommandText()` and related style methods
 - `.boxWrap()` — wrap text at whitespace
@@ -135,6 +138,7 @@ v13 introduced `.saveStateBeforeParse()` and `.restoreStateBeforeParse()` method
 ### NEW: Color support in `.configureOutput()`
 
 v13 added colour-related helpers to `.configureOutput()`:
+
 - `getOutHasColors()` — whether output stream supports colours
 - `getErrHasColors()` — whether error stream supports colours
 - `stripColor()` — remove ANSI colour codes from string
@@ -147,7 +151,7 @@ v13 changed to throw during Option construction if option flags are unsupported,
 
 ```js
 // v12 and earlier: silently ignored or processed
-new Option('-ws'); // previously accepted
+new Option("-ws"); // previously accepted
 
 // v13+: throws immediately
 // Error: options with short flags must be a single character
@@ -180,11 +184,12 @@ program.configureOutput(config);
 ### NEW: `.helpCommand()` and `.addHelpOption()` in v12
 
 v12 introduced two new configuration methods:
+
 - `.helpCommand()` — configure the built-in help command (replaces deprecated `.addHelpCommand(string|boolean)`)
 - `.addHelpOption()` — alternative way to configure the built-in help option [source](./.skilld/releases/v12.0.0.md:L11-L12).
 
 ```ts
-program.helpCommand('assist [command]');
+program.helpCommand("assist [command]");
 program.helpCommand(false); // disable help command
 program.addHelpOption(); // enable/configure help option
 ```
@@ -194,8 +199,8 @@ program.addHelpOption(); // enable/configure help option
 v12 throws an error if you attempt to add an option with a flag that is already in use. Previously this was silently allowed [source](./.skilld/releases/v12.0.0.md:L22).
 
 ```js
-program.option('--port <number>');
-program.option('--port <string>'); // v12+: throws error
+program.option("--port <number>");
+program.option("--port <string>"); // v12+: throws error
 ```
 
 ### BREAKING: Duplicate command names throw in v12
@@ -216,12 +221,12 @@ The default CommonJS export of a global Command instance was removed. Use the na
 
 ```js
 // v11 and earlier (no longer works)
-const program = require('commander');
+const program = require("commander");
 
 // v12+ (use this)
-const { program } = require('commander');
+const { program } = require("commander");
 // or
-const { Command } = require('commander');
+const { Command } = require("commander");
 const program = new Command();
 ```
 
@@ -244,9 +249,11 @@ Passing a string or boolean to `.addHelpCommand()` is deprecated as of v12. Use 
 - `noHelp` — renamed to `hidden` in v5.1 (deprecated from v7)
 
 **Also changed:** Node.js v18 baseline (v12) · Node.js v20 baseline (v14) · Node.js v22.12.0 baseline (v15) · Leading/trailing spaces ignored by `.arguments()` (v11) · `.passThroughOptions` constraints in `.addCommand()` (v12) · Help class refactoring (v13)
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Best Practices
 
 - Declare command arguments explicitly with `.argument()` for clarity — avoid relying on implicit command-arguments captured by `program.args`, which provides less help text control and makes the API contract unclear [source](./.skilld/docs/deprecated.md#cmddescriptioncmddescription-argdescriptions)
@@ -274,4 +281,5 @@ Passing a string or boolean to `.addHelpCommand()` is deprecated as of v12. Use 
 - Use `.hook()` for lifecycle events (`preSubcommand`, `preAction`, `postAction`) instead of event emitters like `.on('--help')` — composable and supports async handlers [source](./.skilld/docs/parsing-and-hooks.md:L1:24)
 
 - Define options with dual long flags like `--ws, --workspace` to allow memorable abbreviated aliases — more ergonomic than single-character short flags for frequently-used options (v13.1+) [source](./.skilld/releases/v13.1.0.md:L10)
+
 <!-- /skilld:best-practices -->
