@@ -27,6 +27,12 @@ export interface Config {
   customPrompt: string | null;
   /** How many candidate messages to generate in interactive mode. */
   interactiveCount: number;
+  /**
+   * Sampling temperature for the final model when generating interactive
+   * options, to encourage variety between candidates. `null` leaves the model
+   * at its default. Only applied in interactive mode.
+   */
+  interactiveTemperature: number | null;
   /** Models for each pipeline stage. */
   models: ModelConfig;
   /**

@@ -100,9 +100,11 @@ generates and commits (or prints, with `--dry-run`).
 
 ## Interactive mode
 
-`cc -i` opens a TUI showing the diff stat alongside several candidate messages.
-Use the arrow keys to move, `Enter` to commit the highlighted option, `e` to edit
-it first, and `q`/`Esc` to cancel.
+`cc -i` opens a TUI showing the staged **diff** alongside several candidate
+messages. The options are generated with a higher temperature
+(`interactiveTemperature`) for more variety. Use the arrow keys to move between
+options, `PgUp`/`PgDn` to scroll the diff, `Enter` to commit the highlighted
+option, `e` to edit it in your `$EDITOR` first, and `q`/`Esc` to cancel.
 
 ## Configuration
 
@@ -118,6 +120,7 @@ always win.
   "template": null,
   "customPrompt": "Reference the ticket id from the branch name when present.",
   "interactiveCount": 3,
+  "interactiveTemperature": 1,
   "models": {
     "summary": "sonnet[1m]",
     "final": "haiku"

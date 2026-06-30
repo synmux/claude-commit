@@ -28,6 +28,32 @@ export interface RunPromptOptions {
   abortController?: AbortController;
   /** Receives the underlying CLI's stderr (for `--verbose`). */
   onStderr?: (data: string) => void;
+  /**
+   * Sampling temperature. Passed to the model via `CLAUDE_CODE_EXTRA_BODY`.
+   * Used to add variety when generating several interactive options. Models
+   * that don't accept a temperature override will reject the request, so the
+   * caller should be prepared to retry without it.
+   */
+  temperature?: number;
+}
+
+/** Build the subprocess env that injects a temperature override, preserving any existing extra body. */
+function envWithTemperature(
+  temperature: number,
+): Record<string, string | undefined> {
+  let extra: Record<string, unknown> = {};
+  const existing = process.env.CLAUDE_CODE_EXTRA_BODY;
+  if (existing) {
+    try {
+      extra = JSON.parse(existing);
+    } catch {
+      /* ignore a malformed existing value */
+    }
+  }
+  return {
+    ...process.env,
+    CLAUDE_CODE_EXTRA_BODY: JSON.stringify({ ...extra, temperature }),
+  };
 }
 
 /** Map a known SDK assistant error code to a friendlier, actionable message. */
@@ -72,6 +98,9 @@ export async function runPrompt(
     includePartialMessages: Boolean(opts.onText),
     ...(opts.abortController ? { abortController: opts.abortController } : {}),
     ...(opts.onStderr ? { stderr: opts.onStderr } : {}),
+    ...(opts.temperature != null
+      ? { env: envWithTemperature(opts.temperature) }
+      : {}),
   };
 
   let resultText: string | null = null;

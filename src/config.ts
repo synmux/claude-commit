@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG: Config = {
   template: null,
   customPrompt: null,
   interactiveCount: 3,
+  interactiveTemperature: 1,
   models: {
     summary: "sonnet[1m]",
     final: "haiku",
@@ -59,6 +60,17 @@ export function sanitizePartial(raw: unknown): PartialConfig {
     Number.isFinite(obj.interactiveCount)
   ) {
     out.interactiveCount = Math.max(1, Math.floor(obj.interactiveCount));
+  }
+  if (obj.interactiveTemperature === null) {
+    out.interactiveTemperature = null;
+  } else if (
+    typeof obj.interactiveTemperature === "number" &&
+    Number.isFinite(obj.interactiveTemperature)
+  ) {
+    out.interactiveTemperature = Math.min(
+      2,
+      Math.max(0, obj.interactiveTemperature),
+    );
   }
   if (typeof obj.maxChunkTokens === "number" && obj.maxChunkTokens > 0) {
     out.maxChunkTokens = Math.floor(obj.maxChunkTokens);

@@ -89,12 +89,29 @@ export async function generateCommit(
   progress.onPhase?.(
     count > 1 ? "Writing commit options" : "Writing commit message",
   );
-  const finalResult = await runPrompt(buildFinalUser(summaries, count), {
+  const finalPrompt = buildFinalUser(summaries, count);
+  const finalOpts = {
     model: config.models.final,
     system: buildFinalSystem(config),
     ...(progress.onText ? { onText: progress.onText } : {}),
     ...(abortController ? { abortController } : {}),
-  });
+  };
+  // Bump the temperature when producing several options, for more variety.
+  // Some models reject a temperature override, so fall back to the default.
+  const useTemperature = count > 1 && config.interactiveTemperature != null;
+  let finalResult;
+  if (useTemperature) {
+    try {
+      finalResult = await runPrompt(finalPrompt, {
+        ...finalOpts,
+        temperature: config.interactiveTemperature!,
+      });
+    } catch {
+      finalResult = await runPrompt(finalPrompt, finalOpts);
+    }
+  } else {
+    finalResult = await runPrompt(finalPrompt, finalOpts);
+  }
   costUsd += finalResult.costUsd;
 
   const messages =

@@ -35,6 +35,30 @@ describe("sanitizePartial", () => {
     expect(sanitizePartial(null)).toEqual({});
     expect(sanitizePartial("x")).toEqual({});
   });
+
+  test("interactiveTemperature: accepts null, clamps to 0..2, ignores bad types", () => {
+    expect(
+      sanitizePartial({ interactiveTemperature: null }).interactiveTemperature,
+    ).toBe(null);
+    expect(
+      sanitizePartial({ interactiveTemperature: 0.8 }).interactiveTemperature,
+    ).toBe(0.8);
+    expect(
+      sanitizePartial({ interactiveTemperature: 5 }).interactiveTemperature,
+    ).toBe(2);
+    expect(
+      sanitizePartial({ interactiveTemperature: -1 }).interactiveTemperature,
+    ).toBe(0);
+    expect(
+      sanitizePartial({ interactiveTemperature: "hot" }).interactiveTemperature,
+    ).toBeUndefined();
+  });
+});
+
+describe("default config", () => {
+  test("bumps interactive temperature by default", () => {
+    expect(DEFAULT_CONFIG.interactiveTemperature).toBe(1);
+  });
 });
 
 describe("mergeConfig / mergePartial", () => {

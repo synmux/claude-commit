@@ -8,7 +8,7 @@
  * fall back to a plain readline prompt.
  */
 import { createInterface } from "node:readline";
-import { commit, getStagedStat } from "../git";
+import { commit } from "../git";
 import { generateCommit } from "../generate";
 import { Spinner } from "./spinner";
 import { editInEditor } from "./editor";
@@ -45,12 +45,11 @@ export async function runInteractive(
   }
   spinner.stop();
 
-  const stat = await getStagedStat().catch(() => "");
   const messages = result.messages;
 
   let selection: Selection;
   try {
-    selection = await selectWithTui(messages, stat);
+    selection = await selectWithTui(messages, diff);
   } catch {
     // TUI failed to initialize (unusual terminal, etc.) — degrade gracefully.
     selection = await selectWithReadline(messages);
@@ -80,13 +79,23 @@ export async function runInteractive(
   return 0;
 }
 
+/** Max characters of diff to render in the TUI (display only; the full diff is still summarized). */
+const MAX_DIFF_DISPLAY_CHARS = 100_000;
+/** Rows scrolled per PageUp/PageDown press. */
+const SCROLL_STEP = 10;
+
 /** The OpenTUI selection screen. Resolves with the user's choice. */
 async function selectWithTui(
   messages: string[],
-  stat: string,
+  diff: string,
 ): Promise<Selection> {
-  const { createCliRenderer, BoxRenderable, TextRenderable, SelectRenderable } =
-    await import("@opentui/core");
+  const {
+    createCliRenderer,
+    BoxRenderable,
+    TextRenderable,
+    SelectRenderable,
+    ScrollBoxRenderable,
+  } = await import("@opentui/core");
 
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
 
@@ -124,18 +133,25 @@ async function selectWithTui(
 
       const header = new TextRenderable(renderer, {
         content:
-          "Pick a commit message    ↑/↓ move · ⏎ commit · e edit · q cancel",
+          "Pick a commit message   ↑/↓ select · PgUp/PgDn scroll diff · ⏎ commit · e edit · q cancel",
       });
 
-      const statBox = new BoxRenderable(renderer, {
+      const shownDiff =
+        diff.length > MAX_DIFF_DISPLAY_CHARS
+          ? diff.slice(0, MAX_DIFF_DISPLAY_CHARS) +
+            "\n… (diff truncated for display)"
+          : diff;
+      const diffBox = new ScrollBoxRenderable(renderer, {
+        flexGrow: 2,
         border: true,
         borderColor: "gray",
-        title: "Staged changes",
+        title: "Staged diff",
+        scrollY: true,
         padding: 0,
       });
-      statBox.add(
+      diffBox.add(
         new TextRenderable(renderer, {
-          content: stat.trim() || "(no diff stat available)",
+          content: shownDiff.trimEnd() || "(no diff)",
         }),
       );
 
@@ -154,7 +170,7 @@ async function selectWithTui(
       });
 
       root.add(header);
-      root.add(statBox);
+      root.add(diffBox);
       root.add(select);
       renderer.root.add(root);
 
@@ -169,6 +185,15 @@ async function selectWithTui(
           case "down":
           case "j":
             select.moveDown();
+            renderer.requestRender();
+            break;
+          case "pageup":
+            diffBox.scrollBy(-SCROLL_STEP);
+            renderer.requestRender();
+            break;
+          case "pagedown":
+          case "space":
+            diffBox.scrollBy(SCROLL_STEP);
             renderer.requestRender();
             break;
           case "return":
