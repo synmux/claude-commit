@@ -179,40 +179,47 @@ async function selectWithTui(
 
       onKey = (key) => {
         if (!key) return; // some terminals can emit empty/unknown key events
-        switch (key.name) {
-          case "up":
-          case "k":
-            select.moveUp();
-            renderer.requestRender();
-            break;
-          case "down":
-          case "j":
-            select.moveDown();
-            renderer.requestRender();
-            break;
-          case "pageup":
-            diffBox.scrollBy(-SCROLL_STEP);
-            renderer.requestRender();
-            break;
-          case "pagedown":
-          case "space":
-            diffBox.scrollBy(SCROLL_STEP);
-            renderer.requestRender();
-            break;
-          case "return":
-          case "enter":
-            finish({ action: "commit", index: select.getSelectedIndex() });
-            break;
-          case "e":
-            finish({ action: "edit", index: select.getSelectedIndex() });
-            break;
-          case "q":
-          case "escape":
-            finish({ action: "cancel" });
-            break;
-          case "c":
-            if (key.ctrl) finish({ action: "cancel" });
-            break;
+        try {
+          switch (key.name) {
+            case "up":
+            case "k":
+              select.moveUp();
+              renderer.requestRender();
+              break;
+            case "down":
+            case "j":
+              select.moveDown();
+              renderer.requestRender();
+              break;
+            case "pageup":
+              diffBox.scrollBy(-SCROLL_STEP);
+              renderer.requestRender();
+              break;
+            case "pagedown":
+            case "space":
+              diffBox.scrollBy(SCROLL_STEP);
+              renderer.requestRender();
+              break;
+            case "return":
+            case "enter":
+              finish({ action: "commit", index: select.getSelectedIndex() });
+              break;
+            case "e":
+              finish({ action: "edit", index: select.getSelectedIndex() });
+              break;
+            case "q":
+            case "escape":
+              finish({ action: "cancel" });
+              break;
+            case "c":
+              if (key.ctrl) finish({ action: "cancel" });
+              break;
+          }
+        } catch {
+          // A renderable method threw unexpectedly. Rather than let the error
+          // escape the key handler and leave the terminal stuck in raw mode,
+          // cancel cleanly — finish() restores the terminal via cleanup().
+          finish({ action: "cancel" });
         }
       };
 

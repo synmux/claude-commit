@@ -2,15 +2,26 @@
  * Git operations, implemented with Bun's shell (`Bun.$`).
  */
 import { $ } from "bun";
+import { ClaudeCommitError } from "./errors";
 import type { FileChange } from "./types";
 
-export class GitError extends Error {
+/**
+ * A git command failed. Subclasses {@link ClaudeCommitError} so the CLI prints
+ * it as a clean, user-facing error rather than a stack trace.
+ */
+export class GitError extends ClaudeCommitError {
   override name = "GitError";
 }
 
 /** Run a git command, returning stdout. Throws {@link GitError} on failure. */
 async function git(args: string[]): Promise<string> {
-  const res = await $`git ${args}`.quiet().nothrow();
+  let res;
+  try {
+    res = await $`git ${args}`.quiet().nothrow();
+  } catch (err) {
+    // Should not happen with `.nothrow()`, but never let a raw shell error leak.
+    throw new GitError(`Could not run git: ${(err as Error).message}`);
+  }
   if (res.exitCode !== 0) {
     const stderr = res.stderr.toString().trim();
     throw new GitError(
@@ -22,8 +33,13 @@ async function git(args: string[]): Promise<string> {
 
 /** True if the current working directory is inside a git work tree. */
 export async function isGitRepo(): Promise<boolean> {
-  const res = await $`git rev-parse --is-inside-work-tree`.quiet().nothrow();
-  return res.exitCode === 0 && res.stdout.toString().trim() === "true";
+  try {
+    const res = await $`git rev-parse --is-inside-work-tree`.quiet().nothrow();
+    return res.exitCode === 0 && res.stdout.toString().trim() === "true";
+  } catch {
+    // git missing or unrunnable — treat as "not a usable repo".
+    return false;
+  }
 }
 
 /** Absolute path to the repository root. */
@@ -69,11 +85,19 @@ export async function getStagedStat(): Promise<string> {
  * there is no temp file to be raced or read by another user.
  */
 export async function commit(message: string): Promise<void> {
-  const proc = Bun.spawn(["git", "commit", "-F", "-"], {
-    stdin: new TextEncoder().encode(message),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  let proc;
+  try {
+    // `Bun.spawn` throws synchronously if `git` isn't on PATH.
+    proc = Bun.spawn(["git", "commit", "-F", "-"], {
+      stdin: new TextEncoder().encode(message),
+      // We surface our own confirmation, so discard git's stdout summary rather
+      // than leaving an unread pipe that could (in theory) fill and block.
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+  } catch (err) {
+    throw new GitError(`Could not run git: ${(err as Error).message}`);
+  }
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
     const stderr = (await new Response(proc.stderr).text()).trim();

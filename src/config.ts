@@ -5,6 +5,7 @@
  * key) < a `.claudecommit.json` / `.claudecommitrc(.json)` file < CLI flags.
  */
 import { dirname, join, resolve } from "node:path";
+import { ClaudeCommitError } from "./errors";
 import type { Config, ModelConfig, PartialConfig } from "./types";
 
 export const DEFAULT_CONFIG: Config = {
@@ -96,7 +97,7 @@ async function readJsonIfExists(path: string): Promise<unknown | undefined> {
   try {
     return await file.json();
   } catch (err) {
-    throw new Error(
+    throw new ClaudeCommitError(
       `Failed to parse config file ${path}: ${(err as Error).message}`,
     );
   }
@@ -138,7 +139,14 @@ export async function loadFileConfig(
   let result: PartialConfig = {};
 
   // package.json#claudecommit at the repo root (lowest precedence of the files).
-  const pkg = await readJsonIfExists(join(repoRoot, "package.json"));
+  // A malformed package.json is not cc's concern to enforce — skip it rather
+  // than blocking the commit (the user may even be committing its fix).
+  let pkg: unknown;
+  try {
+    pkg = await readJsonIfExists(join(repoRoot, "package.json"));
+  } catch {
+    pkg = undefined;
+  }
   if (pkg && typeof pkg === "object" && "claudecommit" in (pkg as object)) {
     result = mergePartial(
       result,
@@ -152,7 +160,7 @@ export async function loadFileConfig(
   if (filePath) {
     const raw = await readJsonIfExists(filePath);
     if (raw === undefined && configPath) {
-      throw new Error(`Config file not found: ${filePath}`);
+      throw new ClaudeCommitError(`Config file not found: ${filePath}`);
     }
     result = mergePartial(result, sanitizePartial(raw));
   }

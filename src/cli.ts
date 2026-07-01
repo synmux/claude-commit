@@ -121,7 +121,20 @@ export async function run(argv: string[]): Promise<number> {
   const verbose = Boolean(opts.verbose);
 
   const abortController = new AbortController();
-  const onSigint = () => abortController.abort();
+  // Two-stage Ctrl-C: the first interrupt asks the in-flight generation to
+  // cancel gracefully (aborting the SDK subprocess); a second, impatient
+  // interrupt force-quits in case that abort is slow to take effect.
+  let interrupting = false;
+  const onSigint = () => {
+    if (interrupting) {
+      // Second Ctrl-C: force-quit. Restore the cursor in case a spinner hid it,
+      // since this path bypasses the spinner's own cleanup.
+      if (process.stderr.isTTY) process.stderr.write("\x1b[?25h");
+      process.exit(130);
+    }
+    interrupting = true;
+    abortController.abort();
+  };
   process.on("SIGINT", onSigint);
 
   try {
@@ -143,7 +156,9 @@ export async function run(argv: string[]): Promise<number> {
     const diff = await getStagedDiff();
     if (diff.trim() === "") {
       throw new ClaudeCommitError(
-        "No staged changes. Stage files with `git add`, or pass -a/--all to stage everything.",
+        opts.all
+          ? "No changes to commit: the working tree is clean."
+          : "No staged changes. Stage files with `git add`, or pass -a/--all to stage everything.",
       );
     }
 

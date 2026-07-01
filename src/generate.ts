@@ -147,6 +147,9 @@ export async function generateCommit(
       if (messages && messages.length > 0) break;
     } catch (err) {
       lastError = err;
+      // If the run was cancelled, stop retrying: the shared abort signal would
+      // make every remaining attempt fail immediately in the same way.
+      if (abortController?.signal.aborted) break;
     }
   }
 

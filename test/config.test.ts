@@ -139,4 +139,26 @@ describe("loadFileConfig", () => {
   test("an explicit missing config path throws", async () => {
     await expect(loadFileConfig(dir, dir, "nope.json")).rejects.toThrow();
   });
+
+  test("tolerates a malformed package.json instead of blocking", async () => {
+    // package.json has many purposes; a syntax error in it (the user may even
+    // be committing the fix) must not stop cc from loading its own config.
+    await writeFile(join(dir, "package.json"), "{ not: valid json ");
+    await writeFile(
+      join(dir, ".claudecommit.json"),
+      JSON.stringify({ gitmoji: true }),
+    );
+    const cfg = await loadFileConfig(dir, dir);
+    expect(cfg.gitmoji).toBe(true);
+  });
+
+  test("a malformed dedicated config file throws", async () => {
+    await writeFile(join(dir, ".claudecommit.json"), "{ broken ");
+    await expect(loadFileConfig(dir, dir)).rejects.toThrow();
+  });
+
+  test("a malformed explicit --config file throws", async () => {
+    await writeFile(join(dir, "custom.json"), "{ nope ");
+    await expect(loadFileConfig(dir, dir, "custom.json")).rejects.toThrow();
+  });
 });

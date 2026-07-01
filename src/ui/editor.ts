@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
+import { ClaudeCommitError } from "../errors";
 
 /** Resolve the editor command, mirroring git's lookup order. */
 function resolveEditor(): string {
@@ -18,15 +19,27 @@ function resolveEditor(): string {
 
 /** Open `initial` in the user's editor and return the saved contents. */
 export async function editInEditor(initial: string): Promise<string> {
+  const editor = resolveEditor();
   // Unpredictable name + exclusive create (`wx`) + owner-only perms (0o600)
   // so the temp file can't be pre-created as a symlink or read by other users.
   const file = join(tmpdir(), `claudecommit-edit-${randomUUID()}.txt`);
-  await writeFile(file, initial, { mode: 0o600, flag: "wx" });
   try {
-    await runEditor(resolveEditor(), file);
+    await writeFile(file, initial, { mode: 0o600, flag: "wx" });
+  } catch (err) {
+    throw new ClaudeCommitError(
+      `Could not create a temporary file to edit the message: ${(err as Error).message}`,
+    );
+  }
+  try {
+    await runEditor(editor, file);
     const edited = await readFile(file, "utf8");
     // Drop trailing whitespace/newline noise editors tend to add.
     return edited.replace(/\s+$/, "");
+  } catch (err) {
+    if (err instanceof ClaudeCommitError) throw err;
+    throw new ClaudeCommitError(
+      `Editing the commit message failed (${editor}): ${(err as Error).message}`,
+    );
   } finally {
     await unlink(file).catch(() => {});
   }
