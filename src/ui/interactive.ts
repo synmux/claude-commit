@@ -21,8 +21,7 @@ export interface InteractiveOptions {
 }
 
 type Selection =
-  | { action: "commit" | "edit"; index: number }
-  | { action: "cancel" };
+  { action: "commit" | "edit"; index: number } | { action: "cancel" };
 
 /** Run the full interactive flow. Returns a process exit code. */
 export async function runInteractive(
