@@ -27,6 +27,12 @@ lint:
     - prettier@3.9.4
     - trufflehog@3.95.7
     - yamllint@1.38.0
+  ignore:
+    - linters:
+        - ALL
+      paths:
+        - .agents/skills/skilld-lock.yaml
+        - bun.lock
 actions:
   enabled:
     - trunk-announce
