@@ -34,9 +34,15 @@ export async function editInEditor(initial: string): Promise<string> {
 
 function runEditor(editor: string, file: string): Promise<void> {
   return new Promise((resolvePromise, reject) => {
-    // Editor command may include flags (e.g. "code --wait").
-    const [cmd, ...args] = editor.split(/\s+/);
-    const child = spawn(cmd!, [...args, file], { stdio: "inherit" });
+    // $EDITOR / $GIT_EDITOR are shell command lines that may contain flags,
+    // spaces in the program path, or quoted arguments (e.g. "code --wait" or
+    // "/path/with spaces/editor"). Run them through the shell exactly as git
+    // does rather than naively splitting on whitespace. The file path is our
+    // own (tmpdir + UUID), so double-quoting it is safe.
+    const child = spawn(`${editor} "${file}"`, {
+      stdio: "inherit",
+      shell: true,
+    });
     child.on("error", reject);
     child.on("exit", (code) => {
       if (code === 0 || code === null) resolvePromise();

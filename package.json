@@ -2,7 +2,8 @@
   "name": "claudecommit",
   "version": "0.1.0",
   "description": "Generate git commit messages with Claude, using your Claude Code subscription.",
-  "module": "src/cli.ts",
+  "main": "index.ts",
+  "module": "index.ts",
   "type": "module",
   "private": true,
   "bin": {
@@ -11,7 +12,8 @@
   },
   "files": [
     "bin",
-    "src"
+    "src",
+    "index.ts"
   ],
   "devDependencies": {
     "@types/bun": "latest",

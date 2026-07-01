@@ -5,6 +5,8 @@
  * stderr is a TTY; otherwise `start`/`update` are silent no-ops. This keeps the
  * read-only progress indicator out of the way of `cc --dry-run | git commit -F -`.
  */
+import { color } from "./colors";
+
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const INTERVAL_MS = 80;
 
@@ -45,16 +47,18 @@ export class Spinner {
   }
 
   succeed(label: string): void {
-    this.stop(`\x1b[32m✔\x1b[0m ${label}`);
+    this.stop(`${color("32", "✔")} ${label}`);
   }
 
   fail(label: string): void {
-    this.stop(`\x1b[31m✖\x1b[0m ${label}`);
+    this.stop(`${color("31", "✖")} ${label}`);
   }
 
   private render(): void {
+    // `\r\x1b[2K` (cursor return + clear line) only runs when enabled (a TTY);
+    // the frame color additionally respects NO_COLOR via the helper.
     process.stderr.write(
-      `\r\x1b[2K\x1b[36m${FRAMES[this.frame]}\x1b[0m ${this.label}`,
+      `\r\x1b[2K${color("36", FRAMES[this.frame]!)} ${this.label}`,
     );
   }
 

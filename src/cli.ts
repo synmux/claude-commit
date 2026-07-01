@@ -15,6 +15,7 @@ import { loadFileConfig, resolveConfig } from "./config";
 import { generateCommit } from "./generate";
 import { Spinner } from "./ui/spinner";
 import { confirmCommit, editInEditor } from "./ui/editor";
+import { color } from "./ui/colors";
 import { ClaudeCommitError } from "./errors";
 import type { ModelConfig, PartialConfig } from "./types";
 
@@ -108,7 +109,7 @@ function flagsToConfig(opts: CliOptions): PartialConfig {
 }
 
 function printMessage(message: string): void {
-  const bar = "\x1b[90m" + "─".repeat(48) + "\x1b[0m";
+  const bar = color("90", "─".repeat(48));
   process.stderr.write(`\n${bar}\n${message}\n${bar}\n`);
 }
 
@@ -165,7 +166,7 @@ export async function run(argv: string[]): Promise<number> {
     );
   } catch (err) {
     if (err instanceof ClaudeCommitError) {
-      process.stderr.write(`\x1b[31merror:\x1b[0m ${err.message}\n`);
+      process.stderr.write(`${color("31", "error:")} ${err.message}\n`);
       return 1;
     }
     throw err;
@@ -199,11 +200,14 @@ async function runNonInteractive(
 
   if (verbose) {
     process.stderr.write(
-      `\x1b[90m${result.chunkCount} chunk(s), cost $${result.costUsd.toFixed(4)}\x1b[0m\n`,
+      color(
+        "90",
+        `${result.chunkCount} chunk(s), cost $${result.costUsd.toFixed(4)}`,
+      ) + "\n",
     );
     for (const [i, summary] of result.summaries.entries()) {
       process.stderr.write(
-        `\x1b[90m--- summary ${i + 1} ---\n${summary}\x1b[0m\n`,
+        color("90", `--- summary ${i + 1} ---\n${summary}`) + "\n",
       );
     }
   }
@@ -236,8 +240,8 @@ async function runNonInteractive(
   const stat = verbose ? await getStagedStat().catch(() => "") : "";
   await commit(message);
   spinner.succeed("Committed");
-  process.stderr.write(`\x1b[90m${firstLine(message)}\x1b[0m\n`);
-  if (stat) process.stderr.write(`\x1b[90m${stat}\x1b[0m\n`);
+  process.stderr.write(color("90", firstLine(message)) + "\n");
+  if (stat) process.stderr.write(color("90", stat) + "\n");
   return 0;
 }
 

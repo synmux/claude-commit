@@ -12,6 +12,7 @@ import { commit } from "../git";
 import { generateCommit } from "../generate";
 import { Spinner } from "./spinner";
 import { editInEditor } from "./editor";
+import { color } from "./colors";
 import type { Config } from "../types";
 
 export interface InteractiveOptions {
@@ -71,10 +72,12 @@ export async function runInteractive(
 
   await commit(message);
   process.stderr.write(
-    `\x1b[32m✔\x1b[0m Committed\n\x1b[90m${firstLine(message)}\x1b[0m\n`,
+    `${color("32", "✔")} Committed\n${color("90", firstLine(message))}\n`,
   );
   if (opts.verbose) {
-    process.stderr.write(`\x1b[90mcost $${result.costUsd.toFixed(4)}\x1b[0m\n`);
+    process.stderr.write(
+      color("90", `cost $${result.costUsd.toFixed(4)}`) + "\n",
+    );
   }
   return 0;
 }
