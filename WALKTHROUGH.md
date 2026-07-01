@@ -214,7 +214,7 @@ flowchart TD
 
 The key behavior:
 
-- File sections are detected by `diff --git `.
+- File sections are detected by `diff --git`.
 - Hunk sections are detected by `@@`.
 - When a file is split, the file header is repeated so each chunk remains
   understandable to the summary model.
