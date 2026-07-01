@@ -1,6 +1,6 @@
-# claudecommit — Project Overview
+# claude-commit — Project Overview
 
-Bun/TypeScript CLI (`cc` / `claudecommit`) that generates git commit messages from the staged diff using the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`, spawns the bundled `claude` binary).
+Bun/TypeScript CLI (`cc` / `claude-commit`) that generates git commit messages from the staged diff using the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`, spawns the bundled `claude` binary).
 
 ## Pipeline
 
@@ -8,7 +8,7 @@ diff → `splitDiff` chunks → summary model (default `sonnet[1m]`) per chunk �
 
 ## Key modules
 
-- `src/config.ts` — precedence: defaults < `package.json#claudecommit` < `.claudecommit(.rc).json` (walk cwd→repo root) < CLI flags. `sanitizePartial` validates & drops unknown/badly-typed keys.
+- `src/config.ts` — precedence: defaults < `package.json#claude-commit` < `.claude-commit(.rc).json` (walk cwd→repo root) < CLI flags. `sanitizePartial` validates & drops unknown/badly-typed keys.
 - `src/agent.ts` — SDK wrapper; `buildSubprocessEnv` builds the subprocess env (credential gating + `CLAUDE_CODE_EXTRA_BODY` temperature injection).
 - `src/ui/*` — spinner, editor confirm, OpenTUI interactive mode (`-i`).
 - Tests in `test/*.test.ts` (bun:test), incl. tmpdir-based config-file tests.

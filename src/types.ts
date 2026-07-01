@@ -1,5 +1,5 @@
 /**
- * Shared types for claudecommit.
+ * Shared types for claude-commit.
  */
 
 /** Which models to use for each stage of the pipeline. */

@@ -1,8 +1,8 @@
 /**
  * Configuration loading and merging.
  *
- * Precedence (low to high): built-in defaults < `package.json` (`claudecommit`
- * key) < a `.claudecommit.json` / `.claudecommitrc(.json)` file < CLI flags.
+ * Precedence (low to high): built-in defaults < `package.json` (`claude-commit`
+ * key) < a `.claude-commit.json` / `.claude-commitrc(.json)` file < CLI flags.
  */
 import { dirname, join, resolve } from "node:path";
 import { ClaudeCommitError } from "./errors";
@@ -26,9 +26,9 @@ export const DEFAULT_CONFIG: Config = {
 };
 
 const CONFIG_FILENAMES = [
-  ".claudecommit.json",
-  ".claudecommitrc.json",
-  ".claudecommitrc",
+  ".claude-commit.json",
+  ".claude-commitrc.json",
+  ".claude-commitrc",
 ];
 
 /** Deep-ish merge of a partial config over a base config (only `models` is nested). */
@@ -130,7 +130,7 @@ async function findConfigFile(
 
 /**
  * Load file-based configuration: the nearest config file (searched from `cwd`
- * up to `repoRoot`) merged over `package.json`'s `claudecommit` key at the repo
+ * up to `repoRoot`) merged over `package.json`'s `claude-commit` key at the repo
  * root. An explicit `configPath` short-circuits discovery.
  */
 export async function loadFileConfig(
@@ -140,7 +140,7 @@ export async function loadFileConfig(
 ): Promise<PartialConfig> {
   let result: PartialConfig = {};
 
-  // package.json#claudecommit at the repo root (lowest precedence of the files).
+  // package.json#claude-commit at the repo root (lowest precedence of the files).
   // A malformed package.json is not cc's concern to enforce — skip it rather
   // than blocking the commit (the user may even be committing its fix).
   let pkg: unknown;
@@ -149,10 +149,10 @@ export async function loadFileConfig(
   } catch {
     pkg = undefined;
   }
-  if (pkg && typeof pkg === "object" && "claudecommit" in (pkg as object)) {
+  if (pkg && typeof pkg === "object" && "claude-commit" in (pkg as object)) {
     result = mergePartial(
       result,
-      sanitizePartial((pkg as Record<string, unknown>).claudecommit),
+      sanitizePartial((pkg as Record<string, unknown>)["claude-commit"]),
     );
   }
 

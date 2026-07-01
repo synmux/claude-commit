@@ -162,7 +162,7 @@ export async function run(argv: string[]): Promise<number> {
           color(
             "90",
             `Ignoring ${ignored.join(" and ")}: using subscription auth. Set ` +
-              `"allowApiKey": true in your claudecommit config to use API credentials.`,
+              `"allowApiKey": true in your claude-commit config to use API credentials.`,
           ) + "\n",
         );
       }

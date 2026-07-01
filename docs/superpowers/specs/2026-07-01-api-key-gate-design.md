@@ -5,7 +5,7 @@
 
 ## Problem
 
-`claudecommit` calls Claude through the Claude Agent SDK, which spawns the
+`claude-commit` calls Claude through the Claude Agent SDK, which spawns the
 bundled `claude` binary and inherits `process.env`. Authentication therefore
 follows Claude Code's resolution order: with `ANTHROPIC_API_KEY` (or
 `ANTHROPIC_AUTH_TOKEN`) present in the environment, that credential is used and
@@ -49,7 +49,7 @@ presence alone perturbs the SDK's credential resolution.
 - `DEFAULT_CONFIG` (`src/config.ts`): `allowApiKey: false`.
 - `sanitizePartial` (`src/config.ts`): accept boolean `allowApiKey`.
 - Settable through the existing precedence chain:
-  `package.json#claudecommit` < `.claudecommit(.rc).json` < CLI flags.
+  `package.json#claude-commit` < `.claude-commit(.rc).json` < CLI flags.
   No new CLI flag (YAGNI — a deliberate, set-once safety setting).
 
 ### Enforcement (`src/agent.ts`)
@@ -75,7 +75,7 @@ Once per run, after config resolution: if the gate is off and either variable
 is present, print a dim stderr one-liner, e.g.
 
 > Ignoring ANTHROPIC_API_KEY (using subscription auth; set
-> `"allowApiKey": true` in your claudecommit config to use it).
+> `"allowApiKey": true` in your claude-commit config to use it).
 
 The strip is the guarantee; the notice is discoverability.
 

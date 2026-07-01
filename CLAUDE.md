@@ -1,4 +1,4 @@
-# `claudecommit` for Agents
+# `claude-commit` for Agents
 
 Default to using Bun instead of Node.js.
 

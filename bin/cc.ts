@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Executable entry point for `cc` / `claudecommit`.
+ * Executable entry point for `cc` / `claude-commit`.
  */
 import { run } from "../src/cli";
 import { color } from "../src/ui/colors";

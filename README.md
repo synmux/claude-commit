@@ -1,9 +1,9 @@
-# `claudecommit`
+# `claude-commit`
 
 Generate high-quality git commit messages with Claude — using your **Claude Code
 subscription**, not an API key.
 
-`claudecommit` reads your staged diff, has a strong model summarize it, and a fast
+`claude-commit` reads your staged diff, has a strong model summarize it, and a fast
 model turn that summary into a well-formed commit message. It handles diffs of any
 size (including ones too large to fit in a single context window), and supports
 Conventional Commits, gitmoji, first-line templates, custom instructions, and an
@@ -37,7 +37,7 @@ Requires [Bun](https://bun.sh).
 
 ```sh
 bun install
-bun link            # makes `cc` and `claudecommit` available on your PATH
+bun link            # makes `cc` and `claude-commit` available on your PATH
 ```
 
 Or run it directly without linking:
@@ -48,7 +48,7 @@ bun run bin/cc.ts --help
 
 ## Authentication
 
-`claudecommit` uses the Claude Agent SDK and, by default, always authenticates
+`claude-commit` uses the Claude Agent SDK and, by default, always authenticates
 with your Claude Code subscription session (run `claude login` once). Usage is
 bundled with your Claude Code usage — no separate API bill.
 
@@ -116,8 +116,8 @@ option, `e` to edit it in your `$EDITOR` first, and `q`/`Esc` to cancel.
 
 ## Configuration
 
-Defaults can be set in a `.claudecommit.json` (searched from the current directory
-up to the repo root) or under a `claudecommit` key in `package.json`. CLI flags
+Defaults can be set in a `.claude-commit.json` (searched from the current directory
+up to the repo root) or under a `claude-commit` key in `package.json`. CLI flags
 always win.
 
 ```json

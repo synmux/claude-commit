@@ -132,7 +132,7 @@ function describeAssistantError(code: string): string {
       return (
         "Authentication failed. Run `claude login` to sign in with your Claude " +
         "subscription, or set ANTHROPIC_API_KEY and enable `allowApiKey` in " +
-        "your claudecommit config."
+        "your claude-commit config."
       );
     case "billing_error":
       return "Billing error from the Claude API. Check your plan or API credits.";

@@ -1,6 +1,6 @@
-# claudecommit Codebase Walkthrough
+# claude-commit Codebase Walkthrough
 
-`claudecommit` is a Bun/TypeScript CLI that generates git commit messages from
+`claude-commit` is a Bun/TypeScript CLI that generates git commit messages from
 the staged diff. It uses the Claude Agent SDK as a prompt-in/text-out model
 runner, authenticating with your Claude Code subscription; API credentials in
 the environment are used only when the `allowApiKey` config option is enabled.
@@ -19,7 +19,7 @@ The codebase is intentionally small. The core path is:
 
 ```text
 .
-├── bin/cc.ts                 # executable entrypoint for `cc` / `claudecommit`
+├── bin/cc.ts                 # executable entrypoint for `cc` / `claude-commit`
 ├── index.ts                  # library exports for programmatic use
 ├── src/
 │   ├── cli.ts                # Commander CLI and top-level orchestration
@@ -117,8 +117,8 @@ are loaded and merged.
 
 ```mermaid
 flowchart BT
-  defaults[DEFAULT_CONFIG] --> pkg[package.json claudecommit key]
-  pkg --> file[.claudecommit.json / .claudecommitrc.json / .claudecommitrc]
+  defaults[DEFAULT_CONFIG] --> pkg[package.json claude-commit key]
+  pkg --> file[.claude-commit.json / .claude-commitrc.json / .claude-commitrc]
   file --> flags[CLI flags]
   flags --> resolved[Resolved Config]
 ```
@@ -126,9 +126,9 @@ flowchart BT
 Precedence is low to high:
 
 1. Built-in `DEFAULT_CONFIG`.
-2. `package.json` under the `claudecommit` key at the repo root.
-3. The nearest `.claudecommit.json`, `.claudecommitrc.json`, or
-   `.claudecommitrc`, searched from the current directory up to the repo root.
+2. `package.json` under the `claude-commit` key at the repo root.
+3. The nearest `.claude-commit.json`, `.claude-commitrc.json`, or
+   `.claude-commitrc`, searched from the current directory up to the repo root.
 4. CLI flags.
 
 `sanitizePartial()` is intentionally conservative. It ignores unknown keys and

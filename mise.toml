@@ -1,5 +1,5 @@
 [env]
-CLAUDECOMMIT_MISE_ACTIVE = 'true'
+CLAUDE_COMMIT_MISE_ACTIVE = 'true'
 
 [settings]
 env_file = '.env'

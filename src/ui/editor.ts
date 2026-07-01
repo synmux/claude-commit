@@ -22,7 +22,7 @@ export async function editInEditor(initial: string): Promise<string> {
   const editor = resolveEditor();
   // Unpredictable name + exclusive create (`wx`) + owner-only perms (0o600)
   // so the temp file can't be pre-created as a symlink or read by other users.
-  const file = join(tmpdir(), `claudecommit-edit-${randomUUID()}.txt`);
+  const file = join(tmpdir(), `claude-commit-edit-${randomUUID()}.txt`);
   try {
     await writeFile(file, initial, { mode: 0o600, flag: "wx" });
   } catch (err) {

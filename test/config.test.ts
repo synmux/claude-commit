@@ -120,9 +120,9 @@ describe("loadFileConfig", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  test("reads .claudecommit.json", async () => {
+  test("reads .claude-commit.json", async () => {
     await writeFile(
-      join(dir, ".claudecommit.json"),
+      join(dir, ".claude-commit.json"),
       JSON.stringify({ conventionalCommits: true }),
     );
     const cfg = await loadFileConfig(dir, dir);
@@ -131,7 +131,7 @@ describe("loadFileConfig", () => {
 
   test("reads allowApiKey from a config file", async () => {
     await writeFile(
-      join(dir, ".claudecommit.json"),
+      join(dir, ".claude-commit.json"),
       JSON.stringify({ allowApiKey: true }),
     );
     const cfg = await loadFileConfig(dir, dir);
@@ -141,10 +141,10 @@ describe("loadFileConfig", () => {
   test("config file overrides package.json", async () => {
     await writeFile(
       join(dir, "package.json"),
-      JSON.stringify({ claudecommit: { gitmoji: true, multiline: true } }),
+      JSON.stringify({ "claude-commit": { gitmoji: true, multiline: true } }),
     );
     await writeFile(
-      join(dir, ".claudecommit.json"),
+      join(dir, ".claude-commit.json"),
       JSON.stringify({ multiline: false }),
     );
     const cfg = await loadFileConfig(dir, dir);
@@ -156,7 +156,7 @@ describe("loadFileConfig", () => {
     const nested = join(dir, "a", "b");
     await mkdir(nested, { recursive: true });
     await writeFile(
-      join(dir, ".claudecommit.json"),
+      join(dir, ".claude-commit.json"),
       JSON.stringify({ template: "[T] {message}" }),
     );
     const cfg = await loadFileConfig(nested, dir);
@@ -172,7 +172,7 @@ describe("loadFileConfig", () => {
     // be committing the fix) must not stop cc from loading its own config.
     await writeFile(join(dir, "package.json"), "{ not: valid json ");
     await writeFile(
-      join(dir, ".claudecommit.json"),
+      join(dir, ".claude-commit.json"),
       JSON.stringify({ gitmoji: true }),
     );
     const cfg = await loadFileConfig(dir, dir);
@@ -180,7 +180,7 @@ describe("loadFileConfig", () => {
   });
 
   test("a malformed dedicated config file throws", async () => {
-    await writeFile(join(dir, ".claudecommit.json"), "{ broken ");
+    await writeFile(join(dir, ".claude-commit.json"), "{ broken ");
     await expect(loadFileConfig(dir, dir)).rejects.toThrow();
   });
 

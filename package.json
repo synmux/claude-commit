@@ -1,5 +1,5 @@
 {
-  "name": "claudecommit",
+  "name": "@synmux/claude-commit",
   "version": "0.1.0",
   "description": "Generate git commit messages with Claude, using your Claude Code subscription.",
   "main": "index.ts",
@@ -8,7 +8,7 @@
   "private": true,
   "bin": {
     "cc": "bin/cc.ts",
-    "claudecommit": "bin/cc.ts"
+    "claude-commit": "bin/cc.ts"
   },
   "files": [
     "bin",
