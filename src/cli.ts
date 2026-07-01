@@ -11,6 +11,7 @@ import {
   getRepoRoot,
   stageAll,
 } from "./git";
+import { presentCredentialVars } from "./agent";
 import { loadFileConfig, resolveConfig } from "./config";
 import { generateCommit } from "./generate";
 import { Spinner } from "./ui/spinner";
@@ -76,8 +77,9 @@ function buildProgram(): Command {
       [
         "",
         "Authentication:",
-        "  Uses the Claude Agent SDK. With no ANTHROPIC_API_KEY set, it uses your",
-        "  Claude Code subscription (run `claude login`), so usage is bundled with it.",
+        "  Uses the Claude Agent SDK with your Claude Code subscription (run",
+        "  `claude login`). ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are ignored",
+        '  unless the config sets "allowApiKey": true (pay-as-you-go billing).',
         "",
         "Examples:",
         "  cc                     generate and commit a message for staged changes",
@@ -150,6 +152,21 @@ export async function run(argv: string[]): Promise<number> {
       opts.config,
     );
     const config = resolveConfig(fileConfig, flagsToConfig(opts));
+
+    // Surface the credential gate: the actual stripping happens in the agent
+    // layer, but silently ignoring an exported key would be confusing.
+    if (!config.allowApiKey) {
+      const ignored = presentCredentialVars(process.env);
+      if (ignored.length > 0) {
+        process.stderr.write(
+          color(
+            "90",
+            `Ignoring ${ignored.join(" and ")}: using subscription auth. Set ` +
+              `"allowApiKey": true in your claudecommit config to use API credentials.`,
+          ) + "\n",
+        );
+      }
+    }
 
     if (opts.all) await stageAll();
 

@@ -22,6 +22,7 @@ export const DEFAULT_CONFIG: Config = {
   },
   maxChunkTokens: 600_000,
   charsPerToken: 3.5,
+  allowApiKey: false,
 };
 
 const CONFIG_FILENAMES = [
@@ -50,6 +51,7 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   bool("conventionalCommits");
   bool("gitmoji");
   bool("multiline");
+  bool("allowApiKey");
 
   if (typeof obj.template === "string") out.template = obj.template;
   else if (obj.template === null) out.template = null;

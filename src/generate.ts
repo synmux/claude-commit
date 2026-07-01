@@ -80,6 +80,7 @@ export async function generateCommit(
       {
         model: config.models.summary,
         system: summarySystem,
+        allowApiKey: config.allowApiKey,
         ...(abortController ? { abortController } : {}),
       },
     );
@@ -101,6 +102,7 @@ export async function generateCommit(
 
   const baseOpts = {
     model: config.models.final,
+    allowApiKey: config.allowApiKey,
     ...(abortController ? { abortController } : {}),
   };
   const temperature =

@@ -42,6 +42,14 @@ export interface Config {
   maxChunkTokens: number;
   /** Approximate characters-per-token ratio used for chunk-size estimation. */
   charsPerToken: number;
+  /**
+   * Allow API credentials from the environment (`ANTHROPIC_API_KEY` /
+   * `ANTHROPIC_AUTH_TOKEN`) to be used, billing pay-as-you-go instead of the
+   * Claude subscription. When false (the default) those variables are
+   * stripped from the environment passed to the Claude Agent SDK subprocess,
+   * so an exported key can never silently switch billing.
+   */
+  allowApiKey: boolean;
 }
 
 /** Partial config as it may appear in a config file or be produced by flags. */

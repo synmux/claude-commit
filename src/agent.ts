@@ -2,12 +2,15 @@
  * Thin wrapper around the Claude Agent SDK that turns a single prompt into a
  * single text completion.
  *
- * The Agent SDK spawns a bundled `claude` binary and inherits `process.env`, so
- * authentication follows Claude Code's own resolution order: if `ANTHROPIC_API_KEY`
- * is unset, a `claude login` subscription session is used and the cost is bundled
- * with Claude Code usage — which is exactly what we want here. We deliberately
- * disable every tool (`tools: []`) and load no settings (`settingSources: []`) so
- * the run is a clean, isolated, prompt-in/text-out request.
+ * The Agent SDK spawns a bundled `claude` binary, so authentication follows
+ * Claude Code's own resolution order over the environment we hand it. By
+ * default the API credential variables (`ANTHROPIC_API_KEY` /
+ * `ANTHROPIC_AUTH_TOKEN`) are stripped from that environment, forcing the
+ * `claude login` subscription session so the cost is bundled with Claude Code
+ * usage; the `allowApiKey` config option passes them through for explicit
+ * pay-as-you-go billing. We deliberately disable every tool (`tools: []`) and
+ * load no settings (`settingSources: []`) so the run is a clean, isolated,
+ * prompt-in/text-out request.
  */
 import {
   query,
@@ -42,25 +45,83 @@ export interface RunPromptOptions {
    * prepared to retry without it.
    */
   outputFormat?: { type: "json_schema"; schema: Record<string, unknown> };
+  /**
+   * Allow API credentials from the environment to reach the SDK subprocess.
+   * Defaults to false: `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` are
+   * stripped so the run is billed to the Claude subscription.
+   */
+  allowApiKey?: boolean;
 }
 
-/** Build the subprocess env that injects a temperature override, preserving any existing extra body. */
-function envWithTemperature(
-  temperature: number,
-): Record<string, string | undefined> {
-  let extra: Record<string, unknown> = {};
-  const existing = process.env.CLAUDE_CODE_EXTRA_BODY;
-  if (existing) {
-    try {
-      extra = JSON.parse(existing);
-    } catch {
-      /* ignore a malformed existing value */
+/**
+ * Environment variables that carry Claude API credentials. Their presence
+ * switches the spawned `claude` binary from subscription auth to
+ * pay-as-you-go API billing, so they are stripped from the subprocess
+ * environment unless the user opts in via the `allowApiKey` config option.
+ */
+export const GATED_CREDENTIAL_VARS = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+] as const;
+
+/**
+ * Names of the gated credential variables present in `env`. An empty string
+ * counts as present, since presence alone perturbs credential resolution.
+ */
+export function presentCredentialVars(
+  env: Record<string, string | undefined>,
+): string[] {
+  return GATED_CREDENTIAL_VARS.filter((name) => env[name] !== undefined);
+}
+
+export interface SubprocessEnvOptions {
+  /** Environment to derive the subprocess environment from (usually `process.env`). */
+  baseEnv: Record<string, string | undefined>;
+  /**
+   * Pass API credential variables through instead of stripping them.
+   * Defaults to false so the gate fails safe when a caller omits it.
+   */
+  allowApiKey?: boolean;
+  /** Sampling temperature to inject via `CLAUDE_CODE_EXTRA_BODY`, preserving any existing extra body. */
+  temperature?: number;
+}
+
+/**
+ * Build the environment for the Claude Agent SDK subprocess, or return
+ * `undefined` when the parent environment can be inherited unchanged.
+ *
+ * Unless `allowApiKey` is set, API credential variables are removed so the
+ * spawned `claude` binary always authenticates with the user's subscription
+ * session — an exported `ANTHROPIC_API_KEY` must never silently switch
+ * billing to pay-as-you-go.
+ */
+export function buildSubprocessEnv(
+  opts: SubprocessEnvOptions,
+): Record<string, string | undefined> | undefined {
+  const { baseEnv, allowApiKey = false, temperature } = opts;
+  const stripped = allowApiKey ? [] : presentCredentialVars(baseEnv);
+  if (stripped.length === 0 && temperature == null) return undefined;
+
+  const env = { ...baseEnv };
+  for (const name of stripped) delete env[name];
+
+  if (temperature != null) {
+    let extra: Record<string, unknown> = {};
+    const existing = baseEnv.CLAUDE_CODE_EXTRA_BODY;
+    if (existing) {
+      try {
+        const parsed: unknown = JSON.parse(existing);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          extra = parsed as Record<string, unknown>;
+        }
+      } catch {
+        /* ignore a malformed existing value */
+      }
     }
+    env.CLAUDE_CODE_EXTRA_BODY = JSON.stringify({ ...extra, temperature });
   }
-  return {
-    ...process.env,
-    CLAUDE_CODE_EXTRA_BODY: JSON.stringify({ ...extra, temperature }),
-  };
+
+  return env;
 }
 
 /** Map a known SDK assistant error code to a friendlier, actionable message. */
@@ -70,7 +131,8 @@ function describeAssistantError(code: string): string {
     case "oauth_org_not_allowed":
       return (
         "Authentication failed. Run `claude login` to sign in with your Claude " +
-        "subscription, or set ANTHROPIC_API_KEY."
+        "subscription, or set ANTHROPIC_API_KEY and enable `allowApiKey` in " +
+        "your claudecommit config."
       );
     case "billing_error":
       return "Billing error from the Claude API. Check your plan or API credits.";
@@ -96,6 +158,11 @@ export async function runPrompt(
   prompt: string,
   opts: RunPromptOptions,
 ): Promise<ModelResult> {
+  const subprocessEnv = buildSubprocessEnv({
+    baseEnv: process.env,
+    allowApiKey: opts.allowApiKey ?? false,
+    ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+  });
   const options: Options = {
     model: opts.model,
     systemPrompt: opts.system,
@@ -105,9 +172,7 @@ export async function runPrompt(
     includePartialMessages: Boolean(opts.onText),
     ...(opts.abortController ? { abortController: opts.abortController } : {}),
     ...(opts.onStderr ? { stderr: opts.onStderr } : {}),
-    ...(opts.temperature != null
-      ? { env: envWithTemperature(opts.temperature) }
-      : {}),
+    ...(subprocessEnv ? { env: subprocessEnv } : {}),
     ...(opts.outputFormat ? { outputFormat: opts.outputFormat } : {}),
   };
 

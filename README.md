@@ -48,13 +48,19 @@ bun run bin/cc.ts --help
 
 ## Authentication
 
-`claudecommit` uses the Claude Agent SDK, which resolves credentials the same way
-Claude Code does:
+`claudecommit` uses the Claude Agent SDK and, by default, always authenticates
+with your Claude Code subscription session (run `claude login` once). Usage is
+bundled with your Claude Code usage — no separate API bill.
 
-- **No `ANTHROPIC_API_KEY` set** → it uses your Claude Code subscription session
-  (run `claude login` once). Usage is bundled with your Claude Code usage — no
-  separate API bill.
-- **`ANTHROPIC_API_KEY` set** → that key is used (pay-as-you-go).
+To protect you from surprise pay-as-you-go charges, API credentials in your
+environment (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`) are **ignored by
+default**: they are stripped from the environment passed to the model
+subprocess, and a one-line notice is printed to stderr. To bill an API key
+instead (pay-as-you-go), opt in explicitly in your configuration:
+
+```json
+{ "allowApiKey": true }
+```
 
 ## Usage
 
@@ -128,7 +134,8 @@ always win.
     "final": "haiku"
   },
   "maxChunkTokens": 600000,
-  "charsPerToken": 3.5
+  "charsPerToken": 3.5,
+  "allowApiKey": false
 }
 ```
 

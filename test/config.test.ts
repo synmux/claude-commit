@@ -59,6 +59,24 @@ describe("default config", () => {
   test("bumps interactive temperature by default", () => {
     expect(DEFAULT_CONFIG.interactiveTemperature).toBe(1);
   });
+
+  test("does not allow API credentials by default", () => {
+    expect(DEFAULT_CONFIG.allowApiKey).toBe(false);
+  });
+});
+
+describe("allowApiKey", () => {
+  test("sanitizePartial accepts booleans only", () => {
+    expect(sanitizePartial({ allowApiKey: true }).allowApiKey).toBe(true);
+    expect(sanitizePartial({ allowApiKey: false }).allowApiKey).toBe(false);
+    expect(sanitizePartial({ allowApiKey: "yes" }).allowApiKey).toBeUndefined();
+    expect(sanitizePartial({ allowApiKey: 1 }).allowApiKey).toBeUndefined();
+  });
+
+  test("resolves through the precedence chain", () => {
+    expect(resolveConfig({}, {}).allowApiKey).toBe(false);
+    expect(resolveConfig({ allowApiKey: true }, {}).allowApiKey).toBe(true);
+  });
 });
 
 describe("mergeConfig / mergePartial", () => {
@@ -109,6 +127,15 @@ describe("loadFileConfig", () => {
     );
     const cfg = await loadFileConfig(dir, dir);
     expect(cfg.conventionalCommits).toBe(true);
+  });
+
+  test("reads allowApiKey from a config file", async () => {
+    await writeFile(
+      join(dir, ".claudecommit.json"),
+      JSON.stringify({ allowApiKey: true }),
+    );
+    const cfg = await loadFileConfig(dir, dir);
+    expect(cfg.allowApiKey).toBe(true);
   });
 
   test("config file overrides package.json", async () => {

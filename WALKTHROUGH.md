@@ -2,7 +2,8 @@
 
 `claudecommit` is a Bun/TypeScript CLI that generates git commit messages from
 the staged diff. It uses the Claude Agent SDK as a prompt-in/text-out model
-runner, so it can use the same authentication path as Claude Code.
+runner, authenticating with your Claude Code subscription; API credentials in
+the environment are used only when the `allowApiKey` config option is enabled.
 
 The codebase is intentionally small. The core path is:
 
@@ -242,6 +243,10 @@ The wrapper makes model calls intentionally narrow:
 - `abortController` is passed through for cancellation.
 - Optional temperature is injected through `CLAUDE_CODE_EXTRA_BODY` while
   preserving any existing JSON body.
+- API credential variables (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`) are
+  stripped from the subprocess environment unless the `allowApiKey` config
+  option is enabled (`buildSubprocessEnv`), so billing stays on the
+  subscription by default.
 
 The SDK stream is reduced to a `ModelResult`:
 
