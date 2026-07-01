@@ -57,6 +57,8 @@ export interface ModelResult {
   costUsd: number;
   /** The model that actually served the request, if reported. */
   model?: string;
+  /** Parsed structured output, when a JSON-schema `outputFormat` was requested. */
+  structured?: unknown;
 }
 
 /** A staged change as seen by `git`. */

@@ -35,6 +35,13 @@ export interface RunPromptOptions {
    * caller should be prepared to retry without it.
    */
   temperature?: number;
+  /**
+   * Request a structured JSON response matching this schema. The parsed object
+   * is returned on {@link ModelResult.structured}. Models that don't support
+   * structured outputs will reject the request, so the caller should be
+   * prepared to retry without it.
+   */
+  outputFormat?: { type: "json_schema"; schema: Record<string, unknown> };
 }
 
 /** Build the subprocess env that injects a temperature override, preserving any existing extra body. */
@@ -101,11 +108,13 @@ export async function runPrompt(
     ...(opts.temperature != null
       ? { env: envWithTemperature(opts.temperature) }
       : {}),
+    ...(opts.outputFormat ? { outputFormat: opts.outputFormat } : {}),
   };
 
   let resultText: string | null = null;
   let costUsd = 0;
   let model: string | undefined;
+  let structured: unknown;
   let assistantError: string | undefined;
 
   let response;
@@ -139,6 +148,7 @@ export async function runPrompt(
           if (usedModels.length > 0) model = usedModels[0];
           if (message.subtype === "success") {
             resultText = message.result;
+            structured = message.structured_output;
           } else {
             const detail =
               "errors" in message && message.errors.length
@@ -169,5 +179,10 @@ export async function runPrompt(
     throw new ClaudeCommitError("The model returned no result.");
   }
 
-  return { text: resultText.trim(), costUsd, ...(model ? { model } : {}) };
+  return {
+    text: resultText.trim(),
+    costUsd,
+    ...(model ? { model } : {}),
+    ...(structured !== undefined ? { structured } : {}),
+  };
 }

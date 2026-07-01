@@ -4,6 +4,8 @@ import {
   buildFinalUser,
   buildSummaryUser,
   cleanMessage,
+  extractMessages,
+  MESSAGES_SCHEMA,
   parseOptions,
   OPTION_DELIMITER,
 } from "../src/prompts";
@@ -111,5 +113,52 @@ describe("cleanMessage", () => {
   test("preserves multiline bodies", () => {
     const msg = "feat: add thing\n\n- detail one\n- detail two";
     expect(cleanMessage(msg)).toBe(msg);
+  });
+});
+
+describe("structured output", () => {
+  test("MESSAGES_SCHEMA is a strict object with a messages array", () => {
+    expect(MESSAGES_SCHEMA).toMatchObject({
+      type: "object",
+      required: ["messages"],
+      additionalProperties: false,
+    });
+    expect((MESSAGES_SCHEMA as any).properties.messages.type).toBe("array");
+  });
+
+  test("extractMessages returns the string list from a valid object", () => {
+    expect(extractMessages({ messages: ["feat: a", "fix: b"] })).toEqual([
+      "feat: a",
+      "fix: b",
+    ]);
+  });
+
+  test("extractMessages filters non-strings and rejects malformed shapes", () => {
+    expect(extractMessages({ messages: ["ok", 5, null, "two"] })).toEqual([
+      "ok",
+      "two",
+    ]);
+    expect(extractMessages({ messages: [] })).toBeNull();
+    expect(extractMessages({ messages: "not-array" })).toBeNull();
+    expect(extractMessages({})).toBeNull();
+    expect(extractMessages(null)).toBeNull();
+    expect(extractMessages("nope")).toBeNull();
+  });
+
+  test("buildFinalUser structured mode asks for the messages array, not a delimiter", () => {
+    const one = buildFinalUser(["did a thing"], 1, true);
+    expect(one).toContain('"messages" array');
+    expect(one).not.toContain(OPTION_DELIMITER);
+
+    const many = buildFinalUser(["did a thing"], 3, true);
+    expect(many).toContain("exactly 3 distinct");
+    expect(many).toContain('"messages" array');
+    expect(many).not.toContain(OPTION_DELIMITER);
+  });
+
+  test("buildFinalSystem structured mode scopes the no-markdown rule to each message", () => {
+    const sys = buildFinalSystem(DEFAULT_CONFIG, true);
+    expect(sys).toContain("Each commit message must be the raw message text");
+    expect(sys).not.toContain("Output ONLY the commit message itself");
   });
 });

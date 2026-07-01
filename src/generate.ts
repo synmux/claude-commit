@@ -19,6 +19,8 @@ import {
   buildSummarySystem,
   buildSummaryUser,
   cleanMessage,
+  extractMessages,
+  MESSAGES_SCHEMA,
   parseOptions,
 } from "./prompts";
 import type { Config } from "./types";
@@ -86,45 +88,78 @@ export async function generateCommit(
   }
 
   // Stage 2: write the commit message(s) from the summaries.
+  //
+  // Prefer a structured (JSON-schema) response so parsing is robust regardless
+  // of how the model formats its prose. We try, in order: structured output
+  // with a temperature bump (for interactive variety), then structured output
+  // without it (for models that reject a temperature override), then plain text
+  // with delimiter parsing (for models that don't support structured output at
+  // all). Whichever succeeds first wins.
   progress.onPhase?.(
     count > 1 ? "Writing commit options" : "Writing commit message",
   );
-  const finalPrompt = buildFinalUser(summaries, count);
-  const finalOpts = {
+
+  const baseOpts = {
     model: config.models.final,
-    system: buildFinalSystem(config),
-    ...(progress.onText ? { onText: progress.onText } : {}),
     ...(abortController ? { abortController } : {}),
   };
-  // Bump the temperature when producing several options, for more variety.
-  // Some models reject a temperature override, so fall back to the default.
-  const useTemperature = count > 1 && config.interactiveTemperature != null;
-  let finalResult;
-  if (useTemperature) {
+  const temperature =
+    count > 1 && config.interactiveTemperature != null
+      ? config.interactiveTemperature
+      : undefined;
+
+  const attempts: Array<{ structured: boolean; temperature?: number }> = [];
+  if (temperature != null) attempts.push({ structured: true, temperature });
+  attempts.push({ structured: true });
+  attempts.push({ structured: false });
+
+  let messages: string[] | null = null;
+  let lastError: unknown;
+  for (const attempt of attempts) {
     try {
-      finalResult = await runPrompt(finalPrompt, {
-        ...finalOpts,
-        temperature: config.interactiveTemperature!,
-      });
-    } catch {
-      finalResult = await runPrompt(finalPrompt, finalOpts);
+      const result = await runPrompt(
+        buildFinalUser(summaries, count, attempt.structured),
+        {
+          ...baseOpts,
+          system: buildFinalSystem(config, attempt.structured),
+          ...(attempt.structured
+            ? {
+                outputFormat: {
+                  type: "json_schema" as const,
+                  schema: MESSAGES_SCHEMA,
+                },
+              }
+            : {}),
+          ...(attempt.temperature != null
+            ? { temperature: attempt.temperature }
+            : {}),
+          ...(!attempt.structured && progress.onText
+            ? { onText: progress.onText }
+            : {}),
+        },
+      );
+      costUsd += result.costUsd;
+      messages = attempt.structured
+        ? extractMessages(result.structured)
+        : count > 1
+          ? parseOptions(result.text)
+          : [result.text];
+      if (messages && messages.length > 0) break;
+    } catch (err) {
+      lastError = err;
     }
-  } else {
-    finalResult = await runPrompt(finalPrompt, finalOpts);
   }
-  costUsd += finalResult.costUsd;
 
-  const messages =
-    count > 1
-      ? dedupe(parseOptions(finalResult.text).map(cleanMessage))
-      : [cleanMessage(finalResult.text)];
-
-  const cleaned = messages.filter((m) => m.length > 0);
-  if (cleaned.length === 0) {
+  const cleaned = (messages ?? [])
+    .map(cleanMessage)
+    .filter((m) => m.length > 0);
+  const deduped = dedupe(cleaned);
+  if (deduped.length === 0) {
+    if (lastError instanceof ClaudeCommitError) throw lastError;
     throw new ClaudeCommitError("The model did not produce a commit message.");
   }
 
-  return { messages: cleaned, summaries, chunkCount: chunks.length, costUsd };
+  return { messages: deduped, summaries, chunkCount: chunks.length, costUsd };
 }
 
 function dedupe(items: string[]): string[] {

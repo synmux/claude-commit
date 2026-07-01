@@ -55,8 +55,46 @@ export function buildSummaryUser(
   return `${preamble}\n\n${chunk}`;
 }
 
-/** System prompt for the final commit-message stage, encoding all formatting rules. */
-export function buildFinalSystem(config: Config): string {
+/**
+ * JSON schema for the final stage's structured output: a list of candidate
+ * commit messages. Requesting this makes parsing robust regardless of how the
+ * model chooses to format its prose.
+ */
+export const MESSAGES_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    messages: {
+      type: "array",
+      description:
+        "The commit message(s), each a complete raw commit message string.",
+      items: { type: "string" },
+    },
+  },
+  required: ["messages"],
+  additionalProperties: false,
+};
+
+/** Pull the message list out of a structured-output object, or return null if malformed. */
+export function extractMessages(structured: unknown): string[] | null {
+  if (
+    structured &&
+    typeof structured === "object" &&
+    Array.isArray((structured as { messages?: unknown }).messages)
+  ) {
+    const messages = (structured as { messages: unknown[] }).messages.filter(
+      (m): m is string => typeof m === "string",
+    );
+    if (messages.length > 0) return messages;
+  }
+  return null;
+}
+
+/**
+ * System prompt for the final commit-message stage, encoding all formatting
+ * rules. When `structured` is true, the model returns its messages as JSON, so
+ * the "no markdown" guidance is scoped to each message's own text.
+ */
+export function buildFinalSystem(config: Config, structured = false): string {
   const rules: string[] = [
     "You are an expert at writing clear, high-quality git commit messages.",
     "You are given a summary of staged changes and must produce a commit message for them.",
@@ -108,17 +146,26 @@ export function buildFinalSystem(config: Config): string {
   }
 
   rules.push(
-    "Output ONLY the commit message itself: no surrounding quotes, no markdown, no code fences, no preamble, and no explanation.",
+    structured
+      ? "Each commit message must be the raw message text only — no surrounding quotes, no markdown, and no code fences."
+      : "Output ONLY the commit message itself: no surrounding quotes, no markdown, no code fences, no preamble, and no explanation.",
   );
 
   return rules.join("\n");
 }
 
 /**
- * User prompt for the final stage. When `count` > 1, asks for several distinct
- * candidates separated by {@link OPTION_DELIMITER} (for interactive selection).
+ * User prompt for the final stage.
+ *
+ * In `structured` mode the candidates are returned via {@link MESSAGES_SCHEMA}'s
+ * `messages` array. Otherwise, when `count` > 1, they are separated by
+ * {@link OPTION_DELIMITER} for text parsing.
  */
-export function buildFinalUser(summaries: string[], count = 1): string {
+export function buildFinalUser(
+  summaries: string[],
+  count = 1,
+  structured = false,
+): string {
   const joined =
     summaries.length === 1
       ? summaries[0]!
@@ -128,6 +175,16 @@ export function buildFinalUser(summaries: string[], count = 1): string {
     summaries.length === 1
       ? "Here is the summary of the staged changes:"
       : "Here are summaries of the parts of the staged changes:";
+
+  if (structured) {
+    const ask =
+      count <= 1
+        ? `Produce a single commit message for this change and return it as the only element of the "messages" array.`
+        : `Produce exactly ${count} distinct commit-message options for this change. ` +
+          `Vary the wording, structure and emphasis so the options are genuinely different. ` +
+          `Return them in the "messages" array.`;
+    return `${header}\n\n${joined}\n\n${ask}`;
+  }
 
   if (count <= 1) {
     return `${header}\n\n${joined}`;
