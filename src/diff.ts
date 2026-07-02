@@ -16,7 +16,7 @@ const HUNK_HEADER = "@@";
  * which we stop trying to subdivide a section. This guards against a
  * misconfigured tiny `maxChars`, or a pathologically large file header,
  * driving the line-splitter's budget to zero and shattering a hunk into
- * one-character pieces — which would otherwise spawn a model request per
+ * one-character pieces - which would otherwise spawn a model request per
  * character.
  */
 const MIN_SPLIT_BUDGET = 64;

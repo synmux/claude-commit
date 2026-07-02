@@ -1,6 +1,6 @@
 # `claude-commit`
 
-Generate high-quality git commit messages with Claude — using your **Claude Code
+Generate high-quality git commit messages with Claude - using your **Claude Code
 subscription**, not an API key.
 
 `claude-commit` reads your staged diff, has a strong model summarize it, and a fast
@@ -23,10 +23,10 @@ Want more details? See [WALKTHROUGH.md](WALKTHROUGH.md).
 staged diff ──split──▶ [chunk, …] ──sonnet[1m]──▶ summaries ──haiku──▶ commit message
 ```
 
-1. **Summarize** — the diff is split into chunks that fit the context window and
+1. **Summarize** - the diff is split into chunks that fit the context window and
    each chunk is summarized by a strong model (`sonnet[1m]`, Sonnet with a 1M-token
    context). Diffs larger than 1M tokens simply produce more chunks.
-2. **Write** — the summaries are handed to a fast model (`haiku`) that writes the
+2. **Write** - the summaries are handed to a fast model (`haiku`) that writes the
    final commit message according to your formatting rules.
 
 Both stages run through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
@@ -50,7 +50,7 @@ bun run bin/cco.ts --help
 
 `claude-commit` uses the Claude Agent SDK and, by default, always authenticates
 with your Claude Code subscription session (run `claude login` once). Usage is
-bundled with your Claude Code usage — no separate API bill.
+bundled with your Claude Code usage - no separate API bill.
 
 To protect you from surprise pay-as-you-go charges, API credentials in your
 environment (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`) are **ignored by
@@ -103,7 +103,7 @@ cco --dry-run | cat      # print a message without committing (TUI-free, pipe-sa
 git commit -F <(cco -d)  # use the message with your own git invocation
 ```
 
-In a pipe (no TTY) there is no spinner and no confirmation prompt — `cco` just
+In a pipe (no TTY) there is no spinner and no confirmation prompt - `cco` just
 generates and commits (or prints, with `--dry-run`).
 
 ## Interactive mode
@@ -116,8 +116,8 @@ cancel.
 
 To make interactive mode the default without typing `-i` every time, set
 `"interactive": true` in your config (see below); opt out of a single run with
-`--no-interactive`. When there is no interactive terminal — in a pipe, a CI job,
-or with `--dry-run` — `cco` ignores the setting and falls back to the
+`--no-interactive`. When there is no interactive terminal - in a pipe, a CI job,
+or with `--dry-run` - `cco` ignores the setting and falls back to the
 non-interactive flow rather than failing.
 
 ## Configuration
@@ -126,7 +126,7 @@ Configuration is layered, from lowest to highest precedence:
 
 1. Built-in defaults.
 2. **A global user config** at `~/.config/claude-commit/config.json` (or
-   `$XDG_CONFIG_HOME/claude-commit/config.json`) — your personal defaults across
+   `$XDG_CONFIG_HOME/claude-commit/config.json`) - your personal defaults across
    every project. The `.claude-commit.json` / `.claude-commitrc.json` /
    `.claude-commitrc` names are also accepted in that directory.
 3. A `claude-commit` key in the repo's `package.json`.

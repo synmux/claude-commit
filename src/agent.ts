@@ -92,7 +92,7 @@ export interface SubprocessEnvOptions {
  *
  * Unless `allowApiKey` is set, API credential variables are removed so the
  * spawned `claude` binary always authenticates with the user's subscription
- * session — an exported `ANTHROPIC_API_KEY` must never silently switch
+ * session - an exported `ANTHROPIC_API_KEY` must never silently switch
  * billing to pay-as-you-go.
  */
 export function buildSubprocessEnv(

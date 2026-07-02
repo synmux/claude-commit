@@ -16,7 +16,7 @@ describe("sanitizePartial", () => {
   test("keeps known keys with correct types", () => {
     const out = sanitizePartial({
       conventionalCommits: true,
-      gitmoji: "yes", // wrong type — ignored
+      gitmoji: "yes", // wrong type - ignored
       multiline: false,
       template: "[X] {message}",
       interactiveCount: 4.9,
@@ -287,7 +287,7 @@ describe("global config (XDG)", () => {
     expect(cfg.conventionalCommits).toBe(true);
   });
 
-  test("config.json is a global-only name — not discovered in the project tree", async () => {
+  test("config.json is a global-only name - not discovered in the project tree", async () => {
     // A stray config.json inside the project must be ignored; only the dotted
     // names apply further down the tree.
     await writeFile(

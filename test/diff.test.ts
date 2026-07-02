@@ -120,7 +120,7 @@ Binary files a/img.png and b/img.png differ`;
       "@@ -1,50 +1,50 @@\n" +
       Array.from({ length: 50 }, (_, i) => `+line ${i}`).join("\n");
     const diff = `${header}\n${hunk}`;
-    // Budget smaller than the header itself — splitting per-line would otherwise
+    // Budget smaller than the header itself - splitting per-line would otherwise
     // shatter the hunk into ~one fragment per character.
     const chunks = splitDiff(diff, 10);
     expect(chunks).toEqual([diff]);

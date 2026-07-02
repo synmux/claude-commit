@@ -51,7 +51,7 @@ export async function runInteractive(
   try {
     selection = await selectWithTui(messages);
   } catch {
-    // TUI failed to initialize (unusual terminal, etc.) — degrade gracefully.
+    // TUI failed to initialize (unusual terminal, etc.) - degrade gracefully.
     selection = await selectWithReadline(messages);
   }
 
@@ -98,7 +98,7 @@ const PICKER_CHROME_ROWS = 4;
  * The picker's height, sized to its content (two rows per candidate) but capped
  * to the terminal so a large `interactiveCount` still fits; past the cap the list
  * scrolls internally (see `showScrollIndicator` in {@link buildPickerScene}). An
- * explicit height keeps the picker compact — only as tall as the options need —
+ * explicit height keeps the picker compact - only as tall as the options need -
  * rather than stretching to fill the screen.
  */
 export function pickerHeight(count: number, terminalRows: number): number {
@@ -163,7 +163,7 @@ export function buildPickerScene(
     showDescription: true,
     wrapSelection: true,
     // A calm slate highlight (OpenTUI's own default background) with soft
-    // near-white text — the previous bright cyan/black fill was too harsh.
+    // near-white text - the previous bright cyan/black fill was too harsh.
     // The default description greys (#888888 / #CCCCCC) read fine on the slate,
     // so they are left untouched.
     selectedBackgroundColor: "#334455",
@@ -246,7 +246,7 @@ async function selectWithTui(messages: string[]): Promise<Selection> {
         } catch {
           // A renderable method threw unexpectedly. Rather than let the error
           // escape the key handler and leave the terminal stuck in raw mode,
-          // cancel cleanly — finish() restores the terminal via cleanup().
+          // cancel cleanly - finish() restores the terminal via cleanup().
           finish({ action: "cancel" });
         }
       };

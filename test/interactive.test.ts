@@ -57,7 +57,7 @@ describe("buildPickerScene", () => {
     }
   });
 
-  test("shows only the options — no diff pane", async () => {
+  test("shows only the options - no diff pane", async () => {
     const { frame } = await renderScene(120, 40, messages);
     expect(frame).not.toContain("Staged diff");
     expect(frame).not.toContain("scroll diff");

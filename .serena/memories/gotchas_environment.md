@@ -2,7 +2,7 @@
 
 ## Bun auto-install masks a broken node_modules
 
-If `node_modules` is missing packages (observed: both `@anthropic-ai/*` packages absent while the rest existed), `bun run` silently auto-installs/resolves them from Bun's global cache — potentially a DIFFERENT version than bun.lock pins. Symptom seen: every `cco` run failed with SDK error "Prompt is too long" regardless of input; fixed by `bun install --frozen-lockfile`. When runtime behaviour makes no sense, verify `node_modules/@anthropic-ai/claude-agent-sdk/package.json` exists and matches the lockfile before debugging code.
+If `node_modules` is missing packages (observed: both `@anthropic-ai/*` packages absent while the rest existed), `bun run` silently auto-installs/resolves them from Bun's global cache - potentially a DIFFERENT version than bun.lock pins. Symptom seen: every `cco` run failed with SDK error "Prompt is too long" regardless of input; fixed by `bun install --frozen-lockfile`. When runtime behaviour makes no sense, verify `node_modules/@anthropic-ai/claude-agent-sdk/package.json` exists and matches the lockfile before debugging code.
 
 ## Running `cco` from inside a Claude Code session
 

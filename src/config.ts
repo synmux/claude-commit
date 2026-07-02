@@ -197,7 +197,7 @@ export async function loadFileConfig(
 
   // package.json#claude-commit at the repo root (above the global config, below
   // project config files). A malformed package.json is not cco's concern to
-  // enforce — skip it rather than blocking the commit (the user may even be
+  // enforce - skip it rather than blocking the commit (the user may even be
   // committing its fix).
   let pkg: unknown;
   try {

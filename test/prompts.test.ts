@@ -70,7 +70,7 @@ describe("buildFinalUser", () => {
 
   test("multi-option prompts demand complete messages and stop nudging structural variety", () => {
     // Regression guard: the old wording said "vary the wording, structure and
-    // emphasis", which let the model drop bodies to manufacture variety — so
+    // emphasis", which let the model drop bodies to manufacture variety - so
     // `multiline` looked ignored in interactive mode. Each option must now be a
     // complete message that obeys every formatting rule (including the body).
     for (const prompt of [

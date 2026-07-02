@@ -147,7 +147,7 @@ export function buildFinalSystem(config: Config, structured = false): string {
 
   rules.push(
     structured
-      ? "Each commit message must be the raw message text only — no surrounding quotes, no markdown, and no code fences."
+      ? "Each commit message must be the raw message text only - no surrounding quotes, no markdown, and no code fences."
       : "Output ONLY the commit message itself: no surrounding quotes, no markdown, no code fences, no preamble, and no explanation.",
   );
 
@@ -157,7 +157,7 @@ export function buildFinalSystem(config: Config, structured = false): string {
 /**
  * The shared instruction for requesting several distinct options.
  *
- * It insists each option be a COMPLETE message obeying the formatting rules —
+ * It insists each option be a COMPLETE message obeying the formatting rules -
  * crucially the body when `multiline` is on. The previous wording asked the
  * model to "vary the structure" of the options, which let it drop bodies to
  * manufacture variety, so `multiline` appeared to be ignored in interactive
@@ -166,7 +166,7 @@ export function buildFinalSystem(config: Config, structured = false): string {
 function multiOptionInstruction(count: number): string {
   return (
     `Produce exactly ${count} distinct commit-message options for this change. ` +
-    `Each option must be a complete commit message that independently obeys all the formatting rules above — ` +
+    `Each option must be a complete commit message that independently obeys all the formatting rules above - ` +
     `including the blank line and body when those rules ask for one. ` +
     `Make the options genuinely different in wording and emphasis, but never drop the subject or a required body just to create variety.`
   );

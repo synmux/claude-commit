@@ -37,7 +37,7 @@ export async function isGitRepo(): Promise<boolean> {
     const res = await $`git rev-parse --is-inside-work-tree`.quiet().nothrow();
     return res.exitCode === 0 && res.stdout.toString().trim() === "true";
   } catch {
-    // git missing or unrunnable — treat as "not a usable repo".
+    // git missing or unrunnable - treat as "not a usable repo".
     return false;
   }
 }
@@ -81,7 +81,7 @@ export async function getStagedStat(): Promise<string> {
 /**
  * Create a commit with the given message. The message is piped to
  * `git commit -F -` over stdin, so arbitrary content (leading dashes, multiple
- * lines, special characters) is handled safely — and nothing touches disk, so
+ * lines, special characters) is handled safely - and nothing touches disk, so
  * there is no temp file to be raced or read by another user.
  */
 export async function commit(message: string): Promise<void> {

@@ -136,7 +136,7 @@ Precedence is low to high:
 1. Built-in `DEFAULT_CONFIG`.
 2. The global user config in `$XDG_CONFIG_HOME/claude-commit` (default
    `~/.config/claude-commit`). `config.json` is the canonical name; the dotted
-   `.claude-commit*` names also work there. `config.json` is **global-only** — it
+   `.claude-commit*` names also work there. `config.json` is **global-only** - it
    is never picked up by the project tree walk (`GLOBAL_CONFIG_FILENAMES` vs
    `CONFIG_FILENAMES`).
 3. `package.json` under the `claude-commit` key at the repo root.
@@ -191,8 +191,8 @@ The pipeline has two model stages:
    - `buildFinalUser(summaries, count)` asks for one message or several distinct
      options (the `messages` array in structured mode, delimiter-separated text
      otherwise). For multiple options it reuses `multiOptionInstruction()`, which
-     requires each option to be a _complete_ message obeying every rule —
-     including the body when `multiline` is on — so options never drop the body
+     requires each option to be a _complete_ message obeying every rule -
+     including the body when `multiline` is on - so options never drop the body
      to manufacture variety (which previously made `multiline` look ignored in
      interactive mode).
    - `runPrompt()` sends the final prompt to the configured final model.
@@ -361,15 +361,15 @@ The TUI shows:
 - A compact, content-sized list of the candidate messages.
 - Keyboard actions for selection, commit, edit, and cancel.
 
-The diff is used for generation but is **not displayed** — the picker shows only
+The diff is used for generation but is **not displayed** - the picker shows only
 the candidate messages, keeping the screen focused on the choice.
 
 `buildPickerScene()` assembles the renderable tree (a header line above the
 candidate list) and `pickerHeight()` sizes the list; both are exported so the
 layout is covered by `test/interactive.test.ts` under OpenTUI's headless test
 renderer. The picker is given an **explicit, content-sized height** (two rows per
-candidate) with `flexShrink: 0` so it stays compact — only as tall as the options
-need — and scrolls internally, with a scroll indicator, when there are more
+candidate) with `flexShrink: 0` so it stays compact - only as tall as the options
+need - and scrolls internally, with a scroll indicator, when there are more
 options than fit the terminal.
 
 If OpenTUI cannot initialize, the module falls back to a plain readline prompt
