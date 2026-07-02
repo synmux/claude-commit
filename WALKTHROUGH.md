@@ -124,7 +124,8 @@ are loaded and merged.
 
 ```mermaid
 flowchart BT
-  defaults[DEFAULT_CONFIG] --> pkg[package.json claude-commit key]
+  defaults[DEFAULT_CONFIG] --> global["global: ~/.config/claude-commit/config.json"]
+  global --> pkg[package.json claude-commit key]
   pkg --> file[.claude-commit.json / .claude-commitrc.json / .claude-commitrc]
   file --> flags[CLI flags]
   flags --> resolved[Resolved Config]
@@ -133,10 +134,15 @@ flowchart BT
 Precedence is low to high:
 
 1. Built-in `DEFAULT_CONFIG`.
-2. `package.json` under the `claude-commit` key at the repo root.
-3. The nearest `.claude-commit.json`, `.claude-commitrc.json`, or
+2. The global user config in `$XDG_CONFIG_HOME/claude-commit` (default
+   `~/.config/claude-commit`). `config.json` is the canonical name; the dotted
+   `.claude-commit*` names also work there. `config.json` is **global-only** — it
+   is never picked up by the project tree walk (`GLOBAL_CONFIG_FILENAMES` vs
+   `CONFIG_FILENAMES`).
+3. `package.json` under the `claude-commit` key at the repo root.
+4. The nearest `.claude-commit.json`, `.claude-commitrc.json`, or
    `.claude-commitrc`, searched from the current directory up to the repo root.
-4. CLI flags.
+5. CLI flags.
 
 `sanitizePartial()` is intentionally conservative. It ignores unknown keys and
 keys with the wrong type, clamps `interactiveTemperature` to `0..2`, floors
@@ -182,8 +188,13 @@ The pipeline has two model stages:
 2. **Final message stage**
    - `buildFinalSystem(config)` encodes formatting rules such as Conventional
      Commits, gitmoji, templates, custom prompt text, and multiline bodies.
-   - `buildFinalUser(summaries, count)` asks for one message or several
-     delimiter-separated options.
+   - `buildFinalUser(summaries, count)` asks for one message or several distinct
+     options (the `messages` array in structured mode, delimiter-separated text
+     otherwise). For multiple options it reuses `multiOptionInstruction()`, which
+     requires each option to be a _complete_ message obeying every rule —
+     including the body when `multiline` is on — so options never drop the body
+     to manufacture variety (which previously made `multiline` look ignored in
+     interactive mode).
    - `runPrompt()` sends the final prompt to the configured final model.
    - If multiple options are requested, `interactiveTemperature` is applied when
      available; if the model rejects that override, generation retries without it.

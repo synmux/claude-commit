@@ -68,6 +68,22 @@ describe("buildFinalUser", () => {
     expect(user).toContain(OPTION_DELIMITER);
   });
 
+  test("multi-option prompts demand complete messages and stop nudging structural variety", () => {
+    // Regression guard: the old wording said "vary the wording, structure and
+    // emphasis", which let the model drop bodies to manufacture variety — so
+    // `multiline` looked ignored in interactive mode. Each option must now be a
+    // complete message that obeys every formatting rule (including the body).
+    for (const prompt of [
+      buildFinalUser(["did a thing"], 3), // delimiter mode
+      buildFinalUser(["did a thing"], 3, true), // structured mode
+    ]) {
+      expect(prompt).toContain("complete commit message");
+      expect(prompt).toContain("obeys all the formatting rules");
+      expect(prompt).toContain("body");
+      expect(prompt).not.toContain("structure");
+    }
+  });
+
   test("multiple summaries are labelled by part", () => {
     const user = buildFinalUser(["first", "second"], 1);
     expect(user).toContain("Part 1:");

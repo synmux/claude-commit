@@ -155,6 +155,24 @@ export function buildFinalSystem(config: Config, structured = false): string {
 }
 
 /**
+ * The shared instruction for requesting several distinct options.
+ *
+ * It insists each option be a COMPLETE message obeying the formatting rules —
+ * crucially the body when `multiline` is on. The previous wording asked the
+ * model to "vary the structure" of the options, which let it drop bodies to
+ * manufacture variety, so `multiline` appeared to be ignored in interactive
+ * mode even though the system prompt still required a body.
+ */
+function multiOptionInstruction(count: number): string {
+  return (
+    `Produce exactly ${count} distinct commit-message options for this change. ` +
+    `Each option must be a complete commit message that independently obeys all the formatting rules above — ` +
+    `including the blank line and body when those rules ask for one. ` +
+    `Make the options genuinely different in wording and emphasis, but never drop the subject or a required body just to create variety.`
+  );
+}
+
+/**
  * User prompt for the final stage.
  *
  * In `structured` mode the candidates are returned via {@link MESSAGES_SCHEMA}'s
@@ -180,9 +198,7 @@ export function buildFinalUser(
     const ask =
       count <= 1
         ? `Produce a single commit message for this change and return it as the only element of the "messages" array.`
-        : `Produce exactly ${count} distinct commit-message options for this change. ` +
-          `Vary the wording, structure and emphasis so the options are genuinely different. ` +
-          `Return them in the "messages" array.`;
+        : `${multiOptionInstruction(count)} Return them in the "messages" array.`;
     return `${header}\n\n${joined}\n\n${ask}`;
   }
 
@@ -191,9 +207,7 @@ export function buildFinalUser(
   }
 
   return (
-    `${header}\n\n${joined}\n\n` +
-    `Produce exactly ${count} distinct commit-message options for this change. ` +
-    `Vary the wording, structure and emphasis so the options are genuinely different. ` +
+    `${header}\n\n${joined}\n\n${multiOptionInstruction(count)} ` +
     `Output each option on its own, preceded by a line containing exactly "${OPTION_DELIMITER}" and nothing else. ` +
     `Do not number the options or add any other text.`
   );

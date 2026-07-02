@@ -1,10 +1,14 @@
 /**
  * Configuration loading and merging.
  *
- * Precedence (low to high): built-in defaults < `package.json` (`claude-commit`
- * key) < a `.claude-commit.json` / `.claude-commitrc(.json)` file < CLI flags.
+ * Precedence (low to high): built-in defaults < a global user config in
+ * `$XDG_CONFIG_HOME/claude-commit` (default `~/.config/claude-commit`) <
+ * `package.json` (`claude-commit` key at the repo root) < the nearest project
+ * `.claude-commit.json` / `.claude-commitrc(.json)` file (searched cwd → repo
+ * root) < CLI flags.
  */
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { ClaudeCommitError } from "./errors";
 import type { Config, ModelConfig, PartialConfig } from "./types";
 
@@ -31,6 +35,39 @@ const CONFIG_FILENAMES = [
   ".claude-commitrc.json",
   ".claude-commitrc",
 ];
+
+/**
+ * Filenames accepted inside the global config directory, most-preferred first.
+ * `config.json` is the canonical name (the directory already says which tool it
+ * is for); the project-style names are also honoured so a config can be copied
+ * or symlinked there.
+ */
+const GLOBAL_CONFIG_FILENAMES = ["config.json", ...CONFIG_FILENAMES];
+
+/**
+ * The user-level config directory, `$XDG_CONFIG_HOME/claude-commit` (falling back
+ * to `~/.config/claude-commit`). Per the XDG Base Directory spec, `XDG_CONFIG_HOME`
+ * is honoured only when it is set to an absolute path.
+ */
+export function globalConfigDir(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const xdg = env.XDG_CONFIG_HOME;
+  const base = xdg && isAbsolute(xdg) ? xdg : join(homedir(), ".config");
+  return join(base, "claude-commit");
+}
+
+/** The first existing global config file in {@link globalConfigDir}, if any. */
+async function findGlobalConfigFile(
+  env: Record<string, string | undefined> = process.env,
+): Promise<string | undefined> {
+  const dir = globalConfigDir(env);
+  for (const name of GLOBAL_CONFIG_FILENAMES) {
+    const candidate = join(dir, name);
+    if (await Bun.file(candidate).exists()) return candidate;
+  }
+  return undefined;
+}
 
 /** Deep-ish merge of a partial config over a base config (only `models` is nested). */
 export function mergeConfig(base: Config, override: PartialConfig): Config {
@@ -131,20 +168,37 @@ async function findConfigFile(
 }
 
 /**
- * Load file-based configuration: the nearest config file (searched from `cwd`
- * up to `repoRoot`) merged over `package.json`'s `claude-commit` key at the repo
- * root. An explicit `configPath` short-circuits discovery.
+ * Load and merge the file-based configuration layers that sit below CLI flags,
+ * lowest first: the global user config, then `package.json`'s `claude-commit` key
+ * at the repo root, then the nearest project config file (searched from `cwd` up
+ * to `repoRoot`). An explicit `configPath` short-circuits the project-file
+ * discovery; the global and `package.json` layers still apply beneath it. `env`
+ * supplies `XDG_CONFIG_HOME` for locating the global config (defaults to
+ * `process.env`).
  */
 export async function loadFileConfig(
   cwd: string,
   repoRoot: string,
   configPath?: string,
+  env: Record<string, string | undefined> = process.env,
 ): Promise<PartialConfig> {
   let result: PartialConfig = {};
 
-  // package.json#claude-commit at the repo root (lowest precedence of the files).
-  // A malformed package.json is not cco's concern to enforce — skip it rather
-  // than blocking the commit (the user may even be committing its fix).
+  // Global user config (lowest precedence): $XDG_CONFIG_HOME/claude-commit. Like
+  // a project config file, a malformed one throws (it is a file the user wrote
+  // deliberately), which readJsonIfExists handles.
+  const globalPath = await findGlobalConfigFile(env);
+  if (globalPath) {
+    result = mergePartial(
+      result,
+      sanitizePartial(await readJsonIfExists(globalPath)),
+    );
+  }
+
+  // package.json#claude-commit at the repo root (above the global config, below
+  // project config files). A malformed package.json is not cco's concern to
+  // enforce — skip it rather than blocking the commit (the user may even be
+  // committing its fix).
   let pkg: unknown;
   try {
     pkg = await readJsonIfExists(join(repoRoot, "package.json"));

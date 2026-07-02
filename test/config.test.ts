@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   DEFAULT_CONFIG,
+  globalConfigDir,
   loadFileConfig,
   mergeConfig,
   mergePartial,
@@ -209,5 +210,98 @@ describe("loadFileConfig", () => {
   test("a malformed explicit --config file throws", async () => {
     await writeFile(join(dir, "custom.json"), "{ nope ");
     await expect(loadFileConfig(dir, dir, "custom.json")).rejects.toThrow();
+  });
+});
+
+describe("global config (XDG)", () => {
+  let projectDir: string;
+  let xdgDir: string;
+  const globalDir = () => join(xdgDir, "claude-commit");
+  const env = () => ({ XDG_CONFIG_HOME: xdgDir });
+
+  beforeEach(async () => {
+    projectDir = await mkdtemp(join(tmpdir(), "cco-project-"));
+    xdgDir = await mkdtemp(join(tmpdir(), "cco-xdg-"));
+    await mkdir(globalDir(), { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(projectDir, { recursive: true, force: true });
+    await rm(xdgDir, { recursive: true, force: true });
+  });
+
+  test("globalConfigDir honours an absolute XDG_CONFIG_HOME", () => {
+    expect(globalConfigDir({ XDG_CONFIG_HOME: "/tmp/xdg" })).toBe(
+      "/tmp/xdg/claude-commit",
+    );
+  });
+
+  test("globalConfigDir falls back to ~/.config when XDG is unset or relative", () => {
+    expect(globalConfigDir({})).toMatch(/\.config\/claude-commit$/);
+    expect(globalConfigDir({ XDG_CONFIG_HOME: "not/absolute" })).toMatch(
+      /\.config\/claude-commit$/,
+    );
+  });
+
+  test("reads config.json from the global directory", async () => {
+    await writeFile(
+      join(globalDir(), "config.json"),
+      JSON.stringify({ gitmoji: true }),
+    );
+    const cfg = await loadFileConfig(projectDir, projectDir, undefined, env());
+    expect(cfg.gitmoji).toBe(true);
+  });
+
+  test("also accepts the project-style filenames in the global directory", async () => {
+    await writeFile(
+      join(globalDir(), ".claude-commit.json"),
+      JSON.stringify({ multiline: true }),
+    );
+    const cfg = await loadFileConfig(projectDir, projectDir, undefined, env());
+    expect(cfg.multiline).toBe(true);
+  });
+
+  test("a project config file overrides the global config", async () => {
+    await writeFile(
+      join(globalDir(), "config.json"),
+      JSON.stringify({ gitmoji: true, multiline: true }),
+    );
+    await writeFile(
+      join(projectDir, ".claude-commit.json"),
+      JSON.stringify({ multiline: false }),
+    );
+    const cfg = await loadFileConfig(projectDir, projectDir, undefined, env());
+    expect(cfg.gitmoji).toBe(true); // inherited from global
+    expect(cfg.multiline).toBe(false); // project overrides global
+  });
+
+  test("package.json overrides the global config", async () => {
+    await writeFile(
+      join(globalDir(), "config.json"),
+      JSON.stringify({ conventionalCommits: false }),
+    );
+    await writeFile(
+      join(projectDir, "package.json"),
+      JSON.stringify({ "claude-commit": { conventionalCommits: true } }),
+    );
+    const cfg = await loadFileConfig(projectDir, projectDir, undefined, env());
+    expect(cfg.conventionalCommits).toBe(true);
+  });
+
+  test("config.json is a global-only name — not discovered in the project tree", async () => {
+    // A stray config.json inside the project must be ignored; only the dotted
+    // names apply further down the tree.
+    await writeFile(
+      join(projectDir, "config.json"),
+      JSON.stringify({ gitmoji: true }),
+    );
+    const cfg = await loadFileConfig(projectDir, projectDir, undefined, env());
+    expect(cfg.gitmoji).toBeUndefined();
+  });
+
+  test("a malformed global config throws", async () => {
+    await writeFile(join(globalDir(), "config.json"), "{ broken ");
+    await expect(
+      loadFileConfig(projectDir, projectDir, undefined, env()),
+    ).rejects.toThrow();
   });
 });

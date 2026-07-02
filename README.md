@@ -122,18 +122,31 @@ non-interactive flow rather than failing.
 
 ## Configuration
 
-Defaults can be set in a `.claude-commit.json` (searched from the current directory
-up to the repo root) or under a `claude-commit` key in `package.json`. CLI flags
-always win.
+Configuration is layered, from lowest to highest precedence:
+
+1. Built-in defaults.
+2. **A global user config** at `~/.config/claude-commit/config.json` (or
+   `$XDG_CONFIG_HOME/claude-commit/config.json`) — your personal defaults across
+   every project. The `.claude-commit.json` / `.claude-commitrc.json` /
+   `.claude-commitrc` names are also accepted in that directory.
+3. A `claude-commit` key in the repo's `package.json`.
+4. The nearest `.claude-commit.json` / `.claude-commitrc.json` / `.claude-commitrc`,
+   searched from the current directory up to the repo root.
+5. CLI flags.
+
+So a global config sets your personal defaults and any project further down the
+tree can override them. Note that the `config.json` name is recognised **only** in
+the global directory; inside a project, use one of the dotted filenames. The same
+keys are valid at every level:
 
 ```json
 {
   "conventionalCommits": true,
-  "gitmoji": false,
-  "multiline": false,
+  "gitmoji": true,
+  "multiline": true,
   "template": null,
   "customPrompt": "Reference the ticket id from the branch name when present.",
-  "interactive": false,
+  "interactive": true,
   "interactiveCount": 3,
   "interactiveTemperature": 1,
   "models": {
@@ -152,3 +165,13 @@ always win.
 bun test          # run the test suite
 bun run typecheck # tsc --noEmit
 ```
+
+## Did you vibe this?
+
+I distinguish vibe coding and AI-assisted development by
+_where you live as the developer_. If you live in the code, it's AI-assisted dev.
+If you just shout at a chat and hope for the best, that's vibe coding.
+
+This was AI-assisted development.
+
+Thanks for coming to my TED talk.
