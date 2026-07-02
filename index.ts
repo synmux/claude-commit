@@ -2,7 +2,7 @@
  * Library entry point for `claude-commit`.
  *
  * Re-exports the building blocks so the commit-message pipeline can be used
- * programmatically. The CLI lives in `bin/cc.ts` (`src/cli.ts`).
+ * programmatically. The CLI lives in `bin/cco.ts` (`src/cli.ts`).
  */
 export { generateCommit } from "./src/generate";
 export type {

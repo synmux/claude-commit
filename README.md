@@ -10,7 +10,7 @@ Conventional Commits, gitmoji, first-line templates, custom instructions, and an
 interactive mode for choosing between several options.
 
 ```console
-$ cc -c
+$ cco -c
 ✔ Committed
 feat(auth): add error handling and refresh token rotation to login
 ```
@@ -37,13 +37,13 @@ Requires [Bun](https://bun.sh).
 
 ```sh
 bun install
-bun link            # makes `cc` and `claude-commit` available on your PATH
+bun link            # makes `cco` and `claude-commit` available on your PATH
 ```
 
 Or run it directly without linking:
 
 ```sh
-bun run bin/cc.ts --help
+bun run bin/cco.ts --help
 ```
 
 ## Authentication
@@ -65,54 +65,60 @@ instead (pay-as-you-go), opt in explicitly in your configuration:
 ## Usage
 
 ```sh
-cc [options]
+cco [options]
 ```
 
-By default `cc` summarizes your **staged** changes, generates a message, shows it,
+By default `cco` summarizes your **staged** changes, generates a message, shows it,
 and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 `--dry-run` to print the message without committing.
 
 ### Options
 
-| Flag                                 | Description                                                            |
-| ------------------------------------ | ---------------------------------------------------------------------- |
-| `-i, --interactive`                  | Choose between several options in an interactive TUI                   |
-| `-n, --count <n>`                    | Number of options to generate in interactive mode (default 3)          |
-| `-a, --all`                          | Stage all changes (`git add -A`) before committing                     |
-| `-c, --conventional`                 | Format as a [Conventional Commit](https://www.conventionalcommits.org) |
-| `-g, --gitmoji`                      | Prefix the subject with a [gitmoji](https://gitmoji.dev)               |
-| `-m, --multiline` / `--no-multiline` | Write a multi-line commit (subject + body), or force a single line     |
-| `-t, --template <tpl>`               | Template for the first line, e.g. `"[PROJ-1] {message}"`               |
-| `-p, --prompt <text>`                | Extra instructions appended to the prompt                              |
-| `--model-summary <model>`            | Model used to summarize the diff (default `sonnet[1m]`)                |
-| `--model-final <model>`              | Model used to write the message (default `haiku`)                      |
-| `-d, --dry-run`                      | Print the message to stdout without committing                         |
-| `-y, --yes`                          | Commit without asking for confirmation                                 |
-| `--no-spinner`                       | Disable the progress spinner                                           |
-| `--config <path>`                    | Path to a config file                                                  |
-| `-v, --verbose`                      | Print summaries, cost and debug output                                 |
+| Flag                                     | Description                                                                             |
+| ---------------------------------------- | --------------------------------------------------------------------------------------- |
+| `-i, --interactive` / `--no-interactive` | Choose between several options in an interactive TUI, or skip it when enabled in config |
+| `-n, --count <n>`                        | Number of options to generate in interactive mode (default 3)                           |
+| `-a, --all`                              | Stage all changes (`git add -A`) before committing                                      |
+| `-c, --conventional`                     | Format as a [Conventional Commit](https://www.conventionalcommits.org)                  |
+| `-g, --gitmoji`                          | Prefix the subject with a [gitmoji](https://gitmoji.dev)                                |
+| `-m, --multiline` / `--no-multiline`     | Write a multi-line commit (subject + body), or force a single line                      |
+| `-t, --template <tpl>`                   | Template for the first line, e.g. `"[PROJ-1] {message}"`                                |
+| `-p, --prompt <text>`                    | Extra instructions appended to the prompt                                               |
+| `--model-summary <model>`                | Model used to summarize the diff (default `sonnet[1m]`)                                 |
+| `--model-final <model>`                  | Model used to write the message (default `haiku`)                                       |
+| `-d, --dry-run`                          | Print the message to stdout without committing                                          |
+| `-y, --yes`                              | Commit without asking for confirmation                                                  |
+| `--no-spinner`                           | Disable the progress spinner                                                            |
+| `--config <path>`                        | Path to a config file                                                                   |
+| `-v, --verbose`                          | Print summaries, cost and debug output                                                  |
 
 ### Examples
 
 ```sh
-cc                      # generate, confirm, and commit staged changes
-cc -a -c                # stage everything and write a Conventional Commit
-cc -c -g -m             # conventional + gitmoji + a body
-cc -i -n 5              # pick from 5 options interactively
-cc --dry-run | cat      # print a message without committing (TUI-free, pipe-safe)
-git commit -F <(cc -d)  # use the message with your own git invocation
+cco                      # generate, confirm, and commit staged changes
+cco -a -c                # stage everything and write a Conventional Commit
+cco -c -g -m             # conventional + gitmoji + a body
+cco -i -n 5              # pick from 5 options interactively
+cco --dry-run | cat      # print a message without committing (TUI-free, pipe-safe)
+git commit -F <(cco -d)  # use the message with your own git invocation
 ```
 
-In a pipe (no TTY) there is no spinner and no confirmation prompt — `cc` just
+In a pipe (no TTY) there is no spinner and no confirmation prompt — `cco` just
 generates and commits (or prints, with `--dry-run`).
 
 ## Interactive mode
 
-`cc -i` opens a TUI showing the staged **diff** alongside several candidate
-messages. The options are generated with a higher temperature
-(`interactiveTemperature`) for more variety. Use the arrow keys to move between
-options, `PgUp`/`PgDn` to scroll the diff, `Enter` to commit the highlighted
-option, `e` to edit it in your `$EDITOR` first, and `q`/`Esc` to cancel.
+`cco -i` opens a TUI listing several candidate messages to choose from. The
+options are generated with a higher temperature (`interactiveTemperature`) for
+more variety. Use the arrow keys to move between options, `Enter` to commit the
+highlighted option, `e` to edit it in your `$EDITOR` first, and `q`/`Esc` to
+cancel.
+
+To make interactive mode the default without typing `-i` every time, set
+`"interactive": true` in your config (see below); opt out of a single run with
+`--no-interactive`. When there is no interactive terminal — in a pipe, a CI job,
+or with `--dry-run` — `cco` ignores the setting and falls back to the
+non-interactive flow rather than failing.
 
 ## Configuration
 
@@ -127,6 +133,7 @@ always win.
   "multiline": false,
   "template": null,
   "customPrompt": "Reference the ticket id from the branch name when present.",
+  "interactive": false,
   "interactiveCount": 3,
   "interactiveTemperature": 1,
   "models": {

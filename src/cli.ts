@@ -43,12 +43,16 @@ interface CliOptions {
 function buildProgram(): Command {
   const program = new Command();
   program
-    .name("cc")
+    .name("cco")
     .description("Generate a git commit message with Claude.")
     .version(VERSION, "-V, --version", "output the version number")
     .option(
       "-i, --interactive",
       "choose between several options in an interactive TUI",
+    )
+    .option(
+      "--no-interactive",
+      'skip the interactive TUI even when "interactive" is set in config',
     )
     .option(
       "-n, --count <n>",
@@ -82,10 +86,10 @@ function buildProgram(): Command {
         '  unless the config sets "allowApiKey": true (pay-as-you-go billing).',
         "",
         "Examples:",
-        "  cc                     generate and commit a message for staged changes",
-        "  cc -a -c               stage everything and write a Conventional Commit",
-        "  cc -i                  pick from several options interactively",
-        "  cc --dry-run | cat     print a message without committing",
+        "  cco                     generate and commit a message for staged changes",
+        "  cco -a -c               stage everything and write a Conventional Commit",
+        "  cco -i                  pick from several options interactively",
+        "  cco --dry-run | cat     print a message without committing",
       ].join("\n"),
     );
   return program;
@@ -98,6 +102,7 @@ function flagsToConfig(opts: CliOptions): PartialConfig {
     cfg.conventionalCommits = opts.conventional;
   if (opts.gitmoji !== undefined) cfg.gitmoji = opts.gitmoji;
   if (opts.multiline !== undefined) cfg.multiline = opts.multiline;
+  if (opts.interactive !== undefined) cfg.interactive = opts.interactive;
   if (opts.template !== undefined) cfg.template = opts.template;
   if (opts.prompt !== undefined) cfg.customPrompt = opts.prompt;
   if (opts.count !== undefined && Number.isFinite(opts.count)) {
@@ -108,6 +113,28 @@ function flagsToConfig(opts: CliOptions): PartialConfig {
   if (opts.modelFinal) models.final = opts.modelFinal;
   if (Object.keys(models).length) cfg.models = models;
   return cfg;
+}
+
+/**
+ * Decide which flow to run from the resolved config, the raw `--interactive`
+ * flag state, and whether we have an interactive terminal.
+ *
+ * - `--dry-run` always wins: it prints and never commits, so the TUI is skipped.
+ * - Interactive requires a TTY. An explicit `-i` without one is a hard error
+ *   (the user asked for something we cannot provide), whereas interactive coming
+ *   only from config silently falls back to the non-interactive flow so pipes
+ *   and CI keep working.
+ */
+export function resolveInteractiveMode(args: {
+  configInteractive: boolean;
+  interactiveFlag: boolean | undefined;
+  dryRun: boolean;
+  hasTty: boolean;
+}): "interactive" | "non-interactive" | "no-tty-error" {
+  if (args.dryRun) return "non-interactive";
+  if (!args.configInteractive) return "non-interactive";
+  if (args.hasTty) return "interactive";
+  return args.interactiveFlag === true ? "no-tty-error" : "non-interactive";
 }
 
 function printMessage(message: string): void {
@@ -142,7 +169,7 @@ export async function run(argv: string[]): Promise<number> {
   try {
     if (!(await isGitRepo())) {
       throw new ClaudeCommitError(
-        "Not a git repository (or any parent). Run `cc` inside a repo.",
+        "Not a git repository (or any parent). Run `cco` inside a repo.",
       );
     }
     const repoRoot = await getRepoRoot();
@@ -179,12 +206,18 @@ export async function run(argv: string[]): Promise<number> {
       );
     }
 
-    if (opts.interactive) {
-      if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        throw new ClaudeCommitError(
-          "Interactive mode (-i) requires an interactive terminal.",
-        );
-      }
+    const interactiveMode = resolveInteractiveMode({
+      configInteractive: config.interactive,
+      interactiveFlag: opts.interactive,
+      dryRun: Boolean(opts.dryRun),
+      hasTty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+    });
+    if (interactiveMode === "no-tty-error") {
+      throw new ClaudeCommitError(
+        "Interactive mode (-i) requires an interactive terminal.",
+      );
+    }
+    if (interactiveMode === "interactive") {
       const { runInteractive } = await import("./ui/interactive");
       return await runInteractive(diff, config, { verbose, abortController });
     }

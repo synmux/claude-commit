@@ -1,10 +1,10 @@
 # claude-commit — Project Overview
 
-Bun/TypeScript CLI (`cc` / `claude-commit`) that generates git commit messages from the staged diff using the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`, spawns the bundled `claude` binary).
+Bun/TypeScript CLI (`cco` / `claude-commit`) that generates git commit messages from the staged diff using the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`, spawns the bundled `claude` binary).
 
 ## Pipeline
 
-diff → `splitDiff` chunks → summary model (default `sonnet[1m]`) per chunk → final model (default `haiku`) writes message(s). Entry: `bin/cc.ts` → `src/cli.ts` (commander) → `src/generate.ts` → `src/agent.ts` (`runPrompt`, single-turn, tools disabled).
+diff → `splitDiff` chunks → summary model (default `sonnet[1m]`) per chunk → final model (default `haiku`) writes message(s). Entry: `bin/cco.ts` → `src/cli.ts` (commander) → `src/generate.ts` → `src/agent.ts` (`runPrompt`, single-turn, tools disabled).
 
 ## Key modules
 
@@ -16,7 +16,7 @@ diff → `splitDiff` chunks → summary model (default `sonnet[1m]`) per chunk �
 ## Commands
 
 - `bun test` · `bun run typecheck` (tsc --noEmit) · `bun run lint` (trunk) · `bun run format` (prettier + trunk fmt)
-- Run: `bun run bin/cc.ts --dry-run --no-spinner` (needs a repo with staged changes)
+- Run: `bun run bin/ --dry-run --no-spinner` (needs a repo with staged changes)
 - Trunk pre-commit hook auto-formats on commit.
 
 ## Conventions

@@ -25,6 +25,13 @@ export interface Config {
   template: string | null;
   /** Extra instructions appended to the standard prompt. */
   customPrompt: string | null;
+  /**
+   * Default to interactive mode (the `-i` selection TUI) on every run, without
+   * needing to pass `-i`. Override for a single run with `--no-interactive`.
+   * When there is no interactive terminal (a pipe, CI, etc.) this is ignored and
+   * cco falls back to the non-interactive flow rather than failing.
+   */
+  interactive: boolean;
   /** How many candidate messages to generate in interactive mode. */
   interactiveCount: number;
   /**

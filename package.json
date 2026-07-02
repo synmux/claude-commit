@@ -7,14 +7,30 @@
   "type": "module",
   "private": true,
   "bin": {
-    "cc": "bin/cc.ts",
-    "claude-commit": "bin/cc.ts"
+    "cco": "bin/cco.ts",
+    "claude-commit": "bin/cco.ts"
   },
   "files": [
     "bin",
     "src",
     "index.ts"
   ],
+  "claude-commit": {
+    "conventionalCommits": true,
+    "gitmoji": true,
+    "multiline": true,
+    "template": null,
+    "interactive": false,
+    "interactiveCount": 3,
+    "interactiveTemperature": 1,
+    "models": {
+      "summary": "sonnet[1m]",
+      "final": "sonnet"
+    },
+    "maxChunkTokens": 600000,
+    "charsPerToken": 3.5,
+    "allowApiKey": false
+  },
   "devDependencies": {
     "@anthropic-ai/claude-code": "^2.1.198",
     "@trunkio/launcher": "^1.3.4",
@@ -31,7 +47,7 @@
     "commander": "^15.0.0"
   },
   "scripts": {
-    "start": "bun run bin/cc.ts",
+    "start": "bun run bin/cco.ts",
     "test": "bun test",
     "format": "bun run prettier --write . && bun run trunk fmt -a",
     "lint": "bun run trunk check -a",

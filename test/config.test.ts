@@ -79,6 +79,28 @@ describe("allowApiKey", () => {
   });
 });
 
+describe("interactive", () => {
+  test("sanitizePartial accepts booleans only", () => {
+    expect(sanitizePartial({ interactive: true }).interactive).toBe(true);
+    expect(sanitizePartial({ interactive: false }).interactive).toBe(false);
+    expect(sanitizePartial({ interactive: "yes" }).interactive).toBeUndefined();
+    expect(sanitizePartial({ interactive: 1 }).interactive).toBeUndefined();
+  });
+
+  test("defaults to false", () => {
+    expect(DEFAULT_CONFIG.interactive).toBe(false);
+  });
+
+  test("resolves through the precedence chain", () => {
+    expect(resolveConfig({}, {}).interactive).toBe(false); // default
+    expect(resolveConfig({ interactive: true }, {}).interactive).toBe(true); // file
+    // A `--no-interactive` flag (false) overrides a file that enables it.
+    expect(
+      resolveConfig({ interactive: true }, { interactive: false }).interactive,
+    ).toBe(false);
+  });
+});
+
 describe("mergeConfig / mergePartial", () => {
   test("mergeConfig overrides scalars and merges models", () => {
     const merged = mergeConfig(DEFAULT_CONFIG, {
@@ -114,7 +136,7 @@ describe("resolveConfig precedence", () => {
 describe("loadFileConfig", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "cc-config-"));
+    dir = await mkdtemp(join(tmpdir(), "cco-config-"));
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -169,7 +191,7 @@ describe("loadFileConfig", () => {
 
   test("tolerates a malformed package.json instead of blocking", async () => {
     // package.json has many purposes; a syntax error in it (the user may even
-    // be committing the fix) must not stop cc from loading its own config.
+    // be committing the fix) must not stop cco from loading its own config.
     await writeFile(join(dir, "package.json"), "{ not: valid json ");
     await writeFile(
       join(dir, ".claude-commit.json"),

@@ -49,7 +49,7 @@ export async function runInteractive(
 
   let selection: Selection;
   try {
-    selection = await selectWithTui(messages, diff);
+    selection = await selectWithTui(messages);
   } catch {
     // TUI failed to initialize (unusual terminal, etc.) — degrade gracefully.
     selection = await selectWithReadline(messages);
@@ -81,25 +81,105 @@ export async function runInteractive(
   return 0;
 }
 
-/** Max characters of diff to render in the TUI (display only; the full diff is still summarized). */
-const MAX_DIFF_DISPLAY_CHARS = 100_000;
-/** Rows scrolled per PageUp/PageDown press. */
-const SCROLL_STEP = 10;
+/**
+ * Rows a single candidate occupies in the picker: the subject line plus a
+ * one-line body preview (`showDescription`), with OpenTUI's default
+ * `itemSpacing` of 0. Mirrors SelectRenderable's own line accounting.
+ */
+const PICKER_LINES_PER_ITEM = 2;
+
+/**
+ * Rows reserved for the non-picker chrome when capping its height: root padding
+ * (2), the header line (1) and the gap below it (1).
+ */
+const PICKER_CHROME_ROWS = 4;
+
+/**
+ * The picker's height, sized to its content (two rows per candidate) but capped
+ * to the terminal so a large `interactiveCount` still fits; past the cap the list
+ * scrolls internally (see `showScrollIndicator` in {@link buildPickerScene}). An
+ * explicit height keeps the picker compact — only as tall as the options need —
+ * rather than stretching to fill the screen.
+ */
+export function pickerHeight(count: number, terminalRows: number): number {
+  const wanted = Math.max(1, count) * PICKER_LINES_PER_ITEM;
+  const cap = Math.max(
+    PICKER_LINES_PER_ITEM,
+    terminalRows - PICKER_CHROME_ROWS,
+  );
+  return Math.min(wanted, cap);
+}
+
+/** The `@opentui/core` module, however it is obtained (dynamic import or test). */
+type TuiModule = typeof import("@opentui/core");
+/** The renderer object returned by `createCliRenderer` (and the headless test renderer). */
+type TuiRenderer = Awaited<ReturnType<TuiModule["createCliRenderer"]>>;
+
+/** The renderables the caller wires key handling to after building the scene. */
+export interface PickerScene {
+  root: InstanceType<TuiModule["BoxRenderable"]>;
+  select: InstanceType<TuiModule["SelectRenderable"]>;
+}
+
+/**
+ * Build the picker's renderable tree: a header line above the candidate list.
+ * Extracted from {@link selectWithTui} so the layout can be rendered under
+ * OpenTUI's headless test renderer and asserted on. The caller adds `root` to
+ * the renderer and wires key handling to the returned `select`.
+ */
+export function buildPickerScene(
+  renderer: TuiRenderer,
+  tui: TuiModule,
+  messages: string[],
+  terminalRows: number,
+): PickerScene {
+  const { BoxRenderable, TextRenderable, SelectRenderable } = tui;
+
+  const root = new BoxRenderable(renderer, {
+    flexDirection: "column",
+    width: "100%",
+    height: "100%",
+    padding: 1,
+    gap: 1,
+  });
+
+  const header = new TextRenderable(renderer, {
+    content:
+      "Pick a commit message   ↑/↓ select · ⏎ commit · e edit · q cancel",
+  });
+
+  // A compact, content-sized list of the candidate messages. flexShrink:0 keeps
+  // it at its full height; showScrollIndicator covers more options than fit.
+  const select = new SelectRenderable(renderer, {
+    height: pickerHeight(messages.length, terminalRows),
+    flexShrink: 0,
+    showScrollIndicator: true,
+    options: messages.map((message, index) => ({
+      name: firstLine(message),
+      description: bodyPreview(message),
+      value: index,
+    })),
+    selectedIndex: 0,
+    showDescription: true,
+    wrapSelection: true,
+    // A calm slate highlight (OpenTUI's own default background) with soft
+    // near-white text — the previous bright cyan/black fill was too harsh.
+    // The default description greys (#888888 / #CCCCCC) read fine on the slate,
+    // so they are left untouched.
+    selectedBackgroundColor: "#334455",
+    selectedTextColor: "#e6edf3",
+  });
+
+  root.add(header);
+  root.add(select);
+
+  return { root, select };
+}
 
 /** The OpenTUI selection screen. Resolves with the user's choice. */
-async function selectWithTui(
-  messages: string[],
-  diff: string,
-): Promise<Selection> {
-  const {
-    createCliRenderer,
-    BoxRenderable,
-    TextRenderable,
-    SelectRenderable,
-    ScrollBoxRenderable,
-  } = await import("@opentui/core");
-
-  const renderer = await createCliRenderer({ exitOnCtrlC: false });
+async function selectWithTui(messages: string[]): Promise<Selection> {
+  const tui = await import("@opentui/core");
+  const renderer = await tui.createCliRenderer({ exitOnCtrlC: false });
 
   return await new Promise<Selection>((resolve, reject) => {
     let settled = false;
@@ -125,55 +205,13 @@ async function selectWithTui(
     };
 
     try {
-      const root = new BoxRenderable(renderer, {
-        flexDirection: "column",
-        width: "100%",
-        height: "100%",
-        padding: 1,
-        gap: 1,
-      });
-
-      const header = new TextRenderable(renderer, {
-        content:
-          "Pick a commit message   ↑/↓ select · PgUp/PgDn scroll diff · ⏎ commit · e edit · q cancel",
-      });
-
-      const shownDiff =
-        diff.length > MAX_DIFF_DISPLAY_CHARS
-          ? diff.slice(0, MAX_DIFF_DISPLAY_CHARS) +
-            "\n… (diff truncated for display)"
-          : diff;
-      const diffBox = new ScrollBoxRenderable(renderer, {
-        flexGrow: 2,
-        border: true,
-        borderColor: "gray",
-        title: "Staged diff",
-        scrollY: true,
-        padding: 0,
-      });
-      diffBox.add(
-        new TextRenderable(renderer, {
-          content: shownDiff.trimEnd() || "(no diff)",
-        }),
+      const terminalRows = process.stdout.rows ?? 24;
+      const { root, select } = buildPickerScene(
+        renderer,
+        tui,
+        messages,
+        terminalRows,
       );
-
-      const select = new SelectRenderable(renderer, {
-        flexGrow: 1,
-        options: messages.map((message, index) => ({
-          name: firstLine(message),
-          description: bodyPreview(message),
-          value: index,
-        })),
-        selectedIndex: 0,
-        showDescription: true,
-        wrapSelection: true,
-        selectedBackgroundColor: "cyan",
-        selectedTextColor: "black",
-      });
-
-      root.add(header);
-      root.add(diffBox);
-      root.add(select);
       renderer.root.add(root);
 
       onKey = (key) => {
@@ -188,15 +226,6 @@ async function selectWithTui(
             case "down":
             case "j":
               select.moveDown();
-              renderer.requestRender();
-              break;
-            case "pageup":
-              diffBox.scrollBy(-SCROLL_STEP);
-              renderer.requestRender();
-              break;
-            case "pagedown":
-            case "space":
-              diffBox.scrollBy(SCROLL_STEP);
               renderer.requestRender();
               break;
             case "return":

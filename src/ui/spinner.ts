@@ -3,7 +3,7 @@
  *
  * It renders to stderr (so stdout stays clean for piping) and only animates when
  * stderr is a TTY; otherwise `start`/`update` are silent no-ops. This keeps the
- * read-only progress indicator out of the way of `cc --dry-run | git commit -F -`.
+ * read-only progress indicator out of the way of `cco --dry-run | git commit -F -`.
  */
 import { color } from "./colors";
 

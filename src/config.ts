@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG: Config = {
   multiline: false,
   template: null,
   customPrompt: null,
+  interactive: false,
   interactiveCount: 3,
   interactiveTemperature: 1,
   models: {
@@ -51,6 +52,7 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   bool("conventionalCommits");
   bool("gitmoji");
   bool("multiline");
+  bool("interactive");
   bool("allowApiKey");
 
   if (typeof obj.template === "string") out.template = obj.template;
@@ -141,7 +143,7 @@ export async function loadFileConfig(
   let result: PartialConfig = {};
 
   // package.json#claude-commit at the repo root (lowest precedence of the files).
-  // A malformed package.json is not cc's concern to enforce — skip it rather
+  // A malformed package.json is not cco's concern to enforce — skip it rather
   // than blocking the commit (the user may even be committing its fix).
   let pkg: unknown;
   try {

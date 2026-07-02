@@ -19,7 +19,7 @@ The codebase is intentionally small. The core path is:
 
 ```text
 .
-├── bin/cc.ts                 # executable entrypoint for `cc` / `claude-commit`
+├── bin/cco.ts                 # executable entrypoint for `cco` / `claude-commit`
 ├── index.ts                  # library exports for programmatic use
 ├── src/
 │   ├── cli.ts                # Commander CLI and top-level orchestration
@@ -43,7 +43,7 @@ The codebase is intentionally small. The core path is:
 
 ```mermaid
 flowchart LR
-  user[User runs cc] --> bin[bin/cc.ts]
+  user[User runs cco] --> bin[bin/cco.ts]
   bin --> cli[src/cli.ts]
 
   cli --> git[src/git.ts]
@@ -63,7 +63,7 @@ flowchart LR
   interactive --> opentui[OpenTUI]
 ```
 
-`bin/cc.ts` is deliberately thin: it imports `run()` from `src/cli.ts`, passes
+`bin/cco.ts` is deliberately thin: it imports `run()` from `src/cli.ts`, passes
 `process.argv.slice(2)`, and converts the returned code into `process.exitCode`.
 Unexpected failures get a stack trace. Expected, user-facing failures are handled
 inside `src/cli.ts` as `ClaudeCommitError`.
@@ -93,22 +93,29 @@ flowchart TD
   stage --> diff[Read git diff --cached]
   diff --> empty{Diff empty?}
   empty -- yes --> emptyerr[ClaudeCommitError]
-  empty -- no --> mode{--interactive?}
+  empty -- no --> mode{"Interactive? (-i or config, unless --dry-run)"}
   mode -- yes --> tty{stdin/stdout are TTY?}
-  tty -- no --> tuierr[ClaudeCommitError]
   tty -- yes --> interactive[runInteractive]
+  tty -- no --> explicit{Explicit -i?}
+  explicit -- yes --> tuierr[ClaudeCommitError]
+  explicit -- no --> noninteractive[runNonInteractive]
   mode -- no --> noninteractive[runNonInteractive]
 ```
 
 Important CLI details:
 
 - `--dry-run` writes only the generated message to stdout, which makes
-  `cc --dry-run | git commit -F -` possible.
+  `cco --dry-run | git commit -F -` possible.
 - The spinner writes to stderr only, so stdout stays clean for piping.
 - Confirmation is only shown when stdin and stdout are both TTYs. In a pipe or
   other non-TTY context, the command skips the prompt.
 - `SIGINT` is converted into an `AbortController` that is passed into generation.
-- `--interactive` is rejected unless the process has an interactive terminal.
+- Interactive mode is enabled per-run with `-i` or by default with the
+  `interactive` config key, and disabled per-run with `--no-interactive`.
+  `resolveInteractiveMode()` decides the flow: `--dry-run` always uses the
+  non-interactive path; an explicit `-i` is rejected when there is no TTY,
+  whereas interactive coming only from config quietly falls back to the
+  non-interactive flow so pipes and CI keep working.
 
 ## Configuration
 
@@ -141,6 +148,7 @@ Defaults worth knowing:
 - Final model: `haiku`
 - `maxChunkTokens`: `600_000`
 - `charsPerToken`: `3.5`
+- `interactive`: `false`
 - `interactiveCount`: `3`
 - `interactiveTemperature`: `1`
 
@@ -314,7 +322,7 @@ staged stat summary.
 
 ## Interactive Mode
 
-`src/ui/interactive.ts` handles `cc -i`.
+`src/ui/interactive.ts` handles `cco -i`.
 
 Interactive mode first calls `generateCommit()` with `count =
 config.interactiveCount`, which asks the final model to produce multiple distinct
@@ -339,12 +347,19 @@ flowchart TD
 
 The TUI shows:
 
-- A scrollable staged diff pane.
-- A candidate-message picker.
-- Keyboard actions for selection, diff scrolling, commit, edit, and cancel.
+- A compact, content-sized list of the candidate messages.
+- Keyboard actions for selection, commit, edit, and cancel.
 
-The full diff is always used for generation, but display truncates after
-`100_000` characters so the TUI remains usable.
+The diff is used for generation but is **not displayed** — the picker shows only
+the candidate messages, keeping the screen focused on the choice.
+
+`buildPickerScene()` assembles the renderable tree (a header line above the
+candidate list) and `pickerHeight()` sizes the list; both are exported so the
+layout is covered by `test/interactive.test.ts` under OpenTUI's headless test
+renderer. The picker is given an **explicit, content-sized height** (two rows per
+candidate) with `flexShrink: 0` so it stays compact — only as tall as the options
+need — and scrolls internally, with a scroll indicator, when there are more
+options than fit the terminal.
 
 If OpenTUI cannot initialize, the module falls back to a plain readline prompt
 that supports choosing by number, editing with `e N`, or quitting with `q`.
@@ -402,7 +417,7 @@ The final user prompt changes based on count:
 
 `src/errors.ts` defines `ClaudeCommitError`, the marker for expected failures.
 The CLI catches this type and prints `error: ...` without a stack trace. Other
-exceptions are considered unexpected and bubble to `bin/cc.ts`, which prints a
+exceptions are considered unexpected and bubble to `bin/cco.ts`, which prints a
 debuggable stack.
 
 `src/git.ts` also defines `GitError`. That error is not specially formatted by
@@ -443,7 +458,7 @@ which keeps the existing unit tests focused on deterministic logic.
 ```sh
 bun test
 bun run typecheck
-bun run bin/cc.ts --help
+bun run bin/cco.ts --help
 ```
 
 Use Bun-native commands in this repository. `CLAUDE.md` explicitly asks agents to
