@@ -5,7 +5,7 @@
   "main": "index.ts",
   "module": "index.ts",
   "type": "module",
-  "private": true,
+  "private": false,
   "bin": {
     "cco": "bin/cco.ts",
     "claude-commit": "bin/cco.ts"
