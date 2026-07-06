@@ -2,14 +2,14 @@
 name: anthropic-ai-claude-agent-sdk-skilld
 description: 'ALWAYS use when writing code importing "@anthropic-ai/claude-agent-sdk". Consult for debugging, best practices, or modifying @anthropic-ai/claude-agent-sdk, anthropic-ai/claude-agent-sdk, anthropic-ai claude-agent-sdk, anthropic ai claude agent sdk, claude-agent-sdk-typescript, claude agent sdk typescript.'
 metadata:
-  version: 0.3.198
+  version: 0.3.201
   generated_by: Anthropic · Haiku 4.5
-  generated_at: 2026-07-01
+  generated_at: 2026-07-06
 ---
 
-# anthropics/claude-agent-sdk-typescript `@anthropic-ai/claude-agent-sdk@0.3.198`
+# anthropics/claude-agent-sdk-typescript `@anthropic-ai/claude-agent-sdk@0.3.201`
 
-**Tags:** latest: 0.3.198, next: 0.3.198
+**Tags:** latest: 0.3.201, next: 0.3.201
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
 
@@ -21,98 +21,107 @@ Use `skilld search "query" -p @anthropic-ai/claude-agent-sdk` instead of greppin
 
 ## API Changes
 
-This section documents version-specific API changes in the Claude Agent SDK v0.3.x series, prioritising recent minor/patch releases.
+This section documents version-specific API changes — prioritize recent major/minor releases.
 
-### New APIs and Methods
+## Breaking Changes
 
-- NEW: `Query.reinitialize()` — v0.3.195 adds a method to re-send the initialize control request after a transport gap and redeliver pending permission/dialog prompts, enabling graceful recovery in long-lived SDK sessions [source](./.skilld/releases/v0.3.195.md:L11)
+- BREAKING: `unstable_v2_createSession()`, `unstable_v2_resumeSession()`, `unstable_v2_prompt()`, `SDKSession`, and `SDKSessionOptions` removed in v0.3.142 — use `query()` with `AsyncIterable<SDKUserMessage>` for multi-turn or `options.resume` to continue sessions [source](./.skilld/releases/CHANGELOG.md:L248)
 
-- NEW: `ReadMcpResourceDirTool` — v0.3.186 introduces a dedicated tool type for MCP resource directory listing; previously this was a fallback inside `ReadMcpResourceTool`, now it is a first-class tool that SDK consumers can control via `allowedTools` and `disallowedTools` [source](./.skilld/releases/v0.3.186.md:L12)
+- BREAKING: MCP servers now connect in background by default (v0.3.142); sessions start immediately with slow servers reporting `status: "pending"` in `init`. Set `MCP_CONNECTION_NONBLOCKING=0` to restore old behaviour or mark a server `alwaysLoad: true` to require it in turn 1 [source](./.skilld/releases/CHANGELOG.md:L249)
 
-- NEW: `rewind_conversation` control request — v0.3.186 adds support for rewinding a conversation to a previous point with durable resume anchor support, enabling conversation branching workflows [source](./.skilld/releases/v0.3.186.md:L13)
+- BREAKING: Switched from `TodoWrite` tool to Task tools (`TaskCreate` / `TaskUpdate` / `TaskGet` / `TaskList`) in v0.3.142; tool consumers must accumulate by task ID instead of replacing snapshot lists [source](./.skilld/releases/CHANGELOG.md:L250)
 
-- NEW: `tool_use_meta` sidecar on assistant messages — v0.3.179 adds optional display-friendly metadata for tool calls, with `icon_url` field added in v0.3.181 from MCP server directory metadata, allowing SDK consumers to render human-readable labels instead of raw wire names [source](./.skilld/releases/v0.3.179.md:L11) [source](./.skilld/releases/v0.3.181.md:L12)
+- BREAKING: `options.env` now replaces `process.env` for CLI subprocess instead of merging (v0.2.121); pass `env: { ...process.env, MY_VAR: "x" }` to override specific variables [source](./.skilld/releases/CHANGELOG.md:L380)
 
-- NEW: `old_source` field in `NotebookEdit` tool results — v0.3.191 adds this field for `replace` and `delete` operations, enabling inline diffs and better version tracking in SDK consumers [source](./.skilld/releases/v0.3.191.md:L11)
+## New APIs & Notable Additions
 
-- NEW: `prompt_id` field in hook input payloads — v0.3.196 adds this UUID field to all hook inputs for correlating hook events with OpenTelemetry prompt-level events (same value as the `prompt.id` OTel attribute), enabling instrumentation and debugging of per-prompt event chains [source](./.skilld/releases/v0.3.196.md:L11)
+- NEW: `Query.reinitialize()` (v0.3.195) — re-send initialize control request and redeliver pending permission/dialog prompts after transport gaps [source](./.skilld/releases/v0.3.195.md:L14)
 
-### Breaking/Significant Changes
+- NEW: `old_source` field on `NotebookEdit` tool results (v0.3.191) — enables inline diffs for `replace` and `delete` operations [source](./.skilld/releases/v0.3.191.md:L11)
 
-- BREAKING: `initialize` control request is now idempotent — v0.3.161 changed `initialize` to return success on subsequent calls with the same payload instead of erroring with "Already initialized". `ControlResponse` gains optional `pending_permission_requests` field to mirror error response format [source](./CHANGELOG.md:L168-169)
+- NEW: `rewind_conversation` control request (v0.3.186) — rewind conversation to a previous point with durable resume anchor support [source](./.skilld/releases/v0.3.186.md:L53)
 
-- BREAKING: MCP servers now connect in background by default — v0.2.142 changed startup to spawn MCP connections asynchronously; sessions start immediately and slow servers report `status: "pending"` until ready. Set `MCP_CONNECTION_NONBLOCKING=0` to block on connection completion or mark a server `alwaysLoad: true` to require readiness before first query [source](./CHANGELOG.md:L249)
+- NEW: `ReadMcpResourceDirTool` (v0.3.186) — dedicated tool type for MCP resource directory listing (previously a fallback inside `ReadMcpResourceTool`) [source](./.skilld/releases/v0.3.186.md:L52)
 
-- BREAKING: Switched from `TodoWrite` to Task tools — v0.2.142 migrated headless and SDK sessions to use `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` instead of `TodoWrite` (deprecated since v0.2.136). Tool consumers should accumulate task state by ID rather than replacing snapshot lists [source](./CHANGELOG.md:L250)
+- NEW: `agent_id` field on `can_use_tool` control requests (v0.3.186) — background agents now forward permission prompts to `canUseTool` instead of auto-denying; stdin stays open while background tasks run [source](./.skilld/releases/v0.3.186.md:L51)
 
-- BREAKING: Removed unstable v2 session API — v0.2.142 removed `unstable_v2_createSession`, `unstable_v2_resumeSession`, `unstable_v2_prompt`, and related types. Use `query()` with an `AsyncIterable<SDKUserMessage>` for multi-turn or `options.resume` to continue a session [source](./CHANGELOG.md:L248)
+- NEW: `tool_use_meta` sidecar on assistant messages (v0.3.179) — provides display-friendly names for tool calls; includes `icon_url` from MCP server metadata (v0.3.181) [source](./.skilld/releases/v0.3.179.md:L11) [source](./.skilld/releases/v0.3.181.md:L74)
 
-### Field Additions and Enhancements
+- NEW: Rate limit fields on `SDKRateLimitInfo` (v0.3.191, v0.3.181) — `seven_day_overage_included` for weekly limits, `model_scoped` array for per-model windows, `errorCode`, `canUserPurchaseCredits`, and `hasChargeableSavedPaymentMethod` for credits-required detection [source](./.skilld/releases/v0.3.191.md:L13) [source](./.skilld/releases/v0.3.181.md:L72)
 
-- `SDKRateLimitInfo` gains three fields in v0.3.181 for detecting credits-required rate limits: `errorCode`, `canUserPurchaseCredits`, `hasChargeableSavedPaymentMethod`. Also gains `seven_day_overage_included` value in v0.3.191 for `rateLimitType` (per-model weekly usage limits) and `model_scoped` array to usage responses with per-model weekly limit windows, utilization, and reset times [source](./.skilld/releases/v0.3.181.md:L11-12) [source](./.skilld/releases/v0.3.191.md:L12-13)
+- NEW: `system/model_fallback` for all triggers (v0.3.174) — expanded from `model_not_found` to include `overloaded`, `server_error`, `last_resort`, and `permission_denied`; message `trigger` field gains new values [source](./.skilld/releases/v0.3.174.md:L10)
 
-- `system/model_fallback` message expanded in v0.3.174 — now emitted for all fallback triggers (`overloaded`, `server_error`, `last_resort`) in addition to the prior `model_not_found` and `permission_denied`. The `trigger` field gains `server_error` and `last_resort` enum values [source](./.skilld/releases/v0.3.174.md:L11)
+- NEW: `skipMcpDiscovery: true` option per plugin (v0.3.172) — allows hosts managing plugin MCP connections to load skills/hooks without re-reading `.mcp.json` [source](./.skilld/releases/v0.3.172.md:L11)
 
-- `agent_id` field added to `can_use_tool` control requests in v0.3.186 — background agents now forward permission prompts to `canUseTool` callbacks instead of auto-denying; stdin stays open during background tasks for interactive tool execution [source](./.skilld/releases/v0.3.186.md:L11)
+- NEW: Claude Fable 5 model (v0.3.170) — added `claude-fable-5` model ID and `fable` alias to SDK model types [source](./.skilld/releases/v0.3.170.md:L11)
 
-### Configuration and Options
+- NEW: `SSEOptions` for `BrowserQueryOptions` (v0.3.169) — alternative to WebSocket transport for browser SDK consumers [source](./.skilld/releases/CHANGELOG.md:L133)
 
-- NEW: `sandbox.credentials` settings — v0.3.187 adds SDK settings types for configuring credential file and environment variable denial in sandboxed commands, enabling fine-grained security policy control [source](./.skilld/releases/v0.3.187.md:L11)
+- NEW: `stop_task` success for absent tasks (v0.3.163) — control requests now return success when target task is `not_found` or `not_running`, enabling reliable stale task chip pruning [source](./.skilld/releases/CHANGELOG.md:L157)
 
-- NEW: `skipMcpDiscovery` plugin option — v0.3.172 allows plugins to set `skipMcpDiscovery: true`, enabling SDK hosts to manage a plugin's MCP connections themselves and load skills/hooks without re-reading the plugin's `.mcp.json` file [source](./.skilld/releases/v0.3.172.md:L11)
+- NEW: `stop_reason: "refusal"` on assistant messages (v0.3.162) — refusal error messages carry `stop_reason` and `stop_details`, allowing SDK consumers to detect refusals without text-matching [source](./.skilld/releases/CHANGELOG.md:L163)
 
-- NEW: Model aliases and fable support — v0.3.170 adds `claude-fable-5` model and the `fable` alias to SDK model types, alongside existing aliases like `opus`, `sonnet`, `haiku` [source](./.skilld/releases/v0.3.170.md:L11)
+- NEW: Idempotent `initialize` control request (v0.3.161) — second `initialize` returns same success payload instead of error; `ControlResponse` gains optional `pending_permission_requests` field [source](./.skilld/releases/CHANGELOG.md:L168)
 
-**Also changed:** `applyFlagSettings()` now live-applies agent changes in v0.3.161 · `system/model_fallback` message expanded to include server errors in v0.3.174
+- NEW: `reloadSkills: true` in `SessionStart` hook output (v0.3.152) — hooks can trigger skill re-scans; hooks can also set `sessionTitle` via `hookSpecificOutput` [source](./.skilld/releases/CHANGELOG.md:L205)
+
+- NEW: `MessageDisplay` hook event (v0.3.152) — allows hooks to transform or hide assistant message text as displayed [source](./.skilld/releases/CHANGELOG.md:L206)
+
+- NEW: `api_retry` system message (v0.3.150) — reports `error: 'overloaded'` for 529 responses (instead of `'rate_limit'`); consumers handling 529 should match both or check `error_status` [source](./.skilld/releases/CHANGELOG.md:L214)
+
+- NEW: `model_not_found` error for unavailable models (v0.3.144) — assistant messages report `error: 'model_not_found'` when selected model doesn't exist or isn't available [source](./.skilld/releases/CHANGELOG.md:L239)
+
+- NEW: `extractFromBunfs()` export (v0.3.144) — for `bun build --compile` consumers: import platform binary with `with { type: 'file' }`, extract, and pass to `options.pathToClaudeCodeExecutable` [source](./.skilld/releases/CHANGELOG.md:L240)
+
+- NEW: `prompt_id` field on hook inputs (v0.3.196) — correlates hook events with OpenTelemetry prompt-level events [source](./.skilld/releases/v0.3.196.md:L9)
+
+- NEW: `promptSuggestions` option to Browser SDK `query()` (v0.3.193) — allows opting remote CLI into follow-up suggestions [source](./.skilld/releases/v0.3.193.md:L23)
+
+- NEW: `sandbox.credentials` to SDK settings (v0.3.187) — configures credential file and environment variable denial in sandboxed commands [source](./.skilld/releases/v0.3.187.md:L47)
+
+## Deprecated APIs
+
+- DEPRECATED: `TodoWrite` tool (v0.2.136) — switch to Task tools (`TaskCreate`, `TaskGet`, `TaskUpdate`, `TaskList`) [source](./.skilld/releases/CHANGELOG.md:L278)
+
+- DEPRECATED: Passing `'Skill'` in `allowedTools` (v0.2.133) — use the `skills` option instead [source](./.skilld/releases/CHANGELOG.md:L291)
+
+- DEPRECATED: `updatedMCPToolOutput` in `PostToolUseHookSpecificOutput` — use `updatedToolOutput` instead [source](./.skilld/releases/CHANGELOG.md:L341)
+
+## Experimental APIs
+
+- `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET()` (experimental) on `Query` (v0.3.169) — returns structured session cost, plan rate-limit, and local usage-behaviors data; API contract not yet stable [source](./.skilld/releases/CHANGELOG.md:L132)
+
+**Also changed:** `applyFlagSettings()` now live-applies agent changes · Spawn failure messages suggest `pathToClaudeCodeExecutable` · Permission-denied messages carry typed reasons (`safetyCheck`, `asyncAgent`) · Remote Control workers send `worker_shutting_down` on exit · MCP server-level specs in `disallowedTools` now correctly remove all server tools
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
 
-## Best Practices for @anthropic-ai/claude-agent-sdk v0.3.198
-
 ## Best Practices
 
-- Ensure `@anthropic-ai/sdk` is installed as a direct dependency alongside the agent SDK — the agent SDK re-exports types from `@anthropic-ai/sdk` internally, and missing it causes TypeScript to resolve types as `any` [source](./.skilld/issues/issue-121.md#missing-anthropicsdk-dependency-causes-types-to-resolve-as-any)
+- Use `getSessionMessages()` to retrieve historical conversation messages when analyzing completed sessions — provides full message history including type, uuid, session_id, content, and tool interactions, critical for session-analysis and archival workflows [source](./.skilld/issues/issue-14.md)
 
-- Use `disallowedTools` rather than `allowedTools` for tool control — `allowedTools` is intended for permission gating (controlling which tools prompt users), not for specifying available tools; prefer `disallowedTools` to exclude specific tools [source](./.skilld/issues/issue-19.md#allowedtools-option-does-not-work)
+- Ensure `@anthropic-ai/sdk` and `@modelcontextprotocol/sdk` are installed as peer dependencies to maintain proper TypeScript type resolution — without them, event types resolve to `any` instead of concrete types [source](./.skilld/releases/CHANGELOG.md#L243)
 
-- Set `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` environment variable when using MCP servers with long-running tools (>60s) — the default 60-second timeout closes the stream for all pending concurrent tool calls, not just the timed-out one; increase to 300000 (5 minutes) or higher [source](./.skilld/issues/issue-41.md#sdk-mcp-server-stream-closed-errors-during-concurrent-tool-calls:L97:102)
+- Pass `toolAliases` mapping to redirect built-in tool names to custom MCP tools — allows SDK consumers to override tools (e.g., `{ Bash: 'mcp__workspace__bash' }`) without the model emitting unknown-tool errors [source](./.skilld/pkg/sdk.d.ts:L1278)
 
-- Prefer stdio transport over SDK transport (createSdkMcpServer) for MCP servers handling concurrent tool calls — the SDK transport has race conditions during concurrent execution; switching to stdio transport eliminates "Stream closed" errors [source](./.skilld/issues/issue-41.md#sdk-mcp-server-stream-closed-errors-during-concurrent-tool-calls:L105:107)
+- Use `sessionStore` option to mirror session transcripts to external storage instead of relying only on local disk — enables session archival, analytics pipelines, and multi-instance deployments with `SessionStore`/`SessionKey`/`SessionStoreEntry` types [source](./.skilld/releases/CHANGELOG.md#L377)
 
-- Call `query.reinitialize()` after detecting a transport disconnect to re-deliver pending permission requests and dialog prompts — without reinitialization, in-flight prompts are lost on reconnection [source](./.skilld/releases/v0.3.195.md#whats-changed)
+- Check `agent_id` field in `can_use_tool` hook requests to distinguish background subagent calls from main-thread calls — background agents forward permissions to `canUseTool` instead of auto-denying [source](./.skilld/releases/v0.3.186.md)
 
-```ts
-const queryStream = query({...});
-// Later, after transport gap detected:
-queryStream.reinitialize();
-```
+- Use `prompt_id` field in hook input payloads for correlating hook events with OpenTelemetry prompt-level events — enables deterministic tracing across the control plane and allows matching hook timestamps to distributed traces [source](./.skilld/releases/v0.3.196.md)
 
-- Extract platform-specific CLI binaries when using `bun build --compile` — the compiled bundle's virtual filesystem prevents `require.resolve` from locating the native binary; use `extractFromBunfs()` and pass the extracted path explicitly [source](./.skilld/pkg-claude-agent-sdk/README.md#compiled-binaries-bun-build---compile)
+- Call `Query.reinitialize()` to re-send the initialize control request and redeliver pending permission/dialog prompts after a transport gap — idempotent initialization makes recovery from network disruptions reliable [source](./.skilld/releases/v0.3.195.md)
 
-```ts
-import binPath from "@anthropic-ai/claude-agent-sdk-darwin-arm64/claude" with { type: "file" };
-import { extractFromBunfs } from "@anthropic-ai/claude-agent-sdk/extract";
+- Extract native binaries with `extractFromBunfs()` when compiling with `bun build --compile` — `require.resolve` doesn't work inside compiled `$bunfs` virtual filesystem, so embed the platform binary as a file asset and extract it [source](./.skilld/pkg/README.md:L19)
 
-const cliPath = extractFromBunfs(binPath);
-const response = query({
-  prompt: "…",
-  options: { pathToClaudeCodeExecutable: cliPath },
-});
-```
+- Set `background: true` on agent definitions for fire-and-forget background tasks — prevents the session from waiting for the agent to complete, allowing the main thread to proceed while the background agent runs independently [source](./.skilld/pkg/sdk.d.ts:L38)
 
-- Implement OpenTelemetry instrumentation via SDK hooks for production observability — the SDK does not support the CLAUDE_CODE_ENABLE_TELEMETRY environment variable or automatic span generation; use session hooks to manually wire telemetry [source](./.skilld/issues/issue-82.md#observability-with-opentelemetry:L34:43)
+- Use `createSdkMcpServer()` to define custom tools that run in the same process rather than spawning external servers — handles lifecycle automatically; if tools run longer than 60s, override `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` to prevent premature stream closure [source](./.skilld/issues/issue-197.md#L40)
 
-- Monitor MCP tool timeout configurations carefully — setting `MCP_TOOL_TIMEOUT` does not guarantee timeout behavior because undici's `headersTimeout` (5 minutes) acts as an independent hard ceiling; configure both the MCP timeout and the undici timeout [source](./.skilld/issues/issue-118.md#mcp-tool-calls-timeout-at-5-minutes-due-to-undici-headerstimeout-despite-mcp_tool_timeout1200000-20-minutes)
+- Call `resolveSettings()` to inspect effective merged settings without spawning the CLI — reads MDM (plist/HKLM/HKCU) for parity with CLI startup and returns provenance info showing which tier supplied each setting value [source](./.skilld/releases/CHANGELOG.md#L277)
 
-- Be aware that `enableFileCheckpointing` does not work in SDK (non-interactive) mode — file snapshots are only created during interactive CLI execution; `rewindFiles()` will always return `canRewind: false` when using the SDK programmatically [source](./.skilld/issues/issue-236.md#file-checkpointing-snapshots-not-created-in-sdk-non-interactive-mode)
+- Prefer the `skills` option over passing `'Skill'` in `allowedTools` — the latter is deprecated and `skills: 'all' | string[]` provides cleaner, more explicit skill configuration [source](./.skilld/releases/CHANGELOG.md#L291)
 
-- Filter out `(no content)` placeholder text blocks in SDK versions before v0.2.30 — earlier versions emit spurious text content blocks with literal "(no content)" before thinking blocks; upgrade to v0.2.30+ or filter in streaming handlers [source](./.skilld/issues/issue-153.md#bug-no-content-text-blocks-are-emitted-before-thinking-blocks:L83:86)
-
-- Understand prompt cache invalidation triggers to optimize costs — random UUIDs in tool descriptions can invalidate the entire cache prefix between `query()` calls, wasting cache benefits (2x input cost for `ephemeral_1h` writes); document cache-sensitive system prompt content and avoid dynamic values [source](./.skilld/issues/issue-197.md#problem)
-
-- Store `ANTHROPIC_API_KEY` outside the agent execution context to prevent credential leakage — agents with access to environment variables can extract API keys; use separate credential injection patterns or isolation mechanisms for production deployments [source](./.skilld/issues/issue-37.md#risk-of-exposing-anthropic_api_key)
-
-- Verify async subagent spawning is supported in your target version — v0.1.77 and later versions had regressions where async subagent prompts failed with "only prompt commands are supported in streaming mode" error; check release notes for your version [source](./.skilld/issues/issue-130.md#async-subagents-error-with-only-prompt-commands-are-supported-in-streaming-mode)
+- Implement a `canUseTool` callback for programmatic permission decisions instead of relying only on permission modes — enables SDK consumers to inspect tool name, input schema, and context before making fine-grained allow/deny/prompt decisions per tool [source](./.skilld/pkg/sdk.d.ts:L1278)
 
 <!-- /skilld:best-practices -->

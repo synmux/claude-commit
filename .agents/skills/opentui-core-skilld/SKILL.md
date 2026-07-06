@@ -2,14 +2,14 @@
 name: opentui-core-skilld
 description: 'ALWAYS use when writing code importing "@opentui/core". Consult for debugging, best practices, or modifying @opentui/core, opentui/core, opentui core, opentui.'
 metadata:
-  version: 0.4.2
+  version: 0.4.3
   generated_by: Anthropic · Haiku 4.5
-  generated_at: 2026-06-30
+  generated_at: 2026-07-06
 ---
 
-# anomalyco/opentui `@opentui/core@0.4.2`
+# anomalyco/opentui `@opentui/core@0.4.3`
 
-**Tags:** latest: 0.4.2, snapshot: 0.0.0-20260616-38ae4bd9
+**Tags:** latest: 0.4.3, snapshot: 0.0.0-20260705-2dee9667
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
 
@@ -21,72 +21,59 @@ Use `skilld search "query" -p @opentui/core` instead of grepping `.skilld/` dire
 
 ## API Changes
 
-This section documents version-specific API changes in @opentui/core v0.4.2 — prioritise recent major/minor releases when working with newer code.
+This section documents version-specific API changes — prioritise recent major/minor releases.
 
-### Recent Major Changes
+- NEW: `NativeSpanFeed` — v0.3.0 introduced routing of renderer output through NativeSpanFeed for custom stdout handling, allowing custom output streams and handlers [source](./.skilld/releases/v0.3.0.md)
 
-- NEW: `DiffRenderable.getHunkRowOffsets()` — added in v0.3.2, returns `number[]` for navigating hunks in diffs [source](./.skilld/releases/v0.3.2.md#whats-changed:L13)
+- NEW: `DiffRenderable.getHunkRowOffsets()` — v0.3.2 added this method for hunk navigation in diff renderables [source](./.skilld/releases/v0.3.2.md)
 
-- NEW: `Box.titleColor` prop — added in v0.3.3, accepts `string | RGBA` to colour the box title independently of border colour [source](./.skilld/releases/v0.3.3.md#whats-changed:L11)
+- NEW: Code block renderer helper — v0.3.2 introduced markdown code block rendering helper for custom code block styling [source](./.skilld/releases/v0.3.2.md)
 
-- NEW: `InputRenderable.minLength` prop — added in v0.2.16, sets minimum required input length validation [source](./.skilld/releases/v0.2.16.md#whats-changed:L18)
+- NEW: `box.titleColor` prop — v0.3.3 added custom title colour property for box components, allowing separate styling from border colour [source](./.skilld/releases/v0.3.3.md)
 
-- BREAKING: `NativeSpanFeed` renderer output routing — v0.3.0 changed renderer output flow through `NativeSpanFeed` instead of direct output (see migration for custom stdout handling) [source](./.skilld/releases/v0.3.0.md#whats-changed:L17)
+- NEW: `@opentui/ssh` package — v0.4.1 introduced new package for SSH terminal integration support [source](./.skilld/releases/v0.4.1.md)
 
-- NEW: `Yoga` layout engine exposed as native — v0.4.1 added native yoga-layout bindings (`export * as Yoga from "./yoga.js"`), replacing previous FFI approach [source](./.skilld/releases/v0.4.1.md#whats-changed:L16)
+- NEW: Native yoga-layout — v0.4.1 switched to native yoga-layout integration for improved performance and layout correctness [source](./.skilld/releases/v0.4.1.md)
 
-- NEW: `@opentui/ssh` package — added in v0.4.1 as a separate SSH integration package [source](./.skilld/releases/v0.4.1.md#whats-changed:L14)
+- NEW: Clipboard OSC 52 support — v0.4.2 added terminal clipboard access via OSC 52 sequence with automatic protocol detection [source](./.skilld/releases/v0.4.2.md)
 
-### Minor Changes
+- NEW: Render backpressure handling — v0.4.1 added native render backpressure and failure handling for threaded rendering [source](./.skilld/releases/v0.4.1.md)
 
-- NEW: Code block renderer helper — added in v0.3.2 for markdown code block customisation (internal API) [source](./.skilld/releases/v0.3.2.md#whats-changed:L14)
+- NEW: Node.js 26 support — v0.4.0 extended platform support to Node.js 26 alongside Bun [source](./.skilld/releases/v0.4.0.md)
 
-- NEW: `split-footer replay reset` — added in v0.3.1 for renderer split-footer state management [source](./.skilld/releases/v0.3.1.md#whats-changed:L11)
-
-- NEW: Node.js 26 support — v0.4.0 added native support for Node.js 26 runtime alongside Bun, improving runtime portability [source](./.skilld/releases/v0.4.0.md#whats-changed:L13)
-
-- FIXED: Native event callbacks — v0.2.13 fixed `Fix OpenTUI native event callbacks`, addressing callback handling in native bindings [source](./.skilld/releases/v0.2.13.md#whats-changed:L13)
-
-### Behaviour Changes
-
-- Renderer output backpressure handling — v0.4.2 and v0.4.1 added threaded output backpressure and native render backpressure handling; code relying on synchronous renderer output may need adjustment [source](./.skilld/releases/v0.4.2.md#whats-changed:L11) [source](./.skilld/releases/v0.4.1.md#whats-changed:L15)
-
-- Clipboard OSC 52 probing — v0.4.2 now probes `OSC 52` clipboard support at startup, changing clipboard availability detection [source](./.skilld/releases/v0.4.2.md#whats-changed:L13)
-
-**Also changed:** QR code component in v0.2.15 · Shell detection (zellij, remote shells) in v0.3.0 · Markdown block spacing fixes across v0.2.x–v0.3.x · CJK text rendering fixes
-
+**Also changed:** `InputRenderable.minLength` new v0.2.16 · QRCode component new v0.2.15 · `renderer.split-footer replay reset` new v0.3.1 · Text-buffer style preservation on listener failure improved v0.4.0 · Link retirement after generation exhaustion v0.4.0 · Scroll position and selection fixes v0.4.2
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
 
 ## Best Practices
 
-- Forward environment variables to renderer on remote sessions — `config.forwardEnvKeys` or explicit `config.remote` control over auto-detection. Without explicit forwarding, remote processes lose local terminal environment needed for capability heuristics [source](./.skilld/docs/src/specs/terminal-startup.md#current-gaps)
+- Always use `createCliRenderer()` to initialize the renderer instead of directly instantiating CliRenderer, which automatically handles terminal setup, capability detection, and proper stream configuration [source](./.skilld/docs/src/specs/terminal-startup.md#terminal-startup-spec)
 
-- Disable OSC 66 width detection for older terminal emulators — set `OPENTUI_FORCE_EXPLICIT_WIDTH=false` before renderer creation to avoid "66" artifacts on unsupported terminals (GNOME Terminal, older Konsole/xterm) [source](./.skilld/docs/development.md:L108:130)
+- Enable `live` mode on renderables that require continuous updates or respond to real-time events — omitting it prevents unnecessary frame scheduling and improves performance when components are static [source](./.skilld/pkg/Renderable.d.ts:L181-L183)
 
-- Use `createTestRenderer()` with explicit dimensions before adding renderables — test environment must be configured upfront with `width` and `height` so layout calculations match test assertions [source](./.skilld/docs/src/testing/README.md:L8:13)
+- Use `scrollViewportCulling` in ScrollBoxRenderable to automatically hide children outside the viewport, dramatically improving performance with large scrollable lists without manual visibility management [source](./.skilld/pkg/renderables/ScrollBox.d.ts:L31)
 
-- Capture test frames with explicit render cycles — call `renderOnce()` before `captureCharFrame()` to ensure pending renders complete; `Bun.sleep(1)` may be needed after mutations to trigger automatic renders [source](./.skilld/docs/src/testing/README.md:L160:168)
+- Prefer BoxRenderable with Yoga flex layout over manual positioning — it handles responsive layouts, automatic spacing, and child constraints without the complexity of manual coordinate management [source](./.skilld/pkg/renderables/Box.d.ts#BoxOptions)
 
-- Test mouse events with position validation — mock mouse calls expect (x, y) coordinates in terminal cells; use `getCurrentPosition()` to verify state before asserting clicks [source](./.skilld/docs/src/testing/README.md:L82:127)
+- Route renderer output through NativeSpanFeed when implementing custom stdout pipelines — zero-copy architecture and backpressure handling prevent buffering issues in high-throughput scenarios [source](./.skilld/pkg/NativeSpanFeed.d.ts:L8-L10)
 
-- Track terminal capabilities during startup — palette detection and capability responses arrive asynchronously after renderer setup; listen for `CAPABILITIES` and `PALETTE` events to react to terminal features discovered after the 5000ms startup window [source](./.skilld/docs/src/specs/terminal-startup.md:L28:51)
+- Use `TestRecorder` for behaviour-driven testing of TUI components — captures frame sequences during interactions, enabling assertions on visual state across render cycles [source](./.skilld/docs/src/testing/README.md:L148-L182)
 
-- Set terminal capabilities in tests to simulate feature support — use `createTerminalCapabilities()` and `setRendererCapabilities()` to model Kitty keyboard, notifications, or other terminal features without a real terminal [source](./.skilld/docs/src/testing/README.md:L25:30)
+- Set `OPENTUI_FORCE_EXPLICIT_WIDTH=false` if your terminal doesn't support OSC 66 (GNOME Terminal, older Konsole/xterm) before creating the renderer to avoid character width detection artifacts [source](./.skilld/docs/development.md:L108-L136)
 
-- Record test frames programmatically for visual assertions — `TestRecorder` captures timestamped frames during interactive tests; use `rec()`, `stop()`, and `recordedFrames` to inspect rendering state across mutations [source](./.skilld/docs/src/testing/README.md:L149:200)
+- Use `buffered: true` on renderables with expensive render operations or complex nested children — frameBuffer caching defers full re-renders until the renderable is marked dirty [source](./.skilld/pkg/Renderable.d.ts:L132)
 
-- Press keys with modifiers using the modifiers object — `pressKey("a", { ctrl: true })` and `pressArrow("left", { meta: true })` handle key+modifier combinations; separate calls do not preserve modifier state [source](./.skilld/docs/src/testing/README.md:L47:52)
+- Implement focus management with `focusable` and `focus()` methods rather than relying on tab order alone — manually routing focus enables complex interactions like modals and focus traps [source](./.skilld/pkg/Renderable.d.ts:L164-L178)
 
-- Type text with controlled delays between keystrokes — `typeText("hello", 10)` adds 10ms between each character; omit the delay for instant typing in tests [source](./.skilld/docs/src/testing/README.md:L40:41)
+- Use `renderBefore()` and `renderAfter()` callbacks for post-processing effects and overlays on specific renderables without creating full wrapper components [source](./.skilld/pkg/Renderable.d.ts:L72-L73)
 
-- Reset spy state between test cases — create spies with `createSpy()` and call `reset()` to clear call history when reusing the same spy instance across multiple assertions [source](./.skilld/docs/src/testing/README.md:L130:145)
+- Always call `createTestRenderer()` instead of CliRenderer in tests to use the in-memory renderer with mock input/output — allows synchronous testing and frame capture without terminal I/O [source](./.skilld/docs/src/testing/README.md:L7-L21)
 
-- Use `renderables/composition` for hierarchical component trees — the composition model provides imperative tree building without reactivity; not a React replacement, but effective for programmatic UI assembly [source](./.skilld/docs/src/renderables/composition/README.md)
+- Compose interactive renderables by registering `onMouseDown`, `onMouseMove`, and `onMouseDragEnd` handlers separately instead of a catch-all `onMouse` handler — improves event routing clarity and allows different handlers to coexist [source](./.skilld/pkg/Renderable.d.ts:L74-L82)
 
-- Configure `bufferedOutput` for custom stdout routing — pass a `NativeBufferedOutput` to handle backpressure and capture output in non-terminal contexts (e.g., SSH or custom pipelines) [source](./.skilld/node_modules/@opentui/core/renderer.d.ts:L21)
+- Use TextRenderable with StyledText for rich text rendering rather than plain strings — enables per-span colors, attributes, and composition without custom buffer management [source](./.skilld/pkg/renderables/Text.d.ts:L8-L11)
 
-- Listen for `FRAME` events to drive custom render loops — emit after native render completes; use `gatherStats: true` to collect frame timing data for performance profiling [source](./.skilld/node_modules/@opentui/core/renderer.d.ts:L72:74)
+- Detect terminal capabilities before rendering heavy components by checking `TerminalCapabilities` (e.g., `kitty_graphics`, `sixel`) — avoids rendering unsupported features that degrade gracefully but waste CPU [source](./.skilld/pkg/types.d.ts:L53-L75)
 
 <!-- /skilld:best-practices -->

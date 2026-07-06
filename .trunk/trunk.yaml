@@ -34,6 +34,7 @@ lint:
       paths:
         - .agents/skills/skilld-lock.yaml
         - bun.lock
+        - .serena/**
 actions:
   enabled:
     - trunk-announce
