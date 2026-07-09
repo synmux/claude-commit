@@ -22,8 +22,8 @@ export const DEFAULT_CONFIG: Config = {
   interactiveCount: 3,
   interactiveTemperature: 1,
   models: {
-    summary: "sonnet[1m]",
-    final: "haiku",
+    summary: "sonnet",
+    final: "sonnet",
   },
   maxChunkTokens: 600_000,
   charsPerToken: 3.5,

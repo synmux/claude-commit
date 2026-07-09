@@ -150,8 +150,8 @@ counts and token budgets, and only deep-merges the nested `models` object.
 
 Defaults worth knowing:
 
-- Summary model: `sonnet[1m]`
-- Final model: `haiku`
+- Summary model: `sonnet`
+- Final model: `sonnet`
 - `maxChunkTokens`: `600_000`
 - `charsPerToken`: `3.5`
 - `interactive`: `false`

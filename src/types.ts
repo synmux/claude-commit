@@ -4,9 +4,9 @@
 
 /** Which models to use for each stage of the pipeline. */
 export interface ModelConfig {
-  /** Model used to read diffs and write summaries. Defaults to `sonnet[1m]`. */
+  /** Model used to read diffs and write summaries. Defaults to `sonnet`. */
   summary: string;
-  /** Model used to turn summaries into the final commit message. Defaults to `haiku`. */
+  /** Model used to turn summaries into the final commit message. Defaults to `sonnet`. */
   final: string;
 }
 

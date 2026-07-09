@@ -4,9 +4,9 @@
  *   diff ──split──▶ [chunk, chunk, ...] ──summary model──▶ [summary, ...]
  *        ──final model──▶ commit message(s)
  *
- * The summary model (default `sonnet[1m]`) reads each diff chunk and writes a
+ * The summary model (default `sonnet`) reads each diff chunk and writes a
  * factual summary; chunking keeps each request within the model's context
- * window. The final model (default `haiku`) turns the summaries into the commit
+ * window. The final model (default `sonnet`) turns the summaries into the commit
  * message(s), applying the configured formatting rules.
  */
 import { runPrompt } from "./agent";

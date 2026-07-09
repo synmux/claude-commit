@@ -20,14 +20,16 @@ feat(auth): add error handling and refresh token rotation to login
 Want more details? See [WALKTHROUGH.md](WALKTHROUGH.md).
 
 ```plaintext
-staged diff ──split──▶ [chunk, …] ──sonnet[1m]──▶ summaries ──haiku──▶ commit message
+staged diff ──split──▶ [chunk, …] ──sonnet──▶ summaries ──sonnet──▶ commit message
 ```
 
 1. **Summarize** - the diff is split into chunks that fit the context window and
-   each chunk is summarized by a strong model (`sonnet[1m]`, Sonnet with a 1M-token
-   context). Diffs larger than 1M tokens simply produce more chunks.
-2. **Write** - the summaries are handed to a fast model (`haiku`) that writes the
-   final commit message according to your formatting rules.
+   each chunk is summarized by a strong model (`sonnet`, which carries a native
+   1M-token context). Diffs larger than 1M tokens simply produce more chunks.
+2. **Write** - the summaries are handed to the same model (`sonnet`) to write the
+   final commit message according to your formatting rules. The message is the
+   whole point of the tool, and its input is tiny, so a strong model here costs
+   almost nothing extra.
 
 Both stages run through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
 
@@ -84,8 +86,8 @@ and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 | `-m, --multiline` / `--no-multiline`     | Write a multi-line commit (subject + body), or force a single line                      |
 | `-t, --template <tpl>`                   | Template for the first line, e.g. `"[PROJ-1] {message}"`                                |
 | `-p, --prompt <text>`                    | Extra instructions appended to the prompt                                               |
-| `--model-summary <model>`                | Model used to summarize the diff (default `sonnet[1m]`)                                 |
-| `--model-final <model>`                  | Model used to write the message (default `haiku`)                                       |
+| `--model-summary <model>`                | Model used to summarize the diff (default `sonnet`)                                     |
+| `--model-final <model>`                  | Model used to write the message (default `sonnet`)                                      |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                          |
 | `-y, --yes`                              | Commit without asking for confirmation                                                  |
 | `--no-spinner`                           | Disable the progress spinner                                                            |
@@ -150,8 +152,8 @@ keys are valid at every level:
   "interactiveCount": 3,
   "interactiveTemperature": 1,
   "models": {
-    "summary": "sonnet[1m]",
-    "final": "haiku"
+    "summary": "sonnet",
+    "final": "sonnet"
   },
   "maxChunkTokens": 600000,
   "charsPerToken": 3.5,

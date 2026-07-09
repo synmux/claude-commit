@@ -21,7 +21,7 @@ import { ClaudeCommitError } from "./errors";
 import type { ModelResult } from "./types";
 
 export interface RunPromptOptions {
-  /** Model string (alias like `haiku`, `sonnet[1m]`, or a full model id). */
+  /** Model string (alias like `sonnet`, `haiku`, or a full model id). */
   model: string;
   /** Full custom system prompt. */
   system: string;
