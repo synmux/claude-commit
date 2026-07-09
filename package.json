@@ -55,5 +55,12 @@
     "lint:fix": "bun run trunk check -a --fix",
     "typecheck": "bun run tsc --noEmit",
     "prepare": "bun run skilld prepare || true"
-  }
+  },
+  "trustedDependencies": [
+    "@anthropic-ai/claude-code",
+    "@google/genai",
+    "onnxruntime-node",
+    "protobufjs",
+    "sharp"
+  ]
 }
