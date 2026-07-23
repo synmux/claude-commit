@@ -25,19 +25,19 @@ skills:
     generator: skilld
   opentui-core-skilld:
     packageName: "@opentui/core"
-    version: 0.4.3
-    packages: "@opentui/core@0.4.3"
+    version: 0.4.5
+    packages: "@opentui/core@0.4.5"
     repo: anomalyco/opentui
-    source: "https://github.com/anomalyco/opentui/tree/v0.4.3/docs"
-    syncedAt: 2026-07-06
+    source: "https://github.com/anomalyco/opentui/tree/v0.4.5/docs"
+    syncedAt: 2026-07-23
     generator: skilld
   anthropic-ai-claude-agent-sdk-skilld:
     packageName: "@anthropic-ai/claude-agent-sdk"
-    version: 0.3.205
-    packages: "@anthropic-ai/claude-agent-sdk@0.3.205"
+    version: 0.3.218
+    packages: "@anthropic-ai/claude-agent-sdk@0.3.218"
     repo: anthropics/claude-agent-sdk-typescript
     source: "ungh://anthropics/claude-agent-sdk-typescript"
-    syncedAt: 2026-07-09
+    syncedAt: 2026-07-23
     generator: skilld
   trunkio-launcher-skilld:
     packageName: "@trunkio/launcher"
@@ -47,11 +47,11 @@ skills:
     generator: skilld
   anthropic-ai-claude-code-skilld:
     packageName: "@anthropic-ai/claude-code"
-    version: 2.1.205
-    packages: "@anthropic-ai/claude-code@2.1.205"
+    version: 2.1.218
+    packages: "@anthropic-ai/claude-code@2.1.218"
     repo: Exhen/claude-code-2.1.88
     source: "ungh://Exhen/claude-code-2.1.88"
-    syncedAt: 2026-07-09
+    syncedAt: 2026-07-23
     generator: skilld
   prettier-skilld:
     packageName: prettier

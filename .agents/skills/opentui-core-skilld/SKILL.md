@@ -2,14 +2,14 @@
 name: opentui-core-skilld
 description: 'ALWAYS use when writing code importing "@opentui/core". Consult for debugging, best practices, or modifying @opentui/core, opentui/core, opentui core, opentui.'
 metadata:
-  version: 0.4.3
+  version: 0.4.5
   generated_by: Anthropic · Haiku 4.5
-  generated_at: 2026-07-06
+  generated_at: 2026-07-23
 ---
 
-# anomalyco/opentui `@opentui/core@0.4.3`
+# anomalyco/opentui `@opentui/core@0.4.5`
 
-**Tags:** latest: 0.4.3, snapshot: 0.0.0-20260705-2dee9667
+**Tags:** snapshot: 0.0.0-20260717-4e811d28, latest: 0.4.5
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
 
@@ -21,59 +21,65 @@ Use `skilld search "query" -p @opentui/core` instead of grepping `.skilld/` dire
 
 ## API Changes
 
-This section documents version-specific API changes — prioritise recent major/minor releases.
+This section documents version-specific API changes — prioritise recent major/minor releases. OpenTUI v0.4.x is the current stable branch; v0.3.0 introduced architectural changes that remain in effect.
 
-- NEW: `NativeSpanFeed` — v0.3.0 introduced routing of renderer output through NativeSpanFeed for custom stdout handling, allowing custom output streams and handlers [source](./.skilld/releases/v0.3.0.md)
+- BREAKING: `LayoutEvent.ADDED` and `LayoutEvent.REMOVED` — removed in v0.4.3 as unused, replaced with child lifecycle management via identity-based methods [source](./.skilld/releases/v0.4.3.md:L16)
 
-- NEW: `DiffRenderable.getHunkRowOffsets()` — v0.3.2 added this method for hunk navigation in diff renderables [source](./.skilld/releases/v0.3.2.md)
+- BREAKING: Link slot management — v0.4.0 retires slots after generation exhaustion, changing behaviour of generator-based links; code relying on slot persistence must now manage lifecycle explicitly [source](./.skilld/releases/v0.4.0.md:L14)
 
-- NEW: Code block renderer helper — v0.3.2 introduced markdown code block rendering helper for custom code block styling [source](./.skilld/releases/v0.3.2.md)
+- NEW: `NativeSpanFeed` — v0.3.0 feature routing renderer output through custom stdout, enabling integration with external output streams for observability and custom rendering pipelines [source](./.skilld/releases/v0.3.0.md:L17)
 
-- NEW: `box.titleColor` prop — v0.3.3 added custom title colour property for box components, allowing separate styling from border colour [source](./.skilld/releases/v0.3.3.md)
+- NEW: `DiffRenderable.getHunkRowOffsets()` — v0.3.2 method for querying hunk boundaries in diff views, supports programmatic navigation and synchronisation with external hunk data [source](./.skilld/releases/v0.3.2.md:L13)
 
-- NEW: `@opentui/ssh` package — v0.4.1 introduced new package for SSH terminal integration support [source](./.skilld/releases/v0.4.1.md)
+- NEW: Markdown code block renderer helper — v0.3.2 utility for rendering custom code block handlers in markdown, enables syntax-aware rendering and language-specific transformations [source](./.skilld/releases/v0.3.2.md:L14)
 
-- NEW: Native yoga-layout — v0.4.1 switched to native yoga-layout integration for improved performance and layout correctness [source](./.skilld/releases/v0.4.1.md)
+- NEW: `Box` component `titleColor` prop — v0.3.3 styling option for box title text, allows independent colouring of titles from box borders and background [source](./.skilld/releases/v0.3.3.md:L11)
 
-- NEW: Clipboard OSC 52 support — v0.4.2 added terminal clipboard access via OSC 52 sequence with automatic protocol detection [source](./.skilld/releases/v0.4.2.md)
+- NEW: `QrCodeRenderable` — v0.2.15 component for rendering QR codes in terminal UI, generates scannable codes with configurable error correction [source](./.skilld/releases/v0.2.15.md:L14)
 
-- NEW: Render backpressure handling — v0.4.1 added native render backpressure and failure handling for threaded rendering [source](./.skilld/releases/v0.4.1.md)
+- NEW: `InputRenderable` `minLength` prop — v0.2.16 validation constraint enforcing minimum input length before submission, integrates with input validation pipeline [source](./.skilld/releases/v0.2.16.md:L18)
 
-- NEW: Node.js 26 support — v0.4.0 extended platform support to Node.js 26 alongside Bun [source](./.skilld/releases/v0.4.0.md)
+- NEW: `@opentui/ssh` package — v0.4.1 dedicated SSH integration module, provides terminal session management over SSH with full OpenTUI renderable support [source](./.skilld/releases/v0.4.1.md:L14)
 
-**Also changed:** `InputRenderable.minLength` new v0.2.16 · QRCode component new v0.2.15 · `renderer.split-footer replay reset` new v0.3.1 · Text-buffer style preservation on listener failure improved v0.4.0 · Link retirement after generation exhaustion v0.4.0 · Scroll position and selection fixes v0.4.2
+- NEW: MP3 and FLAC audio streaming — v0.4.4 codec support in audio subsystem, extends `AudioStreamDemuxer` to handle MP3/FLAC streams alongside existing formats [source](./.skilld/releases/v0.4.4.md:L13)
+
+- ARCHITECTURAL: Native Yoga layout integration — v0.4.1 replaced JavaScript layout computation with native Zig-based Yoga, improves performance but requires validation of custom layout plugins [source](./.skilld/releases/v0.4.1.md:L16)
+
+- ARCHITECTURAL: Node.js 26 support — v0.4.0 extends runtime compatibility to Node.js 26 alongside Bun; pre-built binaries now include Node 26 runtime assets [source](./.skilld/releases/v0.4.0.md:L13)
+
+**Also changed:** `useTimeline` autoplay condition corrected v0.4.4 · `TextBuffer` style preservation on listener failure v0.4.0 · Grapheme pool slot lifetime handling v0.3.3 · Remote shell detection v0.3.0 · Terminal UI renderer scroll position v0.4.2
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
 
 ## Best Practices
 
-- Always use `createCliRenderer()` to initialize the renderer instead of directly instantiating CliRenderer, which automatically handles terminal setup, capability detection, and proper stream configuration [source](./.skilld/docs/src/specs/terminal-startup.md#terminal-startup-spec)
+- Use `createTestRenderer()` for isolated terminal UI testing instead of integrating with real terminals — provides a controlled test environment with width/height configuration and frame capture [source](./.skilld/docs/src/testing/README.md#L8:L21)
 
-- Enable `live` mode on renderables that require continuous updates or respond to real-time events — omitting it prevents unnecessary frame scheduling and improves performance when components are static [source](./.skilld/pkg/Renderable.d.ts:L181-L183)
+- Apply modifiers to keyboard input using the modifiers object (`ctrl`, `shift`, `meta`) for comprehensive input testing — supports arrow keys, special keys, and modifier combinations [source](./.skilld/docs/src/testing/README.md#L47:L65)
 
-- Use `scrollViewportCulling` in ScrollBoxRenderable to automatically hide children outside the viewport, dramatically improving performance with large scrollable lists without manual visibility management [source](./.skilld/pkg/renderables/ScrollBox.d.ts:L31)
+- Set `OPENTUI_FORCE_EXPLICIT_WIDTH=false` as an environment variable or in code before renderer creation for terminals lacking OSC 66 support — prevents garbled artifacts on GNOME Terminal, Konsole, xterm and similar [source](./.skilld/development.md#L108:L145)
 
-- Prefer BoxRenderable with Yoga flex layout over manual positioning — it handles responsive layouts, automatic spacing, and child constraints without the complexity of manual coordinate management [source](./.skilld/pkg/renderables/Box.d.ts#BoxOptions)
+- Use `TestRecorder` to capture and debug frame-by-frame rendering during development — records timestamps and frame numbers for analysis of rendering behavior [source](./.skilld/docs/src/testing/README.md#L150:L183)
 
-- Route renderer output through NativeSpanFeed when implementing custom stdout pipelines — zero-copy architecture and backpressure handling prevent buffering issues in high-throughput scenarios [source](./.skilld/pkg/NativeSpanFeed.d.ts:L8-L10)
+- Call `setRendererCapabilities()` to override terminal capability detection when testing specific terminal features — enables testing of kitty keyboard, notifications, and other features independently [source](./.skilld/docs/src/testing/README.md#L25:L30)
 
-- Use `TestRecorder` for behaviour-driven testing of TUI components — captures frame sequences during interactions, enabling assertions on visual state across render cycles [source](./.skilld/docs/src/testing/README.md:L148-L182)
+- Inspect the terminal startup flow to understand palette detection timing — async capability responses continue after `setupTerminal()` resolves, and palette detection uses hard + idle timeouts [source](./.skilld/docs/src/specs/terminal-startup.md#L1:L30)
 
-- Set `OPENTUI_FORCE_EXPLICIT_WIDTH=false` if your terminal doesn't support OSC 66 (GNOME Terminal, older Konsole/xterm) before creating the renderer to avoid character width detection artifacts [source](./.skilld/docs/development.md:L108-L136)
+- Forward environment variables explicitly in remote sessions via `forwardEnvKeys` to enable proper terminal capability detection — remote auto-detection relies on SSH environment variables, not the remote process environment [source](./.skilld/docs/src/specs/terminal-startup.md#L54:L62)
 
-- Use `buffered: true` on renderables with expensive render operations or complex nested children — frameBuffer caching defers full re-renders until the renderable is marked dirty [source](./.skilld/pkg/Renderable.d.ts:L132)
+- Use `createMockMouse()` with button constants (`LEFT`, `MIDDLE`, `RIGHT`, wheel variants) and modifiers for realistic mouse interaction testing [source](./.skilld/docs/src/testing/README.md#L84:L127)
 
-- Implement focus management with `focusable` and `focus()` methods rather than relying on tab order alone — manually routing focus enables complex interactions like modals and focus traps [source](./.skilld/pkg/Renderable.d.ts:L164-L178)
+- Route custom stdout through `NativeSpanFeed` for applications that need to redirect renderer output — introduced in v0.3.0 to support custom stdout handling [source](./.skilld/releases/v0.3.0.md#L17)
 
-- Use `renderBefore()` and `renderAfter()` callbacks for post-processing effects and overlays on specific renderables without creating full wrapper components [source](./.skilld/pkg/Renderable.d.ts:L72-L73)
+- Structure renderables hierarchically using composition — renderables can be positioned, nested, styled and mounted into parent containers as a tree structure [source](./.skilld/docs/src/renderables/composition/README.md#L1:L9)
 
-- Always call `createTestRenderer()` instead of CliRenderer in tests to use the in-memory renderer with mock input/output — allows synchronous testing and frame capture without terminal I/O [source](./.skilld/docs/src/testing/README.md:L7-L21)
+- Use identity-based child management for renderables to prevent duplicate-id culling corruption — fixed in v0.4.3 to ensure stable child references [source](./.skilld/releases/v0.4.3.md#L17)
 
-- Compose interactive renderables by registering `onMouseDown`, `onMouseMove`, and `onMouseDragEnd` handlers separately instead of a catch-all `onMouse` handler — improves event routing clarity and allows different handlers to coexist [source](./.skilld/pkg/Renderable.d.ts:L74-L82)
+- Only disable terminal setup on non-compliant terminals if necessary — the native terminal initialization auto-detects remote sessions and determines capabilities, avoiding unnecessary manual configuration [source](./.skilld/docs/src/specs/terminal-startup.md#L8:L14)
 
-- Use TextRenderable with StyledText for rich text rendering rather than plain strings — enables per-span colors, attributes, and composition without custom buffer management [source](./.skilld/pkg/renderables/Text.d.ts:L8-L11)
+- Expect `PALETTE` events only when palette detection completes and the normalized palette signature differs from prior emissions — palette detection uses both hard and idle timeouts to optimize responsiveness [source](./.skilld/docs/src/specs/terminal-startup.md#L42:L46)
 
-- Detect terminal capabilities before rendering heavy components by checking `TerminalCapabilities` (e.g., `kitty_graphics`, `sixel`) — avoids rendering unsupported features that degrade gracefully but waste CPU [source](./.skilld/pkg/types.d.ts:L53-L75)
+- Use `createSpy()` for callback testing in renderables — provides `callCount()`, `calledWith()`, `calls` array, and `reset()` for simple function mocking [source](./.skilld/docs/src/testing/README.md#L128:L145)
 
 <!-- /skilld:best-practices -->
