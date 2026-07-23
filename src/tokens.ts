@@ -60,3 +60,50 @@ export function clampChunkTokens(
     contextWindowTokens(model) - CONTEXT_RESERVE_TOKENS,
   );
 }
+
+/**
+ * Chars-per-token for "opaque" content: base64/base85 armor (age, gpg, git
+ * binary patches), long hashes, and similar high-entropy runs. Measured
+ * against the live API on age-armor diff content (2026-07-23): ~1.14
+ * chars/token - the current Claude tokenizer finds almost no merges in
+ * random base64. Note that generic BPE vocabularies (tiktoken-class)
+ * compress base64 roughly 3x better, so swapping in a third-party "real"
+ * tokenizer would underestimate this content class just like a plain
+ * chars/3.5 heuristic does. 1.0 leaves a small safety margin under the
+ * measured value.
+ */
+export const OPAQUE_CHARS_PER_TOKEN = 1.0;
+
+/**
+ * A diff line whose content (after an optional one-character diff marker) is
+ * one long unbroken run with no whitespace - the signature of encoded blobs
+ * rather than prose or code. Misclassifying dense text (e.g. minified JS) as
+ * opaque merely over-reserves, which is the safe direction.
+ */
+const OPAQUE_LINE = /^[+\- ]?\S{40,}$/;
+
+/** Whether a single diff line should be estimated at the opaque ratio. */
+export function isOpaqueLine(line: string): boolean {
+  return OPAQUE_LINE.test(line);
+}
+
+/**
+ * Estimate tokens for diff text with per-line content classification:
+ * opaque lines at {@link OPAQUE_CHARS_PER_TOKEN}, everything else at the
+ * configured `charsPerToken`. A single blended ratio underestimates
+ * armor-heavy diffs more than threefold, which is exactly how a chunk that
+ * looks within budget can overflow the model's real context window.
+ */
+export function estimateDiffTokens(
+  text: string,
+  charsPerToken: number,
+): number {
+  if (charsPerToken <= 0) throw new Error("charsPerToken must be positive");
+  let tokens = 0;
+  for (const line of text.split("\n")) {
+    const lineChars = line.length + 1; // account for the newline
+    tokens +=
+      lineChars / (isOpaqueLine(line) ? OPAQUE_CHARS_PER_TOKEN : charsPerToken);
+  }
+  return Math.ceil(tokens);
+}

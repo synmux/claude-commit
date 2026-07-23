@@ -157,6 +157,7 @@ keys are valid at every level:
   },
   "maxChunkTokens": 600000,
   "charsPerToken": 3.5,
+  "skipArmored": false,
   "allowApiKey": false
 }
 ```
@@ -166,6 +167,23 @@ summary model's context window minus a fixed reserve (1M-window models such as
 current Sonnet/Opus keep the full budget; Haiku, older pinned model ids, and
 unrecognised models are floored at 200k), so a single chunk can never overflow
 the model.
+
+Chunk sizes come from a content-classified token estimate, not a flat
+`charsPerToken` ratio: armored or encoded lines (age/gpg armor, base64 blobs,
+git binary patches) tokenize at roughly **one token per character** on current
+Claude models, so they are budgeted at that rate while ordinary text keeps the
+configured ratio. If the backend still rejects a chunk as too long, cco
+re-splits just that chunk with a halved budget and retries - the rejection is
+free, so the API is the final arbiter.
+
+`skipArmored` (or the `--skip-armored` flag) goes further and replaces each
+run of armored lines with a one-line `[cco: N armored/encoded lines omitted]`
+marker before summarizing. Ciphertext is unreadable to the model anyway, so
+this is the recommended setting for encrypted-file repos - for example a
+[chezmoi](https://www.chezmoi.io) source directory with age encryption, where
+every `chezmoi re-add` re-encrypts nondeterministically and produces megabytes
+of churned armor. Drop a `.claude-commit.json` with `{ "skipArmored": true }`
+in the repo root to enable it per-repo.
 
 ## Development
 

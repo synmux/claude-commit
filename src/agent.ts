@@ -163,9 +163,14 @@ function describeAssistantError(code: string): string {
  *   even when the `skills` option is omitted entirely.
  * - `tools: []` and `plugins: []` drop all built-in tools and plugins.
  *
- * Omitting any of these leaks the user's global Claude Code configuration
- * into the request - observed at ~850k tokens of MCP tool definitions, which
- * overflows the context window before the diff is even counted.
+ * Omitting any of these lets the user's global Claude Code configuration
+ * (MCP tool schemas, skill listings - easily hundreds of thousands of tokens
+ * on a busy setup) into every request; with all of them set, live probes
+ * measure ~170 input tokens per request. Historical note: the 2026-07
+ * "Prompt is too long" failures were ultimately caused by underestimating
+ * the token density of armored diff content (see `estimateDiffTokens`), not
+ * by this leak - the isolation is hygiene and cost control, not the fix for
+ * that bug.
  */
 export function buildQueryOptions(
   opts: RunPromptOptions,

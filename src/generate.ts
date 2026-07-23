@@ -5,14 +5,18 @@
  *        ──final model──▶ commit message(s)
  *
  * The summary model (default `sonnet`) reads each diff chunk and writes a
- * factual summary; chunking keeps each request within the model's context
- * window. The final model (default `sonnet`) turns the summaries into the commit
+ * factual summary; chunks are sized by a content-classified token estimate
+ * (`splitDiffToFit`) so each request fits the model's context window, and a
+ * chunk the backend still rejects as too long is re-split with a halved
+ * budget and retried - the rejection happens before the model runs and is
+ * not billed, so the API acts as the final arbiter of token counts. The
+ * final model (default `sonnet`) turns the summaries into the commit
  * message(s), applying the configured formatting rules.
  */
 import { runPrompt } from "./agent";
-import { splitDiff } from "./diff";
-import { clampChunkTokens, tokensToChars } from "./tokens";
-import { ClaudeCommitError } from "./errors";
+import { redactOpaqueRuns, splitDiffToFit } from "./diff";
+import { clampChunkTokens } from "./tokens";
+import { ClaudeCommitError, isPromptTooLongError } from "./errors";
 import {
   buildFinalSystem,
   buildFinalUser,
@@ -37,6 +41,12 @@ export interface GenerateOptions {
   count?: number;
   progress?: GenerateProgress;
   abortController?: AbortController;
+  /**
+   * Model runner used for every prompt; injectable so tests can exercise the
+   * pipeline (including overflow retries) without real model calls.
+   * Defaults to {@link runPrompt}.
+   */
+  runner?: typeof runPrompt;
 }
 
 export interface GenerateResult {
@@ -50,49 +60,100 @@ export interface GenerateResult {
   costUsd: number;
 }
 
+/**
+ * Floor for overflow-retry halving. Below this a chunk is essentially
+ * prompt-sized already, so a "prompt is too long" rejection indicates
+ * something other than chunk sizing and is surfaced instead of retried.
+ */
+const MIN_RETRY_CHUNK_TOKENS = 8_000;
+
 /** Run the full pipeline over a staged diff. */
 export async function generateCommit(
   diff: string,
   config: Config,
   options: GenerateOptions = {},
 ): Promise<GenerateResult> {
-  const { count = 1, progress = {}, abortController } = options;
+  const {
+    count = 1,
+    progress = {},
+    abortController,
+    runner = runPrompt,
+  } = options;
+
+  const effectiveDiff = config.skipArmored ? redactOpaqueRuns(diff) : diff;
 
   // The configured chunk budget is clamped to the summary model's context
   // window so a single chunk (plus prompt scaffolding and response headroom)
-  // can never overflow it, whatever `maxChunkTokens` says.
+  // can never overflow it, whatever `maxChunkTokens` says. Chunks are sized
+  // by a content-classified token estimate: opaque content (age/gpg armor,
+  // binary patches) measures near 1 char/token, so a plain chars-based
+  // budget underestimates armor-heavy diffs more than threefold.
   const chunkTokens = clampChunkTokens(
     config.models.summary,
     config.maxChunkTokens,
   );
-  const maxChars = tokensToChars(chunkTokens, config.charsPerToken);
-  const chunks = splitDiff(diff, maxChars);
+  const chunks = splitDiffToFit(
+    effectiveDiff,
+    chunkTokens,
+    config.charsPerToken,
+  );
   if (chunks.length === 0) {
     throw new ClaudeCommitError("There are no staged changes to summarize.");
   }
 
-  // Stage 1: summarize each chunk.
+  // Stage 1: summarize each chunk, via a work queue so an oversized chunk
+  // can be re-split and retried in place. The estimate is calibrated, but
+  // only the backend knows the true token count; its "prompt is too long"
+  // rejection is free, so treat it as the final arbiter: halve the budget,
+  // re-split just that chunk, and continue where we left off.
   const summarySystem = buildSummarySystem();
   const summaries: string[] = [];
   let costUsd = 0;
 
-  for (let i = 0; i < chunks.length; i++) {
+  const queue = chunks.map((chunk) => ({ chunk, tokenBudget: chunkTokens }));
+  while (queue.length > 0) {
+    const task = queue.shift()!;
+    const position = summaries.length;
+    const total = summaries.length + queue.length + 1;
     progress.onPhase?.(
-      chunks.length > 1
-        ? `Reading diff (part ${i + 1}/${chunks.length})`
+      total > 1
+        ? `Reading diff (part ${position + 1}/${total})`
         : "Reading diff",
     );
-    const result = await runPrompt(
-      buildSummaryUser(chunks[i]!, i, chunks.length),
-      {
-        model: config.models.summary,
-        system: summarySystem,
-        allowApiKey: config.allowApiKey,
-        ...(abortController ? { abortController } : {}),
-      },
-    );
-    summaries.push(result.text);
-    costUsd += result.costUsd;
+    try {
+      const result = await runner(
+        buildSummaryUser(task.chunk, position, total),
+        {
+          model: config.models.summary,
+          system: summarySystem,
+          allowApiKey: config.allowApiKey,
+          ...(abortController ? { abortController } : {}),
+        },
+      );
+      summaries.push(result.text);
+      costUsd += result.costUsd;
+    } catch (error) {
+      const halvedBudget = Math.floor(task.tokenBudget / 2);
+      if (
+        !isPromptTooLongError(error) ||
+        halvedBudget < MIN_RETRY_CHUNK_TOKENS
+      ) {
+        throw error;
+      }
+      const pieces = splitDiffToFit(
+        task.chunk,
+        halvedBudget,
+        config.charsPerToken,
+      );
+      if (pieces.length === 1 && pieces[0] === task.chunk) {
+        // Nothing left to split on (a single oversized hunk): retrying the
+        // identical request would loop forever, so surface the error.
+        throw error;
+      }
+      queue.unshift(
+        ...pieces.map((chunk) => ({ chunk, tokenBudget: halvedBudget })),
+      );
+    }
   }
 
   // Stage 2: write the commit message(s) from the summaries.
@@ -126,7 +187,7 @@ export async function generateCommit(
   let lastError: unknown;
   for (const attempt of attempts) {
     try {
-      const result = await runPrompt(
+      const result = await runner(
         buildFinalUser(summaries, count, attempt.structured),
         {
           ...baseOpts,
@@ -171,7 +232,14 @@ export async function generateCommit(
     throw new ClaudeCommitError("The model did not produce a commit message.");
   }
 
-  return { messages: deduped, summaries, chunkCount: chunks.length, costUsd };
+  // Report chunks actually processed: overflow retries can split further
+  // than the initial estimate planned.
+  return {
+    messages: deduped,
+    summaries,
+    chunkCount: summaries.length,
+    costUsd,
+  };
 }
 
 function dedupe(items: string[]): string[] {

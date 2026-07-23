@@ -155,7 +155,10 @@ Defaults worth knowing:
 - `maxChunkTokens`: `600_000` (clamped at generation time to the summary
   model's context window minus a fixed reserve - `clampChunkTokens` in
   `src/tokens.ts` - so a chunk can never overflow the model)
-- `charsPerToken`: `3.5`
+- `charsPerToken`: `3.5` (applies to ordinary text only; armored/encoded lines
+  are estimated at ~1 char/token - `estimateDiffTokens` in `src/tokens.ts`)
+- `skipArmored`: `false` (when true, runs of armored lines are replaced with a
+  `[cco: N armored/encoded lines omitted]` marker before summarizing)
 - `interactive`: `false`
 - `interactiveCount`: `3`
 - `interactiveTemperature`: `1`
@@ -168,9 +171,10 @@ chunk count, and reported model cost.
 
 ```mermaid
 flowchart LR
-  diff[Staged diff] --> budget[clampChunkTokens + tokensToChars]
-  budget --> split[splitDiff]
-  split --> chunks[Diff chunks]
+  diff[Staged diff] --> redact[redactOpaqueRuns when skipArmored]
+  redact --> budget[clampChunkTokens]
+  budget --> split[splitDiffToFit - token-classified]
+  split --> chunks[Diff chunks + overflow retry queue]
   chunks --> summaryLoop[For each chunk: summary prompt]
   summaryLoop --> summaries[Summaries]
   summaries --> finalPrompt[Final prompt]
@@ -266,7 +270,10 @@ SDK gates each context source separately, so isolation is layered:
 - `skills: []` disables the CLI's default skill discovery.
 
 Together these keep the user's global Claude Code configuration - potentially
-hundreds of MCP tool definitions worth ~850k tokens - out of the request.
+hundreds of MCP tool definitions - out of the request; live probes measure
+~170 input tokens per isolated call. (The 2026-07 "Prompt is too long"
+failures turned out to be armored-content token density, not this leak - see
+`estimateDiffTokens` - but the isolation stands as hygiene and cost control.)
 
 - `includePartialMessages` is enabled only when a caller provides `onText`.
 - `abortController` is passed through for cancellation.

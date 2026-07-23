@@ -66,6 +66,15 @@ describe("default config", () => {
   });
 });
 
+describe("skipArmored", () => {
+  test("sanitizes to booleans only and defaults to false", () => {
+    expect(sanitizePartial({ skipArmored: true }).skipArmored).toBe(true);
+    expect(sanitizePartial({ skipArmored: "yes" }).skipArmored).toBeUndefined();
+    expect(DEFAULT_CONFIG.skipArmored).toBe(false);
+    expect(resolveConfig({ skipArmored: true }, {}).skipArmored).toBe(true);
+  });
+});
+
 describe("allowApiKey", () => {
   test("sanitizePartial accepts booleans only", () => {
     expect(sanitizePartial({ allowApiKey: true }).allowApiKey).toBe(true);

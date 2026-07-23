@@ -1,5 +1,19 @@
 import { test, expect, describe } from "bun:test";
-import { splitDiff } from "../src/diff";
+import { redactOpaqueRuns, splitDiff, splitDiffToFit } from "../src/diff";
+import { estimateDiffTokens } from "../src/tokens";
+
+const armorLine = (index: number) =>
+  `+${"Ab9Xy".repeat(13)}${String(index % 10).repeat(4)}`;
+
+const armorFile = (lines: number) =>
+  [
+    "diff --git a/secret.age b/secret.age",
+    "index 111..222 100644",
+    "--- a/secret.age",
+    "+++ b/secret.age",
+    `@@ -1,${lines} +1,${lines} @@`,
+    ...Array.from({ length: lines }, (_, index) => armorLine(index)),
+  ].join("\n");
 
 const fileA = `diff --git a/a.txt b/a.txt
 index 111..222 100644
@@ -124,5 +138,78 @@ Binary files a/img.png and b/img.png differ`;
     // shatter the hunk into ~one fragment per character.
     const chunks = splitDiff(diff, 10);
     expect(chunks).toEqual([diff]);
+  });
+});
+
+describe("splitDiffToFit", () => {
+  test("keeps a small text diff as a single chunk", () => {
+    const diff = `${fileA}\n${fileB}`;
+    expect(splitDiffToFit(diff, 10_000, 3.5)).toEqual([diff]);
+  });
+
+  test("splits armor by its real (dense) token estimate", () => {
+    const diff = armorFile(100); // ~7.2k chars, ~7.2k tokens at 1 char/token
+    const chunks = splitDiffToFit(diff, 1_500, 3.5);
+    expect(chunks.length).toBeGreaterThan(2);
+    for (const chunk of chunks) {
+      expect(estimateDiffTokens(chunk, 3.5)).toBeLessThanOrEqual(1_500);
+      // Every piece keeps a self-contained file header.
+      expect(chunk).toContain("a/secret.age");
+    }
+    // No armor line is lost across the split.
+    const armorCount = chunks
+      .join("\n")
+      .split("\n")
+      .filter((line) => line.includes("Ab9Xy")).length;
+    expect(armorCount).toBe(100);
+  });
+
+  test("re-splits only the dense region of a mixed diff", () => {
+    const diff = `${fileA}\n${armorFile(100)}`;
+    const chunks = splitDiffToFit(diff, 1_500, 3.5);
+    for (const chunk of chunks) {
+      expect(estimateDiffTokens(chunk, 3.5)).toBeLessThanOrEqual(1_500);
+    }
+    // The plain-text file survives intact in exactly one chunk.
+    expect(chunks.filter((chunk) => chunk.includes("a/a.txt")).length).toBe(1);
+  });
+
+  test("keeps an unsplittable oversized section whole for the runtime backstop", () => {
+    // No @@ hunks to split on - e.g. a git binary patch body.
+    const binary = [
+      "diff --git a/blob.bin b/blob.bin",
+      "GIT binary patch",
+      "literal 4000",
+      ...Array.from(
+        { length: 60 },
+        (_, i) => `z${"Xy4Qk".repeat(12)}${i % 10}`,
+      ),
+    ].join("\n");
+    expect(splitDiffToFit(binary, 100, 3.5)).toEqual([binary]);
+  });
+});
+
+describe("redactOpaqueRuns", () => {
+  test("replaces an armor run with a counting marker and keeps structure", () => {
+    const redacted = redactOpaqueRuns(armorFile(50));
+    expect(redacted).toContain("[cco: 50 armored/encoded lines omitted]");
+    expect(redacted).toContain("diff --git a/secret.age b/secret.age");
+    expect(redacted).toContain("@@ -1,50 +1,50 @@");
+    expect(redacted).not.toContain("Ab9Xy");
+  });
+
+  test("keeps runs shorter than three lines (a lone URL or hash is content)", () => {
+    const diff = `${fileA}\n+https://example.com/some/rather/long/path/that/matters?token=abcdef`;
+    expect(redactOpaqueRuns(diff)).toBe(diff);
+  });
+
+  test("leaves plain text diffs untouched", () => {
+    const diff = `${fileA}\n${fileB}`;
+    expect(redactOpaqueRuns(diff)).toBe(diff);
+  });
+
+  test("shrinks an armor-heavy diff below any real budget", () => {
+    const redacted = redactOpaqueRuns(armorFile(5_000));
+    expect(estimateDiffTokens(redacted, 3.5)).toBeLessThan(200);
   });
 });

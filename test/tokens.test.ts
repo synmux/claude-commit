@@ -3,7 +3,10 @@ import {
   clampChunkTokens,
   CONTEXT_RESERVE_TOKENS,
   contextWindowTokens,
+  estimateDiffTokens,
   estimateTokens,
+  isOpaqueLine,
+  OPAQUE_CHARS_PER_TOKEN,
   tokensToChars,
 } from "../src/tokens";
 
@@ -59,6 +62,65 @@ describe("contextWindowTokens", () => {
   test("unknown models get the conservative 200k floor", () => {
     expect(contextWindowTokens("my-custom-model")).toBe(200_000);
     expect(contextWindowTokens("")).toBe(200_000);
+  });
+});
+
+describe("isOpaqueLine", () => {
+  const armor = "Ab9Xy".repeat(13); // 65 chars, no whitespace
+
+  test("recognises long unbroken runs with or without a diff marker", () => {
+    expect(isOpaqueLine(armor)).toBe(true);
+    expect(isOpaqueLine(`+${armor}`)).toBe(true);
+    expect(isOpaqueLine(`-${armor}`)).toBe(true);
+    expect(isOpaqueLine(` ${armor}`)).toBe(true);
+  });
+
+  test("rejects short runs and anything containing whitespace", () => {
+    expect(isOpaqueLine("+QWx")).toBe(false);
+    expect(isOpaqueLine("+const value = compute(input);")).toBe(false);
+    expect(isOpaqueLine("@@ -1,5 +1,5 @@")).toBe(false);
+    expect(isOpaqueLine("diff --git a/x.age b/x.age")).toBe(false);
+    expect(isOpaqueLine(`+${armor} trailing`)).toBe(false);
+  });
+});
+
+describe("estimateDiffTokens", () => {
+  const armorLine = `+${"Ab9Xy".repeat(13)}`; // 66 chars incl. marker
+  const textLine = "+const value = compute(input);";
+
+  test("estimates plain text at the configured ratio", () => {
+    const text = Array.from({ length: 10 }, () => textLine).join("\n");
+    expect(estimateDiffTokens(text, 3.5)).toBe(
+      Math.ceil(((textLine.length + 1) * 10) / 3.5),
+    );
+  });
+
+  test("estimates opaque lines at the opaque ratio", () => {
+    const armor = Array.from({ length: 10 }, () => armorLine).join("\n");
+    expect(estimateDiffTokens(armor, 3.5)).toBe(
+      Math.ceil(((armorLine.length + 1) * 10) / OPAQUE_CHARS_PER_TOKEN),
+    );
+  });
+
+  test("mixed content sums both classes", () => {
+    const mixed = `${textLine}\n${armorLine}`;
+    expect(estimateDiffTokens(mixed, 3.5)).toBe(
+      Math.ceil(
+        (textLine.length + 1) / 3.5 +
+          (armorLine.length + 1) / OPAQUE_CHARS_PER_TOKEN,
+      ),
+    );
+  });
+
+  test("armor-heavy content estimates far above a plain chars ratio", () => {
+    const armor = Array.from({ length: 100 }, () => armorLine).join("\n");
+    const classified = estimateDiffTokens(armor, 3.5);
+    const plain = estimateTokens(armor, 3.5);
+    expect(classified).toBeGreaterThan(plain * 3);
+  });
+
+  test("rejects a non-positive ratio", () => {
+    expect(() => estimateDiffTokens("x", 0)).toThrow();
   });
 });
 

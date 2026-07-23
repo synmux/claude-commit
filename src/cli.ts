@@ -39,6 +39,7 @@ interface CliOptions {
   spinner?: boolean;
   config?: string;
   verbose?: boolean;
+  skipArmored?: boolean;
 }
 
 function buildProgram(): Command {
@@ -72,6 +73,11 @@ function buildProgram(): Command {
     .option("-p, --prompt <text>", "extra instructions appended to the prompt")
     .option("--model-summary <model>", "model used to summarize the diff")
     .option("--model-final <model>", "model used to write the final message")
+    .option(
+      "--skip-armored",
+      "omit armored/encoded lines (age/gpg armor, base64 blobs) from the " +
+        "summarized diff; recommended for chezmoi-style encrypted repos",
+    )
     .option("-d, --dry-run", "print the message to stdout without committing")
     .option("-y, --yes", "commit without asking for confirmation")
     .option("--no-spinner", "disable the progress spinner")
@@ -106,6 +112,7 @@ function flagsToConfig(opts: CliOptions): PartialConfig {
   if (opts.interactive !== undefined) cfg.interactive = opts.interactive;
   if (opts.template !== undefined) cfg.template = opts.template;
   if (opts.prompt !== undefined) cfg.customPrompt = opts.prompt;
+  if (opts.skipArmored !== undefined) cfg.skipArmored = opts.skipArmored;
   if (opts.count !== undefined && Number.isFinite(opts.count)) {
     cfg.interactiveCount = Math.max(1, opts.count);
   }

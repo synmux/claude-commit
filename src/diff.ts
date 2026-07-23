@@ -8,6 +8,8 @@
  * every piece so each chunk remains a self-contained, interpretable diff.
  */
 
+import { estimateDiffTokens, isOpaqueLine } from "./tokens";
+
 const FILE_HEADER = "diff --git ";
 const HUNK_HEADER = "@@";
 
@@ -151,4 +153,94 @@ export function splitDiff(diff: string, maxChars: number): string[] {
     units.push(...breakSection(section, maxChars));
   }
   return packUnits(units, maxChars);
+}
+
+/** Character budget for `text` such that its classified token estimate fits `maxTokens`. */
+function charBudgetFor(
+  text: string,
+  maxTokens: number,
+  charsPerToken: number,
+): number {
+  const density =
+    text.length / Math.max(1, estimateDiffTokens(text, charsPerToken));
+  return Math.max(1, Math.floor(maxTokens * density));
+}
+
+/**
+ * Split a diff so that every chunk's *classified token estimate* fits
+ * `maxTokens`.
+ *
+ * `splitDiff` budgets in characters, but token density varies wildly by
+ * content: prose and code sit near the configured `charsPerToken` (~3.5)
+ * while base64/armor lines measure near 1 char/token. Sizing every chunk
+ * with one blended ratio lets an armor-heavy region overflow, so after an
+ * initial blended-density split, any chunk still over budget is re-split
+ * using its own (denser) ratio until everything fits or no further split is
+ * possible. An unsplittable oversized chunk is kept - the overflow retry in
+ * the generation pipeline is the backstop for that case.
+ */
+/**
+ * Minimum consecutive opaque lines before a run is redacted. A lone long
+ * unbroken line (a URL, a hash pin, a long path) can carry real meaning; an
+ * armored blob never arrives alone.
+ */
+const MIN_REDACT_RUN = 3;
+
+/**
+ * Replace each run of opaque (armored/encoded) lines with a single marker
+ * line. The marker keeps the surrounding diff structure interpretable and
+ * tells the summary model what was elided, so it can still report that an
+ * encrypted file changed - without paying ~1 token per character to send
+ * ciphertext the model cannot read anyway.
+ */
+export function redactOpaqueRuns(diff: string): string {
+  const out: string[] = [];
+  let run: string[] = [];
+  const flush = () => {
+    if (run.length >= MIN_REDACT_RUN) {
+      out.push(`[cco: ${run.length} armored/encoded lines omitted]`);
+    } else {
+      out.push(...run);
+    }
+    run = [];
+  };
+  for (const line of diff.split("\n")) {
+    if (isOpaqueLine(line)) {
+      run.push(line);
+    } else {
+      flush();
+      out.push(line);
+    }
+  }
+  flush();
+  return out.join("\n");
+}
+
+export function splitDiffToFit(
+  diff: string,
+  maxTokens: number,
+  charsPerToken: number,
+): string[] {
+  const queue = splitDiff(diff, charBudgetFor(diff, maxTokens, charsPerToken));
+  const fitted: string[] = [];
+  while (queue.length > 0) {
+    const chunk = queue.shift()!;
+    if (estimateDiffTokens(chunk, charsPerToken) <= maxTokens) {
+      fitted.push(chunk);
+      continue;
+    }
+    // Over budget: the chunk's own density is at least as dense as the
+    // blend it was sized with, so this budget is strictly smaller than the
+    // chunk - splitDiff will attempt a real split.
+    const pieces = splitDiff(
+      chunk,
+      charBudgetFor(chunk, maxTokens, charsPerToken),
+    );
+    if (pieces.length <= 1) {
+      fitted.push(chunk);
+      continue;
+    }
+    queue.unshift(...pieces);
+  }
+  return fitted;
 }

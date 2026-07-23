@@ -50,6 +50,15 @@ export interface Config {
   /** Approximate characters-per-token ratio used for chunk-size estimation. */
   charsPerToken: number;
   /**
+   * Replace runs of armored/encoded diff lines (age/gpg armor, base64 blobs,
+   * git binary patch bodies) with a one-line `[... lines omitted]` marker
+   * before summarizing. Ciphertext is unreadable to the model and tokenizes
+   * at roughly one token per character, so skipping it makes commits in
+   * encrypted-file repos (e.g. chezmoi with age) fast and cheap without
+   * losing anything a summary could actually use.
+   */
+  skipArmored: boolean;
+  /**
    * Allow API credentials from the environment (`ANTHROPIC_API_KEY` /
    * `ANTHROPIC_AUTH_TOKEN`) to be used, billing pay-as-you-go instead of the
    * Claude subscription. When false (the default) those variables are
