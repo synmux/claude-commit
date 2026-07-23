@@ -1,6 +1,6 @@
 {
   "name": "@synmux/claude-commit",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Generate git commit messages with Claude, using your Claude Code subscription.",
   "main": "index.ts",
   "module": "index.ts",

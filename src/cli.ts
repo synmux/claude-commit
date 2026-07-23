@@ -3,6 +3,7 @@
  * non-interactive and interactive flows.
  */
 import { Command } from "commander";
+import { getVersion } from "./utils";
 import {
   commit,
   getStagedDiff,
@@ -20,7 +21,7 @@ import { color } from "./ui/colors";
 import { ClaudeCommitError } from "./errors";
 import type { ModelConfig, PartialConfig } from "./types";
 
-export const VERSION = "0.1.0";
+export const VERSION = getVersion();
 
 interface CliOptions {
   interactive?: boolean;
