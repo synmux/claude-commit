@@ -152,7 +152,9 @@ Defaults worth knowing:
 
 - Summary model: `sonnet`
 - Final model: `sonnet`
-- `maxChunkTokens`: `600_000`
+- `maxChunkTokens`: `600_000` (clamped at generation time to the summary
+  model's context window minus a fixed reserve - `clampChunkTokens` in
+  `src/tokens.ts` - so a chunk can never overflow the model)
 - `charsPerToken`: `3.5`
 - `interactive`: `false`
 - `interactiveCount`: `3`
@@ -166,7 +168,7 @@ chunk count, and reported model cost.
 
 ```mermaid
 flowchart LR
-  diff[Staged diff] --> budget[tokensToChars maxChunkTokens]
+  diff[Staged diff] --> budget[clampChunkTokens + tokensToChars]
   budget --> split[splitDiff]
   split --> chunks[Diff chunks]
   chunks --> summaryLoop[For each chunk: summary prompt]
@@ -252,12 +254,20 @@ and fast.
 `src/agent.ts` wraps `@anthropic-ai/claude-agent-sdk` in a single function:
 `runPrompt(prompt, opts)`.
 
-The wrapper makes model calls intentionally narrow:
+The wrapper makes model calls intentionally narrow (`buildQueryOptions`). The
+SDK gates each context source separately, so isolation is layered:
 
-- `tools: []` disables tool use.
+- `tools: []` disables built-in tools and `plugins: []` loads no plugins.
 - `maxTurns: 1` makes each call a single-turn completion.
-- `settingSources: []` ignores user/project Claude settings, `CLAUDE.md`, MCP,
-  and plugins for a clean text-only request.
+- `settingSources: []` ignores user/project Claude settings and `CLAUDE.md` -
+  and only those; it does **not** gate MCP servers or skills.
+- `mcpServers: {}` + `strictMcpConfig: true` ignore every MCP server
+  configured in `~/.claude.json`, project `.mcp.json`, and plugins.
+- `skills: []` disables the CLI's default skill discovery.
+
+Together these keep the user's global Claude Code configuration - potentially
+hundreds of MCP tool definitions worth ~850k tokens - out of the request.
+
 - `includePartialMessages` is enabled only when a caller provides `onText`.
 - `abortController` is passed through for cancellation.
 - Optional temperature is injected through `CLAUDE_CODE_EXTRA_BODY` while

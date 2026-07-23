@@ -11,7 +11,7 @@
  */
 import { runPrompt } from "./agent";
 import { splitDiff } from "./diff";
-import { tokensToChars } from "./tokens";
+import { clampChunkTokens, tokensToChars } from "./tokens";
 import { ClaudeCommitError } from "./errors";
 import {
   buildFinalSystem,
@@ -58,7 +58,14 @@ export async function generateCommit(
 ): Promise<GenerateResult> {
   const { count = 1, progress = {}, abortController } = options;
 
-  const maxChars = tokensToChars(config.maxChunkTokens, config.charsPerToken);
+  // The configured chunk budget is clamped to the summary model's context
+  // window so a single chunk (plus prompt scaffolding and response headroom)
+  // can never overflow it, whatever `maxChunkTokens` says.
+  const chunkTokens = clampChunkTokens(
+    config.models.summary,
+    config.maxChunkTokens,
+  );
+  const maxChars = tokensToChars(chunkTokens, config.charsPerToken);
   const chunks = splitDiff(diff, maxChars);
   if (chunks.length === 0) {
     throw new ClaudeCommitError("There are no staged changes to summarize.");

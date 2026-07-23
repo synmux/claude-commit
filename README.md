@@ -161,6 +161,12 @@ keys are valid at every level:
 }
 ```
 
+`maxChunkTokens` is a cap, not a promise: at run time it is clamped to the
+summary model's context window minus a fixed reserve (1M-window models such as
+current Sonnet/Opus keep the full budget; Haiku, older pinned model ids, and
+unrecognised models are floored at 200k), so a single chunk can never overflow
+the model.
+
 ## Development
 
 ```sh
