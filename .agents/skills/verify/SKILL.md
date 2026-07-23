@@ -36,6 +36,14 @@ verification means running the CLI against real staged changes.
 - Context-isolation regression check: build options with `buildQueryOptions` +
   `buildSubprocessEnv` (`src/agent.ts`), run a tiny prompt through the SDK's
   `query`, and read `usage.input_tokens` on the `result` message. Healthy runs
-  total a few hundred tokens; ~850k means the user's global MCP/skill
-  configuration is leaking into requests again (see `buildQueryOptions` docs
-  for which SDK option gates which source).
+  total a few hundred tokens. When reading usage, sum `input_tokens` +
+  `cache_creation_input_tokens` + `cache_read_input_tokens` - Claude Code
+  auto-caches the prompt, so `input_tokens` alone can read as ~10.
+- Token-density check for armored content: age/gpg armor tokenizes at ~1.14
+  chars/token on current models (measured 2026-07-23), not the ~3.5 of prose.
+  A "Prompt is too long" error whose reported request size is ~3-4x the
+  chars/4 "conversation" figure means dense content, not context leakage -
+  the error's "system prompt, tool definitions, attachment content" wording
+  is boilerplate, and the "conversation" number is a local chars/4 estimate.
+  Reproduce armor handling cheaply with `--skip-armored` on a chezmoi-style
+  staged diff.
