@@ -1,5 +1,9 @@
 import { test, expect, describe } from "bun:test";
-import { buildSubprocessEnv, presentCredentialVars } from "../src/agent";
+import {
+  buildQueryOptions,
+  buildSubprocessEnv,
+  presentCredentialVars,
+} from "../src/agent";
 
 const cleanEnv = { PATH: "/usr/bin", HOME: "/home/user" };
 
@@ -140,5 +144,54 @@ describe("buildSubprocessEnv", () => {
     buildSubprocessEnv({ baseEnv, allowApiKey: false, temperature: 0.5 });
     expect(baseEnv.ANTHROPIC_API_KEY).toBe("sk-test");
     expect(Object.keys(baseEnv)).not.toContain("CLAUDE_CODE_EXTRA_BODY");
+  });
+});
+
+describe("buildQueryOptions", () => {
+  const baseOpts = { model: "sonnet", system: "You write commit messages." };
+
+  test("isolates the run from the user's Claude Code configuration", () => {
+    const options = buildQueryOptions(baseOpts);
+    // Every context source has its own switch; all of them must be off,
+    // or the user's global MCP servers / skills / plugins leak into the
+    // request and can overflow the context window on their own.
+    expect(options.tools).toEqual([]);
+    expect(options.skills).toEqual([]);
+    expect(options.mcpServers).toEqual({});
+    expect(options.strictMcpConfig).toBe(true);
+    expect(options.plugins).toEqual([]);
+    expect(options.settingSources).toEqual([]);
+    expect(options.maxTurns).toBe(1);
+  });
+
+  test("passes the model and system prompt through", () => {
+    const options = buildQueryOptions(baseOpts);
+    expect(options.model).toBe("sonnet");
+    expect(options.systemPrompt).toBe("You write commit messages.");
+  });
+
+  test("enables partial messages only when a text callback is given", () => {
+    expect(buildQueryOptions(baseOpts).includePartialMessages).toBe(false);
+    expect(
+      buildQueryOptions({ ...baseOpts, onText: () => {} })
+        .includePartialMessages,
+    ).toBe(true);
+  });
+
+  test("attaches the subprocess env only when one was built", () => {
+    expect(buildQueryOptions(baseOpts).env).toBeUndefined();
+    const subprocessEnv = { PATH: "/usr/bin" };
+    expect(buildQueryOptions(baseOpts, subprocessEnv).env).toBe(subprocessEnv);
+  });
+
+  test("passes the structured output format through", () => {
+    const outputFormat = {
+      type: "json_schema" as const,
+      schema: { type: "object" },
+    };
+    expect(buildQueryOptions(baseOpts).outputFormat).toBeUndefined();
+    expect(buildQueryOptions({ ...baseOpts, outputFormat }).outputFormat).toBe(
+      outputFormat,
+    );
   });
 });

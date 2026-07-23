@@ -8,9 +8,10 @@
  * `ANTHROPIC_AUTH_TOKEN`) are stripped from that environment, forcing the
  * `claude login` subscription session so the cost is bundled with Claude Code
  * usage; the `allowApiKey` config option passes them through for explicit
- * pay-as-you-go billing. We deliberately disable every tool (`tools: []`) and
- * load no settings (`settingSources: []`) so the run is a clean, isolated,
- * prompt-in/text-out request.
+ * pay-as-you-go billing. Every request runs fully isolated from the user's
+ * Claude Code configuration - no tools, skills, MCP servers, plugins, or
+ * settings (see {@link buildQueryOptions}) - so the request contains nothing
+ * beyond the prompt we build.
  */
 import {
   query,
@@ -150,6 +151,45 @@ function describeAssistantError(code: string): string {
 }
 
 /**
+ * Build the Agent SDK options for one isolated, single-turn text completion.
+ *
+ * Isolation is layered because the SDK gates each context source separately:
+ *
+ * - `settingSources: []` disables settings files and `CLAUDE.md` - and only
+ *   those. It does NOT stop MCP servers or skills from loading.
+ * - `mcpServers: {}` + `strictMcpConfig: true` ignore every MCP server
+ *   configured in `~/.claude.json`, project `.mcp.json`, and plugins.
+ * - `skills: []` disables skill discovery, which the CLI otherwise performs
+ *   even when the `skills` option is omitted entirely.
+ * - `tools: []` and `plugins: []` drop all built-in tools and plugins.
+ *
+ * Omitting any of these leaks the user's global Claude Code configuration
+ * into the request - observed at ~850k tokens of MCP tool definitions, which
+ * overflows the context window before the diff is even counted.
+ */
+export function buildQueryOptions(
+  opts: RunPromptOptions,
+  subprocessEnv?: Record<string, string | undefined>,
+): Options {
+  return {
+    model: opts.model,
+    systemPrompt: opts.system,
+    tools: [], // pure text completion: no Bash/Read/Edit/etc.
+    skills: [],
+    mcpServers: {},
+    strictMcpConfig: true,
+    plugins: [],
+    settingSources: [],
+    maxTurns: 1,
+    includePartialMessages: Boolean(opts.onText),
+    ...(opts.abortController ? { abortController: opts.abortController } : {}),
+    ...(opts.onStderr ? { stderr: opts.onStderr } : {}),
+    ...(subprocessEnv ? { env: subprocessEnv } : {}),
+    ...(opts.outputFormat ? { outputFormat: opts.outputFormat } : {}),
+  };
+}
+
+/**
  * Run a single prompt and return the model's text response.
  *
  * Throws {@link ClaudeCommitError} on any model/authentication/quota failure.
@@ -163,18 +203,7 @@ export async function runPrompt(
     allowApiKey: opts.allowApiKey ?? false,
     ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
   });
-  const options: Options = {
-    model: opts.model,
-    systemPrompt: opts.system,
-    tools: [], // pure text completion: no Bash/Read/Edit/etc.
-    maxTurns: 1,
-    settingSources: [], // ignore user/project/local settings, CLAUDE.md, MCP, plugins
-    includePartialMessages: Boolean(opts.onText),
-    ...(opts.abortController ? { abortController: opts.abortController } : {}),
-    ...(opts.onStderr ? { stderr: opts.onStderr } : {}),
-    ...(subprocessEnv ? { env: subprocessEnv } : {}),
-    ...(opts.outputFormat ? { outputFormat: opts.outputFormat } : {}),
-  };
+  const options = buildQueryOptions(opts, subprocessEnv);
 
   let resultText: string | null = null;
   let costUsd = 0;
