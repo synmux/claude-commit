@@ -47,6 +47,10 @@
     "@opentui/core": "^0.4.5",
     "commander": "^15.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/synmux/claude-commit"
+  },
   "scripts": {
     "start": "bun run bin/cco.ts",
     "test": "bun test",
