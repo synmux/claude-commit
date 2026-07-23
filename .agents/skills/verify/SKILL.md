@@ -33,3 +33,9 @@ verification means running the CLI against real staged changes.
   `claude-sonnet-5`). To see the resolved model, context window, and cost, run
   `./node_modules/.bin/claude -p 'Reply OK' --model <m> --output-format json`
   and read the `modelUsage` key.
+- Context-isolation regression check: build options with `buildQueryOptions` +
+  `buildSubprocessEnv` (`src/agent.ts`), run a tiny prompt through the SDK's
+  `query`, and read `usage.input_tokens` on the `result` message. Healthy runs
+  total a few hundred tokens; ~850k means the user's global MCP/skill
+  configuration is leaking into requests again (see `buildQueryOptions` docs
+  for which SDK option gates which source).
