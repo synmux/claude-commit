@@ -1,6 +1,6 @@
 {
   "name": "@synmux/claude-commit",
-  "version": "0.1.4",
+  "version": "1.0.0",
   "description": "Generate git commit messages with Claude, using your Claude Code subscription.",
   "main": "index.ts",
   "module": "index.ts",
@@ -40,7 +40,7 @@
     "skilld": "^2.0.0"
   },
   "peerDependencies": {
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.218",
