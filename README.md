@@ -151,6 +151,7 @@ keys are valid at every level:
   "interactive": true,
   "interactiveCount": 3,
   "interactiveTemperature": 1,
+  "spinner": "bouncingBall",
   "models": {
     "summary": "sonnet",
     "final": "sonnet"
@@ -161,6 +162,13 @@ keys are valid at every level:
   "allowApiKey": false
 }
 ```
+
+`spinner` chooses the progress animation: any name from the
+[cli-spinners](https://github.com/sindresorhus/cli-spinners) set bundled with
+[ora](https://github.com/sindresorhus/ora) (`"dots"`, `"moon"`, `"pong"`,
+`"bouncingBall"`, ...). Unknown names are ignored and the default
+`bouncingBall` is used. `--no-spinner` disables the animated spinner, but final
+status lines still print.
 
 `maxChunkTokens` is a cap, not a promise: at run time it is clamped to the
 summary model's context window minus a fixed reserve (1M-window models such as

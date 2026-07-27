@@ -146,7 +146,8 @@ Precedence is low to high:
 
 `sanitizePartial()` is intentionally conservative. It ignores unknown keys and
 keys with the wrong type, clamps `interactiveTemperature` to `0..2`, floors
-counts and token budgets, and only deep-merges the nested `models` object.
+counts and token budgets, drops unrecognised `spinner` names, and only
+deep-merges the nested `models` object.
 
 Defaults worth knowing:
 
@@ -162,6 +163,8 @@ Defaults worth knowing:
 - `interactive`: `false`
 - `interactiveCount`: `3`
 - `interactiveTemperature`: `1`
+- `spinner`: `bouncingBall` (any cli-spinners name, rendered by ora;
+  unknown names fall back to the default)
 
 ## Generation Pipeline
 
@@ -409,9 +412,12 @@ The editor command follows git-like precedence:
 
 The temp file uses a random UUID, exclusive creation, and `0600` permissions.
 
-`src/ui/spinner.ts` is a small stderr-only spinner. It hides/restores the cursor,
-updates labels as generation phases change, and is disabled when stderr is not a
-TTY.
+`src/ui/spinner.ts` is a small stderr-only spinner, rendered by
+[ora](https://github.com/sindresorhus/ora). The animation is picked by the
+`spinner` config key (any cli-spinners name, default `bouncingBall`). It
+hides/restores the cursor, updates labels as generation phases change, and is
+disabled when stderr is not a TTY - when disabled, only the final
+`succeed`/`fail` status lines are printed.
 
 ## Prompt Formatting Rules
 

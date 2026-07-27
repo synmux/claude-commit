@@ -111,6 +111,25 @@ describe("interactive", () => {
   });
 });
 
+describe("spinner", () => {
+  test("sanitizePartial accepts known spinner names only", () => {
+    expect(sanitizePartial({ spinner: "dots" }).spinner).toBe("dots");
+    expect(
+      sanitizePartial({ spinner: "not-a-spinner" }).spinner,
+    ).toBeUndefined();
+    expect(sanitizePartial({ spinner: 7 }).spinner).toBeUndefined();
+  });
+
+  test("defaults to bouncingBall", () => {
+    expect(DEFAULT_CONFIG.spinner).toBe("bouncingBall");
+  });
+
+  test("resolves through the precedence chain", () => {
+    expect(resolveConfig({}, {}).spinner).toBe("bouncingBall");
+    expect(resolveConfig({ spinner: "moon" }, {}).spinner).toBe("moon");
+  });
+});
+
 describe("mergeConfig / mergePartial", () => {
   test("mergeConfig overrides scalars and merges models", () => {
     const merged = mergeConfig(DEFAULT_CONFIG, {

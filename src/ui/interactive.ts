@@ -30,7 +30,7 @@ export async function runInteractive(
   opts: InteractiveOptions,
 ): Promise<number> {
   const count = Math.max(1, config.interactiveCount);
-  const spinner = new Spinner(process.stderr.isTTY);
+  const spinner = new Spinner(process.stderr.isTTY, config.spinner);
   spinner.start(`Generating ${count} option${count === 1 ? "" : "s"}`);
   let result;
   try {
