@@ -42,7 +42,7 @@ export interface Config {
   interactiveTemperature: number | null;
   /**
    * Name of the progress spinner animation: any spinner from the cli-spinners
-   * set bundled with ora (e.g. `"dots"`, `"moon"`, `"bouncingBall"`). Unknown
+   * set bundled with ora (e.g. `"dots"`, `"moon"`, `"dwarfFortress"`). Unknown
    * names are ignored and the default is used instead.
    */
   spinner: string;

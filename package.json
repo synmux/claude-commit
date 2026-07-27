@@ -1,6 +1,6 @@
 {
   "name": "@synmux/claude-commit",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Generate git commit messages with Claude, using your Claude Code subscription.",
   "main": "index.ts",
   "module": "index.ts",
@@ -24,7 +24,7 @@
     "interactive": false,
     "interactiveCount": 3,
     "interactiveTemperature": 1,
-    "spinner": "bouncingBall",
+    "spinner": "dwarfFortress",
     "models": {
       "summary": "sonnet",
       "final": "sonnet"

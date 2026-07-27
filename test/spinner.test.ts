@@ -9,7 +9,7 @@ import {
 
 describe("isSpinnerName", () => {
   test("recognises cli-spinners names", () => {
-    expect(isSpinnerName("bouncingBall")).toBe(true);
+    expect(isSpinnerName("dwarfFortress")).toBe(true);
     expect(isSpinnerName("dots")).toBe(true);
   });
 
@@ -28,9 +28,9 @@ describe("resolveSpinner", () => {
     expect(resolveSpinner("not-a-spinner")).toEqual(spinners[DEFAULT_SPINNER]);
   });
 
-  test("the default spinner is bouncingBall", () => {
-    expect(DEFAULT_SPINNER).toBe("bouncingBall");
-    expect(resolveSpinner(DEFAULT_SPINNER)).toEqual(spinners.bouncingBall);
+  test("the default spinner is dwarfFortress", () => {
+    expect(DEFAULT_SPINNER).toBe("dwarfFortress");
+    expect(resolveSpinner(DEFAULT_SPINNER)).toEqual(spinners.dwarfFortress);
   });
 });
 

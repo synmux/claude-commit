@@ -10,7 +10,7 @@ diff → `splitDiff` chunks → summary model (default `sonnet`) per chunk → f
 
 - `src/config.ts` - precedence: defaults < global `$XDG_CONFIG_HOME/claude-commit` < `package.json#claude-commit` < `.claude-commit(.rc).json` (walk cwd→repo root) < CLI flags. `sanitizePartial` validates & drops unknown/badly-typed keys.
 - `src/agent.ts` - SDK wrapper; `buildSubprocessEnv` builds the subprocess env (credential gating + `CLAUDE_CODE_EXTRA_BODY` temperature injection).
-- `src/ui/*` - ora-rendered spinner (`spinner` config key picks any cli-spinners name, default `bouncingBall`; unknown names fall back rather than throw; wrapper keeps callers' TTY/`--no-spinner` gating and stays fully silent when disabled except final ✔/✖ lines), editor confirm, OpenTUI interactive mode (`-i`).
+- `src/ui/*` - ora-rendered spinner (`spinner` config key picks any cli-spinners name, default `dwarfFortress`; unknown names fall back rather than throw; wrapper keeps callers' TTY/`--no-spinner` gating and stays fully silent when disabled except final ✔/✖ lines), editor confirm, OpenTUI interactive mode (`-i`).
 - Tests in `test/*.test.ts` (bun:test), incl. tmpdir-based config-file tests and `test/spinner.test.ts`.
 
 ## Commands

@@ -163,7 +163,7 @@ Defaults worth knowing:
 - `interactive`: `false`
 - `interactiveCount`: `3`
 - `interactiveTemperature`: `1`
-- `spinner`: `bouncingBall` (any cli-spinners name, rendered by ora;
+- `spinner`: `dwarfFortress` (any cli-spinners name, rendered by ora;
   unknown names fall back to the default)
 
 ## Generation Pipeline
@@ -414,7 +414,7 @@ The temp file uses a random UUID, exclusive creation, and `0600` permissions.
 
 `src/ui/spinner.ts` is a small stderr-only spinner, rendered by
 [ora](https://github.com/sindresorhus/ora). The animation is picked by the
-`spinner` config key (any cli-spinners name, default `bouncingBall`). It
+`spinner` config key (any cli-spinners name, default `dwarfFortress`). It
 hides/restores the cursor, updates labels as generation phases change, and is
 disabled when stderr is not a TTY - when disabled, only the final
 `succeed`/`fail` status lines are printed.
