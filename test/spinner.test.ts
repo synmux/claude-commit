@@ -1,5 +1,5 @@
 import { test, expect, describe, spyOn } from "bun:test";
-import { spinners } from "ora";
+import spinners from "cli-spinners";
 import {
   DEFAULT_SPINNER,
   isSpinnerName,
