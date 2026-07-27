@@ -11,7 +11,8 @@
  * The animation is chosen by the `spinner` config key: any name from the
  * cli-spinners set bundled with ora, defaulting to {@link DEFAULT_SPINNER}.
  */
-import ora, { spinners, type Ora, type Spinner as SpinnerAnimation } from "ora";
+import ora, { type Ora } from "ora";
+import spinners, { type Spinner as SpinnerAnimation } from "cli-spinners";
 import { color } from "./colors";
 
 /** The spinner used when none (or an unknown one) is configured. */
