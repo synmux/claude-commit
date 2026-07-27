@@ -256,7 +256,7 @@ async function runNonInteractive(
   abortController: AbortController,
 ): Promise<number> {
   const useSpinner = opts.spinner !== false && process.stderr.isTTY;
-  const spinner = new Spinner(useSpinner);
+  const spinner = new Spinner(useSpinner, config.spinner);
 
   spinner.start("Reading diff");
   let result;

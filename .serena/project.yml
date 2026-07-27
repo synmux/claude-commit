@@ -129,7 +129,7 @@ ls_additional_workspace_folders: []
 #     - "./subproject1"
 #     - "./subproject2"
 ls_workspace_folders:
-- .
+  - .
 
 # list of language servers to start when using the LSP backend; choose from:
 #   ada                 al                  angular             ansible             bash
@@ -164,4 +164,4 @@ ls_workspace_folders:
 # The first language server is the default language and the respective language server will be used as a fallback.
 # Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
 language_servers:
-- typescript
+  - typescript

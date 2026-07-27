@@ -10,6 +10,7 @@
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { ClaudeCommitError } from "./errors";
+import { DEFAULT_SPINNER, isSpinnerName } from "./ui/spinner";
 import type { Config, ModelConfig, PartialConfig } from "./types";
 
 export const DEFAULT_CONFIG: Config = {
@@ -21,6 +22,7 @@ export const DEFAULT_CONFIG: Config = {
   interactive: false,
   interactiveCount: 3,
   interactiveTemperature: 1,
+  spinner: DEFAULT_SPINNER,
   models: {
     summary: "sonnet",
     final: "sonnet",
@@ -115,6 +117,9 @@ export function sanitizePartial(raw: unknown): PartialConfig {
       2,
       Math.max(0, obj.interactiveTemperature),
     );
+  }
+  if (typeof obj.spinner === "string" && isSpinnerName(obj.spinner)) {
+    out.spinner = obj.spinner;
   }
   if (typeof obj.maxChunkTokens === "number" && obj.maxChunkTokens > 0) {
     out.maxChunkTokens = Math.floor(obj.maxChunkTokens);

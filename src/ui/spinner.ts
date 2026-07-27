@@ -1,48 +1,70 @@
 /**
- * A minimal, dependency-free progress spinner for non-interactive runs.
+ * The progress spinner for non-interactive runs, rendered by `ora`.
  *
- * It renders to stderr (so stdout stays clean for piping) and only animates when
- * stderr is a TTY; otherwise `start`/`update` are silent no-ops. This keeps the
- * read-only progress indicator out of the way of `cco --dry-run | git commit -F -`.
+ * It writes to stderr (so stdout stays clean for piping) and only animates when
+ * explicitly enabled: callers gate on `process.stderr.isTTY` and `--no-spinner`,
+ * and ora's own TTY/CI detection is bypassed so that decision lives in one
+ * place. When disabled, `start`/`update` are silent no-ops but final status
+ * lines (`succeed`/`fail`) still print. This keeps the progress indicator out
+ * of the way of `cco --dry-run | git commit -F -`.
+ *
+ * The animation is chosen by the `spinner` config key: any name from the
+ * cli-spinners set bundled with ora, defaulting to {@link DEFAULT_SPINNER}.
  */
+import ora, { spinners, type Ora, type Spinner as SpinnerAnimation } from "ora";
 import { color } from "./colors";
 
-const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const INTERVAL_MS = 80;
+/** The spinner used when none (or an unknown one) is configured. */
+export const DEFAULT_SPINNER = "bouncingBall";
+
+/** Whether `name` is one of the cli-spinners animations bundled with ora. */
+export function isSpinnerName(name: string): boolean {
+  return Object.hasOwn(spinners, name);
+}
+
+/**
+ * Look up a spinner animation by name, falling back to {@link DEFAULT_SPINNER}
+ * for unknown names (ora itself throws on those, and a cosmetic option must
+ * never be able to break a commit).
+ */
+export function resolveSpinner(name: string): SpinnerAnimation {
+  const known = (spinners as Record<string, SpinnerAnimation | undefined>)[
+    name
+  ];
+  return known ?? spinners[DEFAULT_SPINNER];
+}
 
 export class Spinner {
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private frame = 0;
-  private label = "";
+  private instance: Ora | null = null;
   private readonly enabled: boolean;
+  private readonly animation: SpinnerAnimation;
 
-  constructor(enabled = process.stderr.isTTY) {
+  constructor(enabled = process.stderr.isTTY, spinnerName = DEFAULT_SPINNER) {
     this.enabled = Boolean(enabled);
+    this.animation = resolveSpinner(spinnerName);
   }
 
   start(label: string): void {
-    this.label = label;
     if (!this.enabled) return;
-    this.stopTimer();
-    process.stderr.write("\x1b[?25l"); // hide cursor
-    this.render();
-    this.timer = setInterval(() => {
-      this.frame = (this.frame + 1) % FRAMES.length;
-      this.render();
-    }, INTERVAL_MS);
+    this.instance?.stop();
+    this.instance = ora({
+      text: label,
+      spinner: this.animation,
+      stream: process.stderr,
+      // The caller already decided (TTY check + --no-spinner); don't let ora's
+      // own TTY/CI detection silently disagree.
+      isEnabled: true,
+    }).start();
   }
 
   update(label: string): void {
-    this.label = label;
-    if (this.enabled && this.timer) this.render();
+    if (this.instance) this.instance.text = label;
   }
 
   /** Stop and clear the spinner line, optionally printing a final status line. */
   stop(finalLine?: string): void {
-    this.stopTimer();
-    if (this.enabled) {
-      process.stderr.write("\r\x1b[2K\x1b[?25h"); // clear line, show cursor
-    }
+    this.instance?.stop();
+    this.instance = null;
     if (finalLine !== undefined) process.stderr.write(finalLine + "\n");
   }
 
@@ -52,20 +74,5 @@ export class Spinner {
 
   fail(label: string): void {
     this.stop(`${color("31", "✖")} ${label}`);
-  }
-
-  private render(): void {
-    // `\r\x1b[2K` (cursor return + clear line) only runs when enabled (a TTY);
-    // the frame color additionally respects NO_COLOR via the helper.
-    process.stderr.write(
-      `\r\x1b[2K${color("36", FRAMES[this.frame]!)} ${this.label}`,
-    );
-  }
-
-  private stopTimer(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
   }
 }

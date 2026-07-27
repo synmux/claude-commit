@@ -40,6 +40,12 @@ export interface Config {
    * at its default. Only applied in interactive mode.
    */
   interactiveTemperature: number | null;
+  /**
+   * Name of the progress spinner animation: any spinner from the cli-spinners
+   * set bundled with ora (e.g. `"dots"`, `"moon"`, `"bouncingBall"`). Unknown
+   * names are ignored and the default is used instead.
+   */
+  spinner: string;
   /** Models for each pipeline stage. */
   models: ModelConfig;
   /**
