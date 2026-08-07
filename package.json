@@ -24,7 +24,7 @@
     "interactive": false,
     "interactiveCount": 3,
     "interactiveTemperature": 1,
-    "spinner": "dwarfFortress",
+    "spinner": "material",
     "models": {
       "summary": "sonnet",
       "final": "sonnet"

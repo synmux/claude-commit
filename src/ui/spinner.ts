@@ -16,7 +16,7 @@ import spinners, { type Spinner as SpinnerAnimation } from "cli-spinners";
 import { color } from "./colors";
 
 /** The spinner used when none (or an unknown one) is configured. */
-export const DEFAULT_SPINNER = "dwarfFortress";
+export const DEFAULT_SPINNER = "material";
 
 /** Whether `name` is one of the cli-spinners animations bundled with ora. */
 export function isSpinnerName(name: string): boolean {

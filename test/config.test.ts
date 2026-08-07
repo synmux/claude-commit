@@ -120,12 +120,12 @@ describe("spinner", () => {
     expect(sanitizePartial({ spinner: 7 }).spinner).toBeUndefined();
   });
 
-  test("defaults to dwarfFortress", () => {
-    expect(DEFAULT_CONFIG.spinner).toBe("dwarfFortress");
+  test("defaults to material", () => {
+    expect(DEFAULT_CONFIG.spinner).toBe("material");
   });
 
   test("resolves through the precedence chain", () => {
-    expect(resolveConfig({}, {}).spinner).toBe("dwarfFortress");
+    expect(resolveConfig({}, {}).spinner).toBe("material");
     expect(resolveConfig({ spinner: "moon" }, {}).spinner).toBe("moon");
   });
 });
