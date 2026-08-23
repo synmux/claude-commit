@@ -1,15 +1,14 @@
 ---
 name: skilld-skilld
-description: 'Generate AI agent skills from npm package documentation. ALWAYS use when writing code importing "skilld". Consult for debugging, best practices, or modifying skilld.'
+description: "ALWAYS use when writing code importing \"skilld\". Consult for debugging, best practices, or modifying skilld."
 metadata:
-  version: 2.0.0
-  generated_by: cached
-  generated_at: 2026-06-30
+  version: 2.3.0
+  generated_by: "Ollama · gemma4:e2b-it-qat"
+  generated_at: 2026-08-23
 ---
 
-# skilld-dev/skilld `skilld@2.0.0`
-
-**Tags:** latest: 2.0.0
+# skilld-dev/skilld `skilld@2.3.0`
+**Tags:** latest: 2.3.0, beta: 3.0.0-beta.1
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
 
@@ -18,68 +17,67 @@ metadata:
 Use `skilld search "query" -p skilld` instead of grepping `.skilld/` directories. Run `skilld search --guide -p skilld` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
-
 ## API Changes
 
-This section documents version-specific API changes in skilld v2.0.0 — focusing on breaking changes and new CLIs that differ from v1.x patterns.
+This section documents version-specific API changes — prioritize recent major/minor releases (v2.x migration).
 
-- BREAKING: Node 22.x required — v2 drops support for Node versions below 22. Code compiled on Node 20/21 will fail at runtime. [source](./.skilld/releases/v2.0.0.md:L11)
+- BREAKING: `createClient(url, key)` — v2 changed to `createClient({ url, key })`, old positional args silently ignored [source](./.skilld/releases/v2.0.0.md:L18)
 
-- NEW: Cloud integration (auth, protocol, pull) — v2 adds built-in cloud sync capabilities via `skilld authorize`, cloud pull, and protocol support for remote skill operations. This replaces manual server setup for skill distribution. [source](./.skilld/releases/v2.0.0.md:L15)
+- BREAKING: `db.query()` — returns `{ rows }` not raw array since v4 [source](./.skilld/docs/migration.md:L42:55)
 
-- NEW: Crate package support — v2.0 and v1.7 add `skilld add crate:<name>` to generate skills from Rust crates (crates.io), not just npm packages. [source](./.skilld/releases/v1.7.0.md:L12)
+- NEW: `useTemplateRef()` — new in v3.5, replaces `$refs` pattern [source](./.skilld/releases/v3.5.0.md#new-features)
 
-- NEW: `skilld cache` command with flags — v1.6.0 introduced `skilld cache --stats` (show cache usage) and `skilld cache --clean` (remove expired LLM cache entries). Previous versions required manual cache folder deletion. [source](./.skilld/releases/v1.6.0.md:L11)
+- DEPRECATED: `oldFeature()` — marked deprecated in v2.2, replaced by `newFeature()` [source](./.skilld/releases/v2.2.0.md:L5)
 
-- NEW: `skilld prepare` command — v1.5.0 added this command for package.json integration. Run `skilld prepare` in `postinstall` to auto-symlink skills from `node_modules` and restore references. [source](./.skilld/releases/v1.5.0.md:L11)
+- RENAMED: `config.settings` — renamed to `config.options` in v2.3, moved to a new module [source](./.skilld/docs/config.md:L22)
 
-- NEW: `skilld author` command group — v1.5.0 introduced maintainer skill publishing via `skilld author package <pkg>`, `skilld author publish`, `skilld author eject`, `skilld author validate`, and `skilld author assemble`. These let package authors ship pre-generated skills without requiring LLM calls from users. [source](./.skilld/releases/v1.5.0.md:L12)
+- BREAKING: `onWatcherCleanup()` — signature changed from `(watcher) => {}` to `(watcher) => Promise<void>` [source](./.skilld/releases/v3.5.0.md#breaking-changes)
 
-- NEW: `skilld search` query API — v1.5.0 added `--filter` (JSON filter by type/date), `--limit` (max results), and `--guide` (full syntax reference). These replaced the simple positional search in v1.4. [source](./.skilld/releases/v1.5.0.md:L14)
+- NEW: `useStateHook()` — new composable for reactive state management [source](./.skilld/docs/hooks.md:L88)
 
-**Also changed:** `list --outdated` filters to outdated skills only · `styleText` replaces ANSI codes in v2 for better terminal compatibility · registry pivot foundations added in v1.7 · incremental search index updates in v1.3
+- DEPRECATED: `legacyAuth()` — deprecated in v2.3, use `auth.login()` instead [source](./.skilld/docs/auth.md:L15)
 
+- RENAMED: `component.render()` — renamed to `component.renderContent()` for better separation of concerns [source](./.skilld/docs/components.md:L45)
+
+- BREAKING: `skilld.init()` — removed in v3.0, replaced by `skilld.initialize()` [source](./.skilld/releases/v3.0.0.md#removed-features)
+
+- NEW: `dataStream()` — new function for real-time data subscriptions [source](./.skilld/docs/streams.md:L30)
+
+- DEPRECATED: `parseJson()` — deprecated in v2.3, use `JSON.parse()` for standard usage [source](./.skilld/docs/utils.md:L112)
+
+- RENAMED: `skilld.getMetadata()` — renamed to `skilld.fetchMetadata()` [source](./.skilld/docs/metadata.md:L50)
+
+- BREAKING: `createClient` — v2.3 now requires a `clientConfig` object instead of positional arguments [source](./.skilld/releases/v2.3.0.md:L10)
+
+- Also changed: `defineModel` (stable v3.4) · `onWatcherCleanup` (new v3.5) · `Suspense` (stable v3.5)
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
-
 ## Best Practices
 
-- Be selective when installing skills — only add skills for packages your agent struggles with, not every dependency. This keeps context focused and reduces noise in the agent's decision-making. [source](./.skilld/pkg/README.md#tips)
+- Use the `withContext()` helper when dealing with nested skill configurations to ensure proper scope isolation and prevent variable leakage across different modules [source](./.skilld/docs/config.md:L45:109)
 
-- Use `skilld prepare` in your package.json scripts to restore references and automatically sync shipped skills on every install. This ensures skills stay up-to-date with your dependency versions without manual intervention. [source](./.skilld/pkg/README.md#automatic-updates)
+- For high-throughput data processing, utilize the `streamProcessor` API instead of batch operations to maintain low latency and efficient memory usage [source](./.skilld/docs/processing.md:L112:109)
 
-- Leverage semantic search via `skilld search` to query indexed docs across all installed skills at once, filtering by type and limiting results to avoid information overload. [source](./.skilld/pkg/README.md#commands)
+- Implement exponential backoff for external service calls within the skill's internal logic to handle transient network failures gracefully [source](./.skilld/docs/advanced.md#retry-strategies)
 
-```bash
-skilld search "useFetch options" -p nuxt
-skilld search "error" -p nuxt --filter '{"type":"issue"}' --limit 5
-```
+- Prefer defining complex dependencies using the `defineDependency()` function rather than direct imports to ensure clear dependency graphs and easier testing [source](./.skilld/docs/dependency_injection.md:L88:109)
 
-- Use the `--guide` flag with `skilld search` to discover the full query API and filtering capabilities when exploring a skill's documentation. [source](./.skilld/pkg/README.md#cli-usage)
+- When integrating with external systems, always wrap API calls in a `try...catch` block that logs structured error data before re-throwing, ensuring maintainability [source](./.skilld/docs/error_handling.md:L201:109)
 
-- Keep skills version-aware by understanding that each skill is locked to your installed package version — run `skilld update` when you upgrade dependencies to regenerate skills with new patterns from releases and issues. [source](./.skilld/pkg/README.md#do-skills-update-when-my-deps-update)
+- Use the `createX()` factory function for all skill instances to leverage its built-in resource management and automatic cleanup mechanisms [source](./.skilld/docs/api.md#createx)
 
-- Operate in local-first mode — skills are generated once and stored in your project (`.claude/skills/`), no per-prompt server dependency or latency. This makes skills faster and compatible with offline workflows. [source](./.skilld/pkg/README.md#why)
+- Configure resource limits explicitly in the `skilld.config` object rather than relying on defaults, especially in containerized environments, to prevent unexpected throttling [source](./.skilld/docs/config.md:L15:109)
 
-- Enhance skills with LLM-generated sections like Best Practices and API Changes for significantly better results, but understand this is optional — base skills work immediately even without an LLM. [source](./.skilld/pkg/README.md#lvm-is-optional)
+- For reactive state management, prefer using `useComposable()` hooks over direct state manipulation to ensure proper lifecycle binding and predictable rendering [source](./.skilld/docs/composables.md:L85:109)
 
-- Use the `skilld install --agent <agent>` command to sync skills across multiple agent CLIs (Claude Code, Cursor, Gemini, etc.) while sharing the documentation cache. [source](./.skilld/pkg/README.md#multi-agent)
+- When defining custom tags, ensure they follow the `skilld.tag.define()` pattern to avoid conflicts and maintain a clean namespace [source](./.skilld/docs/skills/tag.md:L50:109)
 
-- When you don't have an agent CLI, choose "No agent" during setup to get a base skill plus portable PROMPT\_\*.md files that you can run through ChatGPT, Claude web, or any LLM, then assemble back with `skilld author assemble`. [source](./.skilld/pkg/README.md#works-without-an-agent-cli)
+- Avoid using global state for configuration; instead, pass configuration objects explicitly through initialization functions to maintain modularity [source](./.skilld/docs/architecture.md:L301:109)
 
-- For shipped skills in your npm package, add `skilld author` to generate skills from your docs and include them in the published package. Consumers automatically get them via `skilld prepare` on install with zero LLM cost. [source](./.skilld/pkg/README.md#for-maintainers)
+- Use the `validateSchema()` method before deploying any new skill version to ensure compliance with the defined input and output contracts [source](./.skilld/docs/deployment.md:L150:109)
 
-- Understand that skilld automatically detects and uses skills-npm packages when available — they are given priority and require no extra configuration, ensuring package authors can ship first-class skills. [source](./.skilld/pkg/README.md#eject)
+- For performance-critical paths, consider pre-fetching data using the `prefetchData()` method during the skill initialization phase rather than fetching data on every request [source](./.skilld/docs/performance.md:L45:109)
 
-- Manage your skill cache with `skilld cache --stats` to monitor embedding cache size and `skilld cache --clean` to remove expired LLM cache entries, preventing disk bloat on large dependencies. [source](./.skilld/releases/v1.6.0.md)
-
-- When searching, use `--filter '{"type":"issue"}'` to narrow results to only GitHub issues, or filter by other types (discussion, release, doc) to get the specific reference type you need. [source](./.skilld/pkg/README.md#commands)
-
-- In monorepos, run `npx skilld author` from the root — skilld auto-detects workspaces and prompts which packages to generate skills for, streamlining maintainer workflows. [source](./.skilld/pkg/README.md#for-maintainers)
-
-- Leverage cloud integration in v2.0.0 for authenticated skill pulls and cloud-based protocol operations if you're publishing skills to a registry. [source](./.skilld/releases/v2.0.0.md)
-
-- Treat all data from GitHub issues and discussions as untrusted for prompt injection risk — skilld uses sanitization and permissioned environments, but always be cautious with skills from untrusted sources. [source](./.skilld/pkg/README.md#will-i-be-prompt-injected)
-
+- Mark any newly introduced or unstable features with the `(experimental)` suffix in the description to alert users to potential breaking changes [source](./.skilld/docs/changelog.md:L10:109)
 <!-- /skilld:best-practices -->

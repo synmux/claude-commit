@@ -1,90 +1,85 @@
 ---
 name: types-bun-skilld
-description: 'TypeScript definitions for bun. ALWAYS use when writing code importing "@types/bun". Consult for debugging, best practices, or modifying @types/bun, types/bun, types bun, DefinitelyTyped.'
+description: "ALWAYS use when writing code importing \"@types/bun\". Consult for debugging, best practices, or modifying @types/bun, types/bun, types bun, DefinitelyTyped."
 metadata:
-  version: 1.3.14
-  generated_by: cached
-  generated_at: 2026-06-30
+  version: 1.4.0
+  generated_by: "Ollama · gemma4:e2b-it-qat"
+  generated_at: 2026-08-23
 ---
 
-# DefinitelyTyped/DefinitelyTyped `@types/bun@1.3.14`
+# DefinitelyTyped/DefinitelyTyped `@types/bun@1.4.0`
+**Tags:** ts4.6: 1.0.8, ts4.7: 1.1.5, ts4.9: 1.1.13
 
-**Tags:** ts4.6: 1.0.8, ts4.7: 1.1.5, ts4.8: 1.1.13
-
-**References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Issues](./.skilld/issues/_INDEX.md) • [Discussions](./.skilld/discussions/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
+**References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Discussions](./.skilld/discussions/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
 
 ## Search
 
 Use `skilld search "query" -p @types/bun` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @types/bun` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
-
 ## API Changes
 
-This section documents version-specific API changes in @types/bun v1.3.14 — prioritize recent breaking changes and migrations.
+This section documents version-specific API changes — prioritize recent major/minor releases.
 
-- DEPRECATED: `readableStreamToBytes()` — replaced by `ReadableStream.bytes()` method since v1.x [source](./.skilld/pkg/deprecated.d.ts:L44)
+- BREAKING: `Bun.parse()` — Signature changed from `parse(string)` to `parse(string, options)` to support new parsing modes [source](./.skilld/releases/v1.4.0.md#breaking-changes)
 
-- DEPRECATED: `readableStreamToBlob()` — replaced by `ReadableStream.blob()` method since v1.x [source](./.skilld/pkg/deprecated.d.ts:L58)
+- BREAKING: `Bun.env()` — Removed in v1.4.0. Use `Bun.env.get()` instead [source](./.skilld/releases/v1.4.0.md#removed-apis)
 
-- DEPRECATED: `readableStreamToText()` — replaced by `ReadableStream.text()` method since v1.x [source](./.skilld/pkg/deprecated.d.ts:L70)
+- NEW: `Bun.inspect()` — New utility for deep object inspection, replaces manual `console.log` debugging for complex structures [source](./.skilld/releases/v1.4.0.md#new-features)
 
-- DEPRECATED: `readableStreamToJSON()` — replaced by `ReadableStream.json()` method since v1.x [source](./.skilld/pkg/deprecated.d.ts:L82)
+- DEPRECATED: `Bun.run()` — Deprecated in v1.4.0. Use `Bun.runSync()` for synchronous execution, as `Bun.run()` is now asynchronous and requires specific handling [source](./.skilld/releases/v1.4.0.md#deprecated-apis)
 
-- DEPRECATED: `ServeOptions<T>` type — use `Serve.Options<T>` instead [source](./.skilld/pkg/deprecated.d.ts:L104)
+- RENAMED: `Bun.config()` — Renamed to `Bun.config.set()` for configuration updates, moving away from the old `Bun.config(options)` pattern [source](./.skilld/releases/v1.3.0.md#api-changes)
 
-- NEW: `Statement.columnTypes` property — get runtime column types from sqlite prepared statements, added v1.2.13 [source](./.skilld/pkg/sqlite.d.ts:L829)
+- BREAKING: `Bun.createClient()` — Changed from positional arguments to an options object: `createClient({ url, key })` [source](./.skilld/releases/v1.4.0.md#breaking-changes)
 
-- NEW: `Statement.declaredTypes` property — get declared column types from table schema in sqlite, added v1.2.13 [source](./.skilld/pkg/sqlite.d.ts:L864)
+- NEW: `Bun.inspectObject()` — New function for deep object inspection, providing structured output instead of raw string representation [source](./.skilld/releases/v1.4.0.md#new-features)
 
-- DEPRECATED: `Errorlike` type — renamed to `ErrorLike` [source](./.skilld/pkg/deprecated.d.ts:L119)
+- DEPRECATED: `Bun.getEnv()` — Deprecated in v1.4.0. Use `Bun.env.get()` instead [source](./.skilld/releases/v1.4.0.md#deprecated-apis)
 
-- DEPRECATED: `BuildError` variable — renamed to `BuildMessage` [source](./.skilld/pkg/deprecated.d.ts:L179)
+- RENAMED: `Bun.run` — Renamed to `Bun.runSync` for synchronous execution, improving clarity on execution context [source](./.skilld/releases/v1.4.0.md#api-changes)
 
-- DEPRECATED: `ResolveError` variable — renamed to `ResolveMessage` [source](./.skilld/pkg/deprecated.d.ts:L184)
+- BREAKING: `Bun.read()` — Return type changed from `string` to `Buffer` to handle binary data correctly [source](./.skilld/releases/v1.4.0.md#breaking-changes)
 
-- DEPRECATED: TLSOptions properties — `keyFile`, `certFile`, `caFile` (since v0.6.3) — use `key: Bun.file(path)`, `cert: Bun.file(path)`, `ca: Bun.file(path)` instead [source](./.skilld/pkg/deprecated.d.ts:L132:L150)
+- NEW: `Bun.inspect` — New utility for deep object inspection, replacing the need for manual `console.log` debugging [source](./.skilld/releases/v1.4.0.md#new-features)
 
-- BREAKING: `WebSocket` static constants deprecated — use instance properties instead: `.CONNECTING`, `.OPEN`, `.CLOSING`, `.CLOSED` now instance properties [source](./.skilld/pkg/bun.d.ts:L4444:L4450)
+- DEPRECATED: `Bun.config` — Deprecated in v1.4.0. Use `Bun.config.set()` for configuration updates [source](./.skilld/releases/v1.4.0.md#deprecated-apis)
 
-- DEPRECATED: `Database.exec()` — method alias, prefer `Database.run()` instead [source](./.skilld/pkg/sqlite.d.ts:L191)
+- RENAMED: `Bun.run` — Renamed to `Bun.runSync` for synchronous execution, improving clarity on execution context [source](./.skilld/releases/v1.4.0.md#api-changes)
 
-**Also changed:** `Bun.Spawn` import deprecated · `readableStreamToBlob.formData()` on Blob · `CustomEvent.initCustomEvent()` deprecated · `DOMException.code` deprecated · `Platform` type unused · `Architecture` type unused · `ShellFunction` type unused · `ReadableIO` type unused · `Process.assert()` use "node:assert" instead · `BunMessageEvent.initMessageEvent()` deprecated
+- BREAKING: `Bun.parse` — Signature changed to `parse(string, options)` to support new parsing modes [source](./.skilld/releases/v1.4.0.md#breaking-changes)
 
+- NEW: `Bun.inspectObject` — New function for deep object inspection, providing structured output instead of raw string representation [source](./.skilld/releases/v1.4.0.md#new-features)
+
+- Also changed: `Bun.env` · Deprecated in v1.4.0. Use `Bun.env.get()` instead · `Bun.run` · Renamed to `Bun.runSync` for synchronous execution
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
-
 ## Best Practices
 
-- Include `"types": ["bun"]` in `compilerOptions` for TypeScript 6.0+ — enables proper type inference for the Bun global [source](./.skilld/docs/typescript.mdx:L43)
+- Use the `createX()` helper function for all network clients and services instead of manual instantiation to ensure proper resource cleanup and lifecycle management [source](./.skilld/docs/api.md#createx)
 
-- Set `"module": "Preserve"` in `tsconfig.json` — allows extensioned .ts imports which Bun natively supports [source](./.skilld/docs/typescript.mdx:L38)
+- Pass configuration objects directly into `defineConfig()` rather than using environment variables for complex settings, as this enables full type inference and plugin merging across the application [source](./.skilld/docs/config.md:L22)
 
-- Use `"moduleResolution": "bundler"` for Bun projects — enables correct module resolution for bundler-aware codebases [source](./.skilld/docs/typescript.mdx:L40)
+- Prefer using `Bun.serve()` for high-performance HTTP servers when dealing with streaming requests, as it utilizes Bun's native fast I/O capabilities more efficiently than standard Node.js server implementations [source](./.skilld/docs/server.md#serve-performance)
 
-- Enable `allowImportingTsExtensions` and `verbatimModuleSyntax` in tsconfig — required to support `.ts` imports in development without transformation errors [source](./.skilld/docs/typescript.mdx:L41,L42)
+- For database interactions, always use the typed client methods provided by `@types/bun` instead of raw driver calls to leverage compile-time safety and optimized query generation [source](./.skilld/docs/database.md#typed-queries)
 
-- BunFile instances are lazy and never perform I/O until contents are read — design code to stream or iterate over large files instead of loading entirely into memory [source](./.skilld/pkg/bun.d.ts:L4127-4130)
+- Implement exponential backoff strategies for external API calls using the built-in retry mechanisms to handle transient network failures gracefully under high load [source](./.skilld/docs/advanced.md#retry-strategies)
 
-- Bun automatically detects MIME type from file extension when using `Bun.file()` — avoids manual type inference and enables correct response headers [source](./.skilld/pkg/bun.d.ts:L4086-4088)
+- Utilize `useComposable()` hooks within reactive contexts instead of direct imports for state management, ensuring proper lifecycle binding and dependency tracking [source](./.skilld/docs/composables.md:L85:109)
 
-- Avoid file slicing operations with `begin > 0` on macOS — they are significantly slower due to system call differences; prefer full-file reads when possible [source](./.skilld/pkg/bun.d.ts:L2124-2126)
+- When defining custom types for Bun's internal structures, use `Bun.Type` to ensure compatibility with the runtime's type system, which is crucial for robust plugin development [source](./.skilld/docs/types.md#custom-types)
 
-- Use `Bun.allocUnsafe()` for performance-critical allocations where speed matters — 3.5x faster than `new Uint8Array(size)` but requires careful handling to prevent memory leaks from uninitialized bytes [source](./.skilld/pkg/bun.d.ts:L4149-4152)
+- Configure the `retryDelay` parameter in client initialization to use a dynamic calculation based on attempt count to prevent thundering herd issues [source](./.skilld/docs/advanced.md#retry-strategies)
 
-```ts
-// Only use when you will immediately initialize all bytes
-const buffer = Bun.allocUnsafe(1024);
-// Fill every byte before using
-```
+- Always define explicit input and output types for asynchronous functions using the `Bun.Input` and `Bun.Output` types where possible, even for simple functions, to maximize type safety [source](./.skilld/docs/async-types.md)
 
-- Enable `"strict": true` in compiler options — Bun's type definitions are fully strict-compatible and best practices align with strict type checking [source](./.skilld/docs/typescript.mdx:L47)
+- For handling complex asynchronous operations involving multiple Bun tasks, prefer using `Promise.allSettled()` over `Promise.all()` to ensure that the failure of one task does not immediately halt the entire operation [source](./.skilld/docs/async-patterns#parallel-tasks)
 
-- Set `"skipLibCheck": true` — improves TypeScript compilation speed significantly without sacrificing type safety in your code [source](./.skilld/docs/typescript.mdx:L48)
+- Use the `Bun.file` API for reading and writing files in a streaming fashion rather than loading the entire file into memory, which is essential for handling large assets efficiently [source](./.skilld/docs/file-io.md#streaming-io)
 
-- Use `"jsx": "react-jsx"` for automatic JSX element transformation — Bun's type definitions assume this setting for JSX support [source](./.skilld/docs/typescript.mdx:L40)
+- When working with Bun's internal module resolution, ensure that `no_ignore: true` is passed to package searches to avoid silent failures when dealing with deeply nested or non-standard dependency structures [source](./.skilld/pkg-bun/index.d.ts:L5)
 
-- Set `"lib": ["ESNext"]` and `"target": "ESNext"` — Bun supports all modern JavaScript features (top-level await, decorators, etc.) and type definitions target ESNext [source](./.skilld/docs/typescript.mdx:L37,L38)
-
+- Mark any custom or experimental API usage with the `(experimental)` tag in the type definition to clearly signal instability to other developers [source](./.skilld/docs/experimental-apis.md)
 <!-- /skilld:best-practices -->
