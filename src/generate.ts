@@ -1,8 +1,17 @@
 /**
  * The commit-message pipeline:
  *
- *   diff ──split──▶ [chunk, chunk, ...] ──summary model──▶ [summary, ...]
+ *   diff ──partition──▶ primary diff, low-priority diff
+ *        ──split──▶ [chunk, chunk, ...] ──summary model──▶ [summary, ...]
  *        ──final model──▶ commit message(s)
+ *
+ * The diff is first partitioned by the configured `lowPriorityPaths`: file
+ * sections under those paths (generated docs, lockfiles, ...) form a
+ * low-priority partition that is summarised after, and more briefly than,
+ * the primary one, and the final model is told which is which so the
+ * subject line describes the primary changes. When every file is low
+ * priority the partition is promoted and the run is identical to one with
+ * no patterns configured.
  *
  * The summary model (default `sonnet`) reads each diff chunk and writes a
  * factual summary; chunks are sized by a content-classified token estimate
@@ -14,7 +23,8 @@
  * message(s), applying the configured formatting rules.
  */
 import { runPrompt } from "./agent";
-import { redactOpaqueRuns, splitDiffToFit } from "./diff";
+import { partitionDiff, redactOpaqueRuns, splitDiffToFit } from "./diff";
+import { createLowPriorityMatcher } from "./paths";
 import { clampChunkTokens } from "./tokens";
 import { ClaudeCommitError, isPromptTooLongError } from "./errors";
 import {
@@ -24,10 +34,11 @@ import {
   buildSummaryUser,
   cleanMessage,
   extractMessages,
+  hasLowPrioritySummaries,
   MESSAGES_SCHEMA,
   parseOptions,
 } from "./prompts";
-import type { Config } from "./types";
+import type { ChangePriority, Config, DiffSummary } from "./types";
 
 export interface GenerateProgress {
   /** Called when a new phase of work begins (for spinner labels). */
@@ -49,15 +60,27 @@ export interface GenerateOptions {
   runner?: typeof runPrompt;
 }
 
+/** How the `lowPriorityPaths` patterns applied to this diff (for `--verbose`). */
+export interface LowPriorityStats {
+  /** File sections whose paths all matched a pattern. */
+  matchedFiles: number;
+  /** File sections in the diff with a recognisable path. */
+  totalFiles: number;
+  /** Every file matched, so the changes were treated as primary after all. */
+  promoted: boolean;
+}
+
 export interface GenerateResult {
   /** Candidate commit messages (length 1 in non-interactive mode). */
   messages: string[];
-  /** The intermediate summaries (useful for `--verbose`). */
-  summaries: string[];
-  /** Number of diff chunks the summary stage processed. */
+  /** The intermediate summaries, primary first, each tagged with its priority. */
+  summaries: DiffSummary[];
+  /** Number of diff chunks the summary stage processed, across both partitions. */
   chunkCount: number;
   /** Total cost across all model calls, in USD. */
   costUsd: number;
+  /** How the low-priority patterns applied to this diff. */
+  lowPriority: LowPriorityStats;
 }
 
 /**
@@ -67,20 +90,39 @@ export interface GenerateResult {
  */
 const MIN_RETRY_CHUNK_TOKENS = 8_000;
 
-/** Run the full pipeline over a staged diff. */
-export async function generateCommit(
-  diff: string,
-  config: Config,
-  options: GenerateOptions = {},
-): Promise<GenerateResult> {
-  const {
-    count = 1,
-    progress = {},
-    abortController,
-    runner = runPrompt,
-  } = options;
+interface PartitionSummaryOptions {
+  config: Config;
+  runner: typeof runPrompt;
+  progress: GenerateProgress;
+  abortController?: AbortController;
+}
 
-  const effectiveDiff = config.skipArmored ? redactOpaqueRuns(diff) : diff;
+/** Spinner label for one chunk of a partition. */
+function readingLabel(
+  priority: ChangePriority,
+  position: number,
+  total: number,
+): string {
+  const subject = priority === "low" ? "low-priority diff" : "diff";
+  return total > 1
+    ? `Reading ${subject} (part ${position + 1}/${total})`
+    : `Reading ${subject}`;
+}
+
+/**
+ * Stage 1 for one partition: split it into chunks and summarise each, via a
+ * work queue so an oversized chunk can be re-split and retried in place.
+ * The estimate is calibrated, but only the backend knows the true token
+ * count; its "prompt is too long" rejection is free, so treat it as the
+ * final arbiter: halve the budget, re-split just that chunk, and continue
+ * where we left off. Returns no summaries for an empty partition.
+ */
+async function summarizePartition(
+  diff: string,
+  priority: ChangePriority,
+  options: PartitionSummaryOptions,
+): Promise<{ summaries: DiffSummary[]; costUsd: number }> {
+  const { config, runner, progress, abortController } = options;
 
   // The configured chunk budget is clamped to the summary model's context
   // window so a single chunk (plus prompt scaffolding and response headroom)
@@ -92,22 +134,10 @@ export async function generateCommit(
     config.models.summary,
     config.maxChunkTokens,
   );
-  const chunks = splitDiffToFit(
-    effectiveDiff,
-    chunkTokens,
-    config.charsPerToken,
-  );
-  if (chunks.length === 0) {
-    throw new ClaudeCommitError("There are no staged changes to summarize.");
-  }
+  const chunks = splitDiffToFit(diff, chunkTokens, config.charsPerToken);
 
-  // Stage 1: summarize each chunk, via a work queue so an oversized chunk
-  // can be re-split and retried in place. The estimate is calibrated, but
-  // only the backend knows the true token count; its "prompt is too long"
-  // rejection is free, so treat it as the final arbiter: halve the budget,
-  // re-split just that chunk, and continue where we left off.
-  const summarySystem = buildSummarySystem();
-  const summaries: string[] = [];
+  const summarySystem = buildSummarySystem(priority);
+  const summaries: DiffSummary[] = [];
   let costUsd = 0;
 
   const queue = chunks.map((chunk) => ({ chunk, tokenBudget: chunkTokens }));
@@ -115,14 +145,10 @@ export async function generateCommit(
     const task = queue.shift()!;
     const position = summaries.length;
     const total = summaries.length + queue.length + 1;
-    progress.onPhase?.(
-      total > 1
-        ? `Reading diff (part ${position + 1}/${total})`
-        : "Reading diff",
-    );
+    progress.onPhase?.(readingLabel(priority, position, total));
     try {
       const result = await runner(
-        buildSummaryUser(task.chunk, position, total),
+        buildSummaryUser(task.chunk, position, total, priority),
         {
           model: config.models.summary,
           system: summarySystem,
@@ -130,7 +156,7 @@ export async function generateCommit(
           ...(abortController ? { abortController } : {}),
         },
       );
-      summaries.push(result.text);
+      summaries.push({ priority, text: result.text });
       costUsd += result.costUsd;
     } catch (error) {
       const halvedBudget = Math.floor(task.tokenBudget / 2);
@@ -155,6 +181,59 @@ export async function generateCommit(
       );
     }
   }
+
+  return { summaries, costUsd };
+}
+
+/** Run the full pipeline over a staged diff. */
+export async function generateCommit(
+  diff: string,
+  config: Config,
+  options: GenerateOptions = {},
+): Promise<GenerateResult> {
+  const {
+    count = 1,
+    progress = {},
+    abortController,
+    runner = runPrompt,
+  } = options;
+
+  const effectiveDiff = config.skipArmored ? redactOpaqueRuns(diff) : diff;
+  const partition = partitionDiff(
+    effectiveDiff,
+    createLowPriorityMatcher(config.lowPriorityPaths),
+  );
+  if (partition.primary.trim() === "") {
+    throw new ClaudeCommitError("There are no staged changes to summarize.");
+  }
+
+  // Stage 1: summarise the primary partition first - fail fast on the part
+  // that matters - then the low-priority one (skipped when empty).
+  const partitionOptions: PartitionSummaryOptions = {
+    config,
+    runner,
+    progress,
+    ...(abortController ? { abortController } : {}),
+  };
+  const primaryStage = await summarizePartition(
+    partition.primary,
+    "primary",
+    partitionOptions,
+  );
+  const lowPriorityStage =
+    partition.lowPriority.trim() === ""
+      ? { summaries: [], costUsd: 0 }
+      : await summarizePartition(
+          partition.lowPriority,
+          "low",
+          partitionOptions,
+        );
+  const summaries = [...primaryStage.summaries, ...lowPriorityStage.summaries];
+  if (summaries.length === 0) {
+    throw new ClaudeCommitError("There are no staged changes to summarize.");
+  }
+  let costUsd = primaryStage.costUsd + lowPriorityStage.costUsd;
+  const hasLowPriority = hasLowPrioritySummaries(summaries);
 
   // Stage 2: write the commit message(s) from the summaries.
   //
@@ -191,7 +270,7 @@ export async function generateCommit(
         buildFinalUser(summaries, count, attempt.structured),
         {
           ...baseOpts,
-          system: buildFinalSystem(config, attempt.structured),
+          system: buildFinalSystem(config, attempt.structured, hasLowPriority),
           ...(attempt.structured
             ? {
                 outputFormat: {
@@ -225,7 +304,7 @@ export async function generateCommit(
 
   const cleaned = (messages ?? [])
     .map(cleanMessage)
-    .filter((m) => m.length > 0);
+    .filter((message) => message.length > 0);
   const deduped = dedupe(cleaned);
   if (deduped.length === 0) {
     if (lastError instanceof ClaudeCommitError) throw lastError;
@@ -239,6 +318,11 @@ export async function generateCommit(
     summaries,
     chunkCount: summaries.length,
     costUsd,
+    lowPriority: {
+      matchedFiles: partition.matchedFiles,
+      totalFiles: partition.totalFiles,
+      promoted: partition.promoted,
+    },
   };
 }
 

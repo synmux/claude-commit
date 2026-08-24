@@ -9,10 +9,14 @@ export type {
   GenerateOptions,
   GenerateProgress,
   GenerateResult,
+  LowPriorityStats,
 } from "./src/generate";
 export { runPrompt } from "./src/agent";
 export type { RunPromptOptions } from "./src/agent";
-export { splitDiff } from "./src/diff";
+export { partitionDiff, sectionPaths, splitDiff } from "./src/diff";
+export type { DiffPartition } from "./src/diff";
+export { createLowPriorityMatcher, isLowPriorityPath } from "./src/paths";
+export type { PathMatcher } from "./src/paths";
 export {
   DEFAULT_CONFIG,
   loadFileConfig,
@@ -32,7 +36,9 @@ export {
 export * as git from "./src/git";
 export { ClaudeCommitError } from "./src/errors";
 export type {
+  ChangePriority,
   Config,
+  DiffSummary,
   ModelConfig,
   PartialConfig,
   ModelResult,

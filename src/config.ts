@@ -30,6 +30,7 @@ export const DEFAULT_CONFIG: Config = {
   maxChunkTokens: 600_000,
   charsPerToken: 3.5,
   skipArmored: false,
+  lowPriorityPaths: [],
   allowApiKey: false,
 };
 
@@ -72,10 +73,18 @@ async function findGlobalConfigFile(
   return undefined;
 }
 
-/** Deep-ish merge of a partial config over a base config (only `models` is nested). */
+/**
+ * Deep-ish merge of a partial config over a base config: `models` is merged
+ * key by key, `lowPriorityPaths` is replaced whole (a higher layer's list
+ * wins outright, so a project can drop a global pattern) and copied so the
+ * result never aliases the base's array.
+ */
 export function mergeConfig(base: Config, override: PartialConfig): Config {
   const models: ModelConfig = { ...base.models, ...(override.models ?? {}) };
-  const merged: Config = { ...base, ...override, models };
+  const lowPriorityPaths = [
+    ...(override.lowPriorityPaths ?? base.lowPriorityPaths),
+  ];
+  const merged: Config = { ...base, ...override, models, lowPriorityPaths };
   return merged;
 }
 
@@ -126,6 +135,14 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   }
   if (typeof obj.charsPerToken === "number" && obj.charsPerToken > 0) {
     out.charsPerToken = obj.charsPerToken;
+  }
+  if (Array.isArray(obj.lowPriorityPaths)) {
+    // An explicit empty list is meaningful: it clears patterns inherited
+    // from a lower layer, so it is kept rather than treated as "unset".
+    out.lowPriorityPaths = obj.lowPriorityPaths
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== "");
   }
 
   if (obj.models && typeof obj.models === "object") {
@@ -233,7 +250,11 @@ export async function loadFileConfig(
   return result;
 }
 
-/** Merge two partial configs (only `models` is nested). */
+/**
+ * Merge two partial configs: `models` is merged key by key; every other key,
+ * including the `lowPriorityPaths` list, is taken whole from the override
+ * when present.
+ */
 export function mergePartial(
   base: PartialConfig,
   override: PartialConfig,
@@ -242,6 +263,8 @@ export function mergePartial(
   if (base.models || override.models) {
     out.models = { ...base.models, ...override.models };
   }
+  const lowPriorityPaths = override.lowPriorityPaths ?? base.lowPriorityPaths;
+  if (lowPriorityPaths) out.lowPriorityPaths = [...lowPriorityPaths];
   return out;
 }
 

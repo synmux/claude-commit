@@ -1,5 +1,10 @@
 import { test, expect, describe } from "bun:test";
-import { resolveInteractiveMode } from "../src/cli";
+import {
+  buildProgram,
+  describeLowPriorityStats,
+  flagsToConfig,
+  resolveInteractiveMode,
+} from "../src/cli";
 
 describe("resolveInteractiveMode", () => {
   const base = {
@@ -72,5 +77,50 @@ describe("resolveInteractiveMode", () => {
         hasTty: true,
       }),
     ).toBe("non-interactive");
+  });
+});
+
+describe("--no-low-priority-paths", () => {
+  test("parses to lowPriorityPaths: false and maps to an empty list", () => {
+    const program = buildProgram();
+    program.parse(["--no-low-priority-paths"], { from: "user" });
+    const opts = program.opts<{ lowPriorityPaths?: boolean }>();
+    expect(opts.lowPriorityPaths).toBe(false);
+    expect(flagsToConfig(opts).lowPriorityPaths).toEqual([]);
+  });
+
+  test("is left unset when the flag is absent", () => {
+    const program = buildProgram();
+    program.parse([], { from: "user" });
+    const opts = program.opts<{ lowPriorityPaths?: boolean }>();
+    expect(flagsToConfig(opts).lowPriorityPaths).toBeUndefined();
+  });
+});
+
+describe("describeLowPriorityStats", () => {
+  test("distinguishes none, some and all-promoted", () => {
+    expect(
+      describeLowPriorityStats({
+        matchedFiles: 0,
+        totalFiles: 3,
+        promoted: false,
+      }),
+    ).toBe("low-priority paths: matched none of 3 files");
+    expect(
+      describeLowPriorityStats({
+        matchedFiles: 2,
+        totalFiles: 3,
+        promoted: false,
+      }),
+    ).toBe("low-priority paths: matched 2 of 3 files");
+    expect(
+      describeLowPriorityStats({
+        matchedFiles: 1,
+        totalFiles: 1,
+        promoted: true,
+      }),
+    ).toBe(
+      "low-priority paths: matched all 1 file - nothing else changed, so treated as primary",
+    );
   });
 });

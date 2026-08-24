@@ -65,6 +65,18 @@ export interface Config {
    */
   skipArmored: boolean;
   /**
+   * Gitignore-style patterns for paths whose changes matter less than the
+   * rest of the commit: generated docs, lockfiles, vendored snapshots, build
+   * output. Diff sections under these paths are summarised separately and
+   * briefly, and the final model is told to describe the other changes in
+   * the subject line and to mention these only after them. When every
+   * changed file matches, the changes are described normally - there is
+   * nothing else for them to yield to. A pattern containing `/` matches a
+   * path or any ancestor directory; a bare pattern matches any path segment
+   * (see `src/paths.ts`).
+   */
+  lowPriorityPaths: string[];
+  /**
    * Allow API credentials from the environment (`ANTHROPIC_API_KEY` /
    * `ANTHROPIC_AUTH_TOKEN`) to be used, billing pay-as-you-go instead of the
    * Claude subscription. When false (the default) those variables are
@@ -78,6 +90,20 @@ export interface Config {
 export type PartialConfig = {
   [K in keyof Config]?: K extends "models" ? Partial<ModelConfig> : Config[K];
 };
+
+/**
+ * How much weight a slice of the diff carries in the commit message.
+ * `primary` changes define the commit; `low` changes - those under the
+ * configured `lowPriorityPaths` - are summarised briefly and mentioned only
+ * after the primary ones.
+ */
+export type ChangePriority = "primary" | "low";
+
+/** The summary of one diff chunk, tagged with the priority of the partition it came from. */
+export interface DiffSummary {
+  priority: ChangePriority;
+  text: string;
+}
 
 /** Result of a single model invocation. */
 export interface ModelResult {

@@ -26,6 +26,8 @@ staged diff ──split──▶ [chunk, …] ──sonnet──▶ summaries �
 1. **Summarize** - the diff is split into chunks that fit the context window and
    each chunk is summarized by a strong model (`sonnet`, which carries a native
    1M-token context). Diffs larger than 1M tokens simply produce more chunks.
+   Changes under configured [low-priority paths](#low-priority-paths) are
+   summarized separately, so churn cannot crowd out the code.
 2. **Write** - the summaries are handed to the same model (`sonnet`) to write the
    final commit message according to your formatting rules. The message is the
    whole point of the tool, and its input is tiny, so a strong model here costs
@@ -88,6 +90,8 @@ and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 | `-p, --prompt <text>`                    | Extra instructions appended to the prompt                                               |
 | `--model-summary <model>`                | Model used to summarize the diff (default `sonnet`)                                     |
 | `--model-final <model>`                  | Model used to write the message (default `sonnet`)                                      |
+| `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff       |
+| `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                 |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                          |
 | `-y, --yes`                              | Commit without asking for confirmation                                                  |
 | `--no-spinner`                           | Disable the progress spinner                                                            |
@@ -159,6 +163,7 @@ keys are valid at every level:
   "maxChunkTokens": 600000,
   "charsPerToken": 3.5,
   "skipArmored": false,
+  "lowPriorityPaths": [],
   "allowApiKey": false
 }
 ```
@@ -194,6 +199,66 @@ this is the recommended setting for encrypted-file repos - for example a
 every `chezmoi re-add` re-encrypts nondeterministically and produces megabytes
 of churned armor. Drop a `.claude-commit.json` with `{ "skipArmored": true }`
 in the repo root to enable it per-repo.
+
+### Low-priority paths
+
+Some paths change a lot without meaning much - generated docs, lockfiles,
+vendored snapshots, build output. Left alone, a commit that touches twenty
+lines of code and regenerates two thousand lines of tooling gets a subject
+line about the tooling. `lowPriorityPaths` lists gitignore-style patterns for
+those paths:
+
+```json
+{
+  "lowPriorityPaths": [".agents/skills/*-skilld", "bun.lock", "!bun.lock.keep"]
+}
+```
+
+Changes under matching paths are summarised separately and briefly, and the
+model is told that the subject line - and the commit type, scope and gitmoji
+where you use them - comes from the _other_ changes, however small they are.
+The low-priority changes are mentioned in the subject only if they fit, and in
+the body (with `multiline`) only after the primary changes. When _every_
+changed file is low priority there is nothing for it to yield to, so the
+changes are described normally, exactly as if no patterns were configured.
+
+Pattern rules follow `.gitignore` conventions, so trunk or gitignore lines can
+usually be copied in:
+
+- A pattern with a `/` in it is anchored at the repository root and matches a
+  path or any directory above it - `.agents/skills/*-skilld` covers every file
+  inside each matching directory.
+- A pattern without a `/` matches any path segment at any depth - `bun.lock`
+  matches `packages/app/bun.lock`; `*-skilld` matches everything inside any
+  `*-skilld` directory.
+- `*` matches dotfiles and does not cross `/`; `**` does; `{a,b}` expands. A
+  leading `/` or `./` anchors, a trailing `/` is ignored. The anchoring
+  decision looks at the whole pattern, so a `/` inside a brace group anchors
+  all of its alternatives - prefer one pattern per intent.
+- A leading `!` negates, and the last matching pattern wins:
+  `["docs/**", "!docs/adr/**"]` deprioritises docs except the ADRs.
+- Patterns are always matched against repository-root-relative paths with
+  `/` separators, whichever directory you run `cco` from. A backslash in a
+  pattern is an escape (`\[`, `\{`, `\!` for the literal characters), so
+  Windows-style `dist\**` matches nothing.
+- Patterns are not validated: a typo such as an unbalanced `{` is parsed
+  rather than rejected and may match something unexpected, so check the
+  `--verbose` match counts when you add one.
+
+A rename into or out of a low-priority path counts as primary (both sides
+must match). The nearest config layer that sets the key wins outright - lists
+are never merged - so `"lowPriorityPaths": []` in a project opts out of a
+global list, and a project that wants the global patterns plus its own must
+repeat them. `--no-low-priority-paths` switches the feature off for one run,
+which is handy when the churn _is_ the story, or for comparing messages while
+tuning patterns.
+
+This changes how changes are _weighted_ in the message, not how much of the
+diff is read: low-priority content is still summarised in full, at the same
+cost. To skip content outright, see `skipArmored`. Under `--verbose`, `cco`
+reports how many files matched (`low-priority paths: matched 3 of 41 files`),
+which is the only way to tell a pattern that matched nothing from one that
+matched everything and was promoted.
 
 ## Development
 

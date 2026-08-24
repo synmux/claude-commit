@@ -16,6 +16,18 @@ The shell carries `CLAUDECODE=1`, `CLAUDE_CODE_*`, `CLAUDE_EFFORT`, `CLAUDE_PID`
 `UNSETS=$(env | grep -oE '^(CLAUDE_CODE_[A-Z_]+|CLAUDECODE|CLAUDE_EFFORT|CLAUDE_PID|AI_AGENT)=' | sed 's/=$//' | sed 's/^/-u /' | tr '\n' ' '); env $UNSETS bun run bin/cco.ts ...`
 Note: the Claude Code Bash tool in this project runs **zsh** (chain with `&&`, not fish's `and`), despite `$SHELL` pointing at fish.
 
+## Committing from a Claude Code session (2026-08-24)
+
+`git commit` is SSH-signed through 1Password (`commit.gpgsign=true`, `gpg.format=ssh`, `gpg.ssh.program=.../op-ssh-sign`). From the Bash tool the signer dies with "1Password: failed to fill whole buffer" → "fatal: failed to write commit object"; the trunk pre-commit hook has already run and passed, and the index is untouched. Do NOT use `--no-gpg-sign`. Write the message to a file and ask the user to run `! git commit -F <file>`. Scratch repos for E2E runs inherit the global config: set `git config commit.gpgsign false` (and `tag.gpgsign false`) right after `git init`.
+
+## E2E scratch-repo recipe for lowPriorityPaths
+
+`scratchpad/e2e.sh` pattern: init repo (signing off, `diff.relative true` to prove `--no-relative`), `.claude-commit.json` with `lowPriorityPaths: ["generated/**", "bun.lock"]`, commit a baseline, then stage a ~20-line `src/parser.ts` fix plus regenerated `generated/docs/*.md` (3×400 lines) and a 300-line `bun.lock`; run `cco --dry-run --no-spinner --verbose` from `src/` (subdir), then with `--no-low-priority-paths` (A/B), then with only the churn staged (promotion). Expected: `low-priority paths: matched 4 of 5 files`, subject about the parser fix, churn as a trailing "Also regenerates" paragraph; promotion case prints `matched all 4 files - nothing else changed, so treated as primary`. ~$0.5 reported cost per run, ~1 min each.
+
+## `bun run format` dirties generated skill docs
+
+`prettier --write .` in the `format` script reformats `.agents/skills/*-skilld/SKILL.md` (trunk ignores those paths, prettier does not). Revert with `git checkout -- .agents/skills/*-skilld` before committing unless the churn is intended; a `.prettierignore` entry would fix it properly (not yet done).
+
 ## User's install + test bed
 
 `~/.bun/bin/cco` symlinks through `~/.bun/install/global/node_modules/@synmux/claude-commit/` into THIS REPO - the user runs live source, so repo changes are immediately live for them (but npm publishing is still needed for other machines). Real-world armor repro: the chezmoi source repo at `~/.local/share/chezmoi` (their `~/.claude.json` and other encrypted dotfiles churn on every `chezmoi re-add`).

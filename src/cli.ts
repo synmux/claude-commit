@@ -14,7 +14,7 @@ import {
 } from "./git";
 import { presentCredentialVars } from "./agent";
 import { loadFileConfig, resolveConfig } from "./config";
-import { generateCommit } from "./generate";
+import { generateCommit, type LowPriorityStats } from "./generate";
 import { Spinner } from "./ui/spinner";
 import { confirmCommit, editInEditor } from "./ui/editor";
 import { color } from "./ui/colors";
@@ -40,9 +40,12 @@ interface CliOptions {
   config?: string;
   verbose?: boolean;
   skipArmored?: boolean;
+  /** `false` when `--no-low-priority-paths` was passed (Commander's negated-flag shape). */
+  lowPriorityPaths?: boolean;
 }
 
-function buildProgram(): Command {
+/** Build the Commander program. Exported for tests. */
+export function buildProgram(): Command {
   const program = new Command();
   program
     .name("cco")
@@ -78,6 +81,11 @@ function buildProgram(): Command {
       "omit armored/encoded lines (age/gpg armor, base64 blobs) from the " +
         "summarized diff; recommended for chezmoi-style encrypted repos",
     )
+    .option(
+      "--no-low-priority-paths",
+      'ignore the "lowPriorityPaths" config for this run, so every change ' +
+        "weighs the same",
+    )
     .option("-d, --dry-run", "print the message to stdout without committing")
     .option("-y, --yes", "commit without asking for confirmation")
     .option("--no-spinner", "disable the progress spinner")
@@ -102,8 +110,11 @@ function buildProgram(): Command {
   return program;
 }
 
-/** Map parsed CLI flags onto a partial config (only set keys the user provided). */
-function flagsToConfig(opts: CliOptions): PartialConfig {
+/**
+ * Map parsed CLI flags onto a partial config (only set keys the user
+ * provided). Exported for tests.
+ */
+export function flagsToConfig(opts: CliOptions): PartialConfig {
   const cfg: PartialConfig = {};
   if (opts.conventional !== undefined)
     cfg.conventionalCommits = opts.conventional;
@@ -113,6 +124,9 @@ function flagsToConfig(opts: CliOptions): PartialConfig {
   if (opts.template !== undefined) cfg.template = opts.template;
   if (opts.prompt !== undefined) cfg.customPrompt = opts.prompt;
   if (opts.skipArmored !== undefined) cfg.skipArmored = opts.skipArmored;
+  // A negated flag arrives as `false`; an empty list overrides any
+  // configured patterns because lists replace rather than merge.
+  if (opts.lowPriorityPaths === false) cfg.lowPriorityPaths = [];
   if (opts.count !== undefined && Number.isFinite(opts.count)) {
     cfg.interactiveCount = Math.max(1, opts.count);
   }
@@ -278,10 +292,17 @@ async function runNonInteractive(
         `${result.chunkCount} chunk(s), cost $${result.costUsd.toFixed(4)}`,
       ) + "\n",
     );
-    for (const [i, summary] of result.summaries.entries()) {
+    if (config.lowPriorityPaths.length > 0) {
       process.stderr.write(
-        color("90", `--- summary ${i + 1} ---\n${summary}`) + "\n",
+        color("90", describeLowPriorityStats(result.lowPriority)) + "\n",
       );
+    }
+    for (const [index, summary] of result.summaries.entries()) {
+      const label =
+        summary.priority === "low"
+          ? `--- summary ${index + 1} (low priority) ---`
+          : `--- summary ${index + 1} ---`;
+      process.stderr.write(color("90", `${label}\n${summary.text}`) + "\n");
     }
   }
 
@@ -316,6 +337,22 @@ async function runNonInteractive(
   process.stderr.write(color("90", firstLine(message)) + "\n");
   if (stat) process.stderr.write(color("90", stat) + "\n");
   return 0;
+}
+
+/**
+ * One verbose line saying how the low-priority patterns applied. Without it
+ * a pattern that matched nothing and one that matched everything (and was
+ * promoted) are indistinguishable from the message alone.
+ */
+export function describeLowPriorityStats(stats: LowPriorityStats): string {
+  const files = `${stats.totalFiles} file${stats.totalFiles === 1 ? "" : "s"}`;
+  if (stats.matchedFiles === 0) {
+    return `low-priority paths: matched none of ${files}`;
+  }
+  if (stats.promoted) {
+    return `low-priority paths: matched all ${files} - nothing else changed, so treated as primary`;
+  }
+  return `low-priority paths: matched ${stats.matchedFiles} of ${files}`;
 }
 
 function firstLine(text: string): string {

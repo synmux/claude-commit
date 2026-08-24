@@ -89,6 +89,69 @@ describe("allowApiKey", () => {
   });
 });
 
+describe("lowPriorityPaths", () => {
+  test("sanitizePartial keeps an array of non-blank strings", () => {
+    expect(
+      sanitizePartial({ lowPriorityPaths: ["bun.lock", " dist/** "] })
+        .lowPriorityPaths,
+    ).toEqual(["bun.lock", "dist/**"]);
+  });
+
+  test("sanitizePartial drops non-string entries and blank strings", () => {
+    expect(
+      sanitizePartial({ lowPriorityPaths: ["a", 1, null, "", "  ", "b"] })
+        .lowPriorityPaths,
+    ).toEqual(["a", "b"]);
+  });
+
+  test("sanitizePartial keeps an explicit empty list (it disables inherited patterns)", () => {
+    expect(sanitizePartial({ lowPriorityPaths: [] }).lowPriorityPaths).toEqual(
+      [],
+    );
+  });
+
+  test("sanitizePartial ignores non-array values", () => {
+    expect(
+      sanitizePartial({ lowPriorityPaths: "bun.lock" }).lowPriorityPaths,
+    ).toBeUndefined();
+    expect(
+      sanitizePartial({ lowPriorityPaths: { a: 1 } }).lowPriorityPaths,
+    ).toBeUndefined();
+    expect(
+      sanitizePartial({ lowPriorityPaths: null }).lowPriorityPaths,
+    ).toBeUndefined();
+  });
+
+  test("defaults to an empty list", () => {
+    expect(DEFAULT_CONFIG.lowPriorityPaths).toEqual([]);
+  });
+
+  test("a higher layer replaces the list rather than merging it", () => {
+    const cfg = resolveConfig(
+      { lowPriorityPaths: ["bun.lock"] },
+      { lowPriorityPaths: ["dist/**"] },
+    );
+    expect(cfg.lowPriorityPaths).toEqual(["dist/**"]);
+    expect(
+      mergePartial({ lowPriorityPaths: ["bun.lock"] }, { lowPriorityPaths: [] })
+        .lowPriorityPaths,
+    ).toEqual([]);
+  });
+
+  test("a layer that omits the key inherits the list below it", () => {
+    expect(
+      resolveConfig({ lowPriorityPaths: ["bun.lock"] }, { gitmoji: true })
+        .lowPriorityPaths,
+    ).toEqual(["bun.lock"]);
+  });
+
+  test("the resolved list is a copy, not the default array", () => {
+    const cfg = resolveConfig({}, {});
+    cfg.lowPriorityPaths.push("mutated");
+    expect(DEFAULT_CONFIG.lowPriorityPaths).toEqual([]);
+  });
+});
+
 describe("interactive", () => {
   test("sanitizePartial accepts booleans only", () => {
     expect(sanitizePartial({ interactive: true }).interactive).toBe(true);
@@ -187,6 +250,15 @@ describe("loadFileConfig", () => {
     );
     const cfg = await loadFileConfig(dir, dir);
     expect(cfg.allowApiKey).toBe(true);
+  });
+
+  test("reads lowPriorityPaths from a config file", async () => {
+    await writeFile(
+      join(dir, ".claude-commit.json"),
+      JSON.stringify({ lowPriorityPaths: [".agents/skills/*-skilld"] }),
+    );
+    const cfg = await loadFileConfig(dir, dir);
+    expect(cfg.lowPriorityPaths).toEqual([".agents/skills/*-skilld"]);
   });
 
   test("config file overrides package.json", async () => {

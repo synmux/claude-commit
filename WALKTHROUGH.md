@@ -10,10 +10,11 @@ The codebase is intentionally small. The core path is:
 1. Parse CLI flags.
 2. Load configuration.
 3. Read the staged git diff.
-4. Split large diffs into model-sized chunks.
-5. Ask a summary model to summarize each chunk.
-6. Ask a final model to turn the summaries into one or more commit messages.
-7. Print, prompt, edit, or commit depending on CLI mode.
+4. Partition it into primary and low-priority changes (`lowPriorityPaths`).
+5. Split each partition into model-sized chunks.
+6. Ask a summary model to summarize each chunk.
+7. Ask a final model to turn the summaries into one or more commit messages.
+8. Print, prompt, edit, or commit depending on CLI mode.
 
 ## Repository Map
 
@@ -27,7 +28,8 @@ The codebase is intentionally small. The core path is:
 │   ├── agent.ts              # Claude Agent SDK wrapper
 │   ├── git.ts                # git command adapter
 │   ├── config.ts             # config discovery, sanitization, and precedence
-│   ├── diff.ts               # structure-aware diff chunking
+│   ├── diff.ts               # structure-aware diff chunking and priority partitioning
+│   ├── paths.ts              # gitignore-style matcher for lowPriorityPaths
 │   ├── prompts.ts            # summary/final prompt builders and response cleanup
 │   ├── tokens.ts             # rough token/character budget helpers
 │   ├── types.ts              # shared TypeScript interfaces
@@ -36,7 +38,7 @@ The codebase is intentionally small. The core path is:
 │       ├── editor.ts         # confirmation prompt and $EDITOR integration
 │       ├── interactive.ts    # OpenTUI picker for multiple candidate messages
 │       └── spinner.ts        # stderr progress spinner
-└── test/                     # Bun tests for config, diff, prompts, tokens
+└── test/                     # Bun tests for config, diff, paths, prompts, generate, git, cli, tokens
 ```
 
 ## Top-Level Architecture
@@ -110,6 +112,8 @@ Important CLI details:
 - Confirmation is only shown when stdin and stdout are both TTYs. In a pipe or
   other non-TTY context, the command skips the prompt.
 - `SIGINT` is converted into an `AbortController` that is passed into generation.
+- `--no-low-priority-paths` maps to `lowPriorityPaths: []` for one run, so a
+  commit whose churn _is_ the story is described in full.
 - Interactive mode is enabled per-run with `-i` or by default with the
   `interactive` config key, and disabled per-run with `--no-interactive`.
   `resolveInteractiveMode()` decides the flow: `--dry-run` always uses the
@@ -146,8 +150,11 @@ Precedence is low to high:
 
 `sanitizePartial()` is intentionally conservative. It ignores unknown keys and
 keys with the wrong type, clamps `interactiveTemperature` to `0..2`, floors
-counts and token budgets, drops unrecognised `spinner` names, and only
-deep-merges the nested `models` object.
+counts and token budgets, drops unrecognised `spinner` names, keeps only
+non-blank strings in `lowPriorityPaths` (an explicit `[]` survives, because it
+is how a project opts out of an inherited list), and only deep-merges the
+nested `models` object - `lowPriorityPaths` is replaced whole by the nearest
+layer that sets it, and copied so no resolved config aliases `DEFAULT_CONFIG`.
 
 Defaults worth knowing:
 
@@ -160,6 +167,9 @@ Defaults worth knowing:
   are estimated at ~1 char/token - `estimateDiffTokens` in `src/tokens.ts`)
 - `skipArmored`: `false` (when true, runs of armored lines are replaced with a
   `[cco: N armored/encoded lines omitted]` marker before summarizing)
+- `lowPriorityPaths`: `[]` (gitignore-style patterns; matching file sections
+  are summarised separately and kept out of the subject line - see
+  `src/paths.ts` and the Generation Pipeline below)
 - `interactive`: `false`
 - `interactiveCount`: `3`
 - `interactiveTemperature`: `1`
@@ -175,35 +185,66 @@ chunk count, and reported model cost.
 ```mermaid
 flowchart LR
   diff[Staged diff] --> redact[redactOpaqueRuns when skipArmored]
-  redact --> budget[clampChunkTokens]
-  budget --> split[splitDiffToFit - token-classified]
-  split --> chunks[Diff chunks + overflow retry queue]
-  chunks --> summaryLoop[For each chunk: summary prompt]
-  summaryLoop --> summaries[Summaries]
-  summaries --> finalPrompt[Final prompt]
+  redact --> partition[partitionDiff by lowPriorityPaths]
+  partition --> primary[Primary partition]
+  partition --> low[Low-priority partition]
+  primary --> budget[clampChunkTokens + splitDiffToFit]
+  low --> budget
+  budget --> chunks[Diff chunks + overflow retry queue]
+  chunks --> summaryLoop[For each chunk: summary prompt for its priority]
+  summaryLoop --> summaries[DiffSummary list - primary first]
+  summaries --> finalPrompt[Final prompt - grouped when both priorities]
   finalPrompt --> finalModel[Final model]
   finalModel --> clean[parseOptions + cleanMessage]
   clean --> result[GenerateResult]
 ```
 
-The pipeline has two model stages:
+Before either model stage, `partitionDiff()` (`src/diff.ts`) sorts the diff's
+file sections by the `lowPriorityPaths` matcher (`createLowPriorityMatcher()`
+in `src/paths.ts`, gitignore semantics on top of `Bun.Glob`). A section is
+low priority only when every path it names matches - `sectionPaths()` reads
+them from the `---`/`+++`/`rename`/`copy` header lines, unquoting git's
+C-style quoting, and falls back to the `diff --git a/X b/Y` header for binary
+and mode-only sections. If nothing is primary, the low-priority sections are
+promoted and the run is identical to one with no patterns. The partition also
+reports `matchedFiles` / `totalFiles` / `promoted`, surfaced as
+`GenerateResult.lowPriority` for the `--verbose` line - the only way to tell a
+pattern that matched nothing from one that matched everything.
 
-1. **Summarization stage**
-   - `buildSummarySystem()` creates stable summary instructions.
-   - `buildSummaryUser(chunk, index, total)` wraps one chunk.
+The pipeline then has two model stages:
+
+1. **Summarization stage** (`summarizePartition()`, run for the primary
+   partition first and then the low-priority one)
+   - `buildSummarySystem(priority)` creates the summary instructions; the
+     low-priority variant asks for a brief summary of which areas changed and
+     how, so churn cannot crowd out the primary summary later.
+   - `buildSummaryUser(chunk, index, total, priority)` wraps one chunk, with
+     part numbering per partition.
    - `runPrompt()` sends each chunk to the configured summary model.
-   - Progress labels distinguish single-diff and multi-part diff reads.
+   - Progress labels distinguish single and multi-part reads and name the
+     low-priority partition ("Reading low-priority diff (part 1/2)").
 
 2. **Final message stage**
-   - `buildFinalSystem(config)` encodes formatting rules such as Conventional
-     Commits, gitmoji, templates, custom prompt text, and multiline bodies.
-   - `buildFinalUser(summaries, count)` asks for one message or several distinct
-     options (the `messages` array in structured mode, delimiter-separated text
-     otherwise). For multiple options it reuses `multiOptionInstruction()`, which
-     requires each option to be a _complete_ message obeying every rule -
-     including the body when `multiline` is on - so options never drop the body
-     to manufacture variety (which previously made `multiline` look ignored in
-     interactive mode).
+   - `buildFinalSystem(config, structured, hasLowPriority)` encodes formatting
+     rules such as Conventional Commits, gitmoji, templates, custom prompt
+     text, and multiline bodies. With both priority groups present it also
+     carries the weighting rules, placed with the other subject-line rules:
+     the subject describes the primary changes however small they are and
+     however large the churn; the type, scope and gitmoji (each only when
+     enabled) come from the primary changes; a body (only with `multiline`)
+     covers the primary changes first and references the low-priority ones
+     briefly after.
+   - `buildFinalUser(summaries, count, structured)` presents the summaries -
+     under "Primary changes" / "Low-priority changes" headings with a closing
+     anchor when both groups exist - and asks for one message or several
+     distinct options (the `messages` array in structured mode,
+     delimiter-separated text otherwise). For multiple options it reuses
+     `multiOptionInstruction()`, which requires each option to be a
+     _complete_ message obeying every rule - including the body when
+     `multiline` is on - so options never drop the body to manufacture
+     variety (which previously made `multiline` look ignored in interactive
+     mode); with two priority groups its variety axis is scoped to the
+     primary changes, since it is the last instruction the model reads.
    - `runPrompt()` sends the final prompt to the configured final model.
    - If multiple options are requested, `interactiveTemperature` is applied when
      available; if the model rejects that override, generation retries without it.
@@ -310,6 +351,15 @@ Main operations:
 - `getStagedFiles()` parses `git diff --cached --name-status`.
 - `stageAll()` runs `git add -A`.
 - `getStagedStat()` returns `git diff --cached --stat --no-color`.
+- The three readers share `STAGED_DIFF_FLAGS` (`--no-relative --no-ext-diff
+--ignore-submodules=none --submodule=short --src-prefix=a/ --dst-prefix=b/`)
+  so a user's `diff.relative`, `diff.external`, `diff.ignoreSubmodules`,
+  `diff.submodule`, `diff.noprefix` or `diff.mnemonicPrefix` settings cannot
+  change the paths, membership or header format the diff parser and the
+  `lowPriorityPaths` matcher rely on - `diff.relative` would otherwise also
+  drop staged files outside the invocation directory, `diff.ignoreSubmodules`
+  would drop submodule bumps, and `diff.submodule=log` would emit a
+  header-less block that glues itself to the previous file's section.
 - `getCurrentBranch()` returns the current branch name or `HEAD`.
 - `commit(message)` pipes the message to `git commit -F -`.
 
@@ -347,9 +397,10 @@ sequenceDiagram
   end
 ```
 
-In verbose mode, the command prints chunk count, total reported cost, and each
-intermediate summary to stderr. After committing, verbose mode also shows the
-staged stat summary.
+In verbose mode, the command prints chunk count, total reported cost, how the
+`lowPriorityPaths` patterns applied (when any are configured), and each
+intermediate summary - labelled `(low priority)` where applicable - to stderr.
+After committing, verbose mode also shows the staged stat summary.
 
 ## Interactive Mode
 

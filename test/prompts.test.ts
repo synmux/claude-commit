@@ -2,6 +2,7 @@ import { test, expect, describe } from "bun:test";
 import {
   buildFinalSystem,
   buildFinalUser,
+  buildSummarySystem,
   buildSummaryUser,
   cleanMessage,
   extractMessages,
@@ -10,6 +11,12 @@ import {
   OPTION_DELIMITER,
 } from "../src/prompts";
 import { DEFAULT_CONFIG, mergeConfig } from "../src/config";
+import type { DiffSummary } from "../src/types";
+
+const primary = (...texts: string[]): DiffSummary[] =>
+  texts.map((text) => ({ priority: "primary", text }));
+const low = (...texts: string[]): DiffSummary[] =>
+  texts.map((text) => ({ priority: "low", text }));
 
 describe("buildFinalSystem", () => {
   test("default prompt asks for imperative single line, no body", () => {
@@ -57,13 +64,13 @@ describe("buildFinalSystem", () => {
 
 describe("buildFinalUser", () => {
   test("single summary, single option", () => {
-    const user = buildFinalUser(["did a thing"], 1);
+    const user = buildFinalUser(primary("did a thing"), 1);
     expect(user).toContain("did a thing");
     expect(user).not.toContain(OPTION_DELIMITER);
   });
 
   test("multiple options request includes the delimiter and count", () => {
-    const user = buildFinalUser(["did a thing"], 3);
+    const user = buildFinalUser(primary("did a thing"), 3);
     expect(user).toContain("exactly 3 distinct");
     expect(user).toContain(OPTION_DELIMITER);
   });
@@ -74,8 +81,8 @@ describe("buildFinalUser", () => {
     // `multiline` looked ignored in interactive mode. Each option must now be a
     // complete message that obeys every formatting rule (including the body).
     for (const prompt of [
-      buildFinalUser(["did a thing"], 3), // delimiter mode
-      buildFinalUser(["did a thing"], 3, true), // structured mode
+      buildFinalUser(primary("did a thing"), 3), // delimiter mode
+      buildFinalUser(primary("did a thing"), 3, true), // structured mode
     ]) {
       expect(prompt).toContain("complete commit message");
       expect(prompt).toContain("obeys all the formatting rules");
@@ -85,9 +92,25 @@ describe("buildFinalUser", () => {
   });
 
   test("multiple summaries are labelled by part", () => {
-    const user = buildFinalUser(["first", "second"], 1);
+    const user = buildFinalUser(primary("first", "second"), 1);
     expect(user).toContain("Part 1:");
     expect(user).toContain("Part 2:");
+  });
+});
+
+describe("buildSummarySystem", () => {
+  test("the primary prompt is the default and never mentions priority", () => {
+    expect(buildSummarySystem()).toBe(buildSummarySystem("primary"));
+    expect(buildSummarySystem()).not.toMatch(/low[- ]priority/i);
+  });
+
+  test("the low-priority prompt explains the content and asks for brevity", () => {
+    const sys = buildSummarySystem("low");
+    expect(sys).toMatch(/low[- ]priority/i);
+    expect(sys).toMatch(/brief/i);
+    expect(sys).toMatch(/generated|lockfile|vendored/i);
+    // It must still forbid writing the commit message itself.
+    expect(sys).toContain("Do not write a commit message");
   });
 });
 
@@ -97,6 +120,145 @@ describe("buildSummaryUser", () => {
       "Summarize the following diff",
     );
     expect(buildSummaryUser("d", 1, 3)).toContain("part 2 of 3");
+  });
+
+  test("labels low-priority chunks, single and multi-part", () => {
+    expect(buildSummaryUser("d", 0, 1, "low")).toMatch(/low[- ]priority/i);
+    const multi = buildSummaryUser("d", 1, 3, "low");
+    expect(multi).toMatch(/low[- ]priority/i);
+    expect(multi).toContain("part 2 of 3");
+  });
+
+  test("the diff chunk always follows the preamble", () => {
+    expect(buildSummaryUser("THE DIFF", 0, 1, "low")).toMatch(/THE DIFF$/);
+  });
+});
+
+describe("buildFinalSystem with low-priority changes", () => {
+  const fullConfig = mergeConfig(DEFAULT_CONFIG, {
+    conventionalCommits: true,
+    gitmoji: true,
+    multiline: true,
+  });
+
+  test("without low-priority changes the prompt is unchanged", () => {
+    expect(buildFinalSystem(DEFAULT_CONFIG, false, false)).toBe(
+      buildFinalSystem(DEFAULT_CONFIG),
+    );
+    expect(buildFinalSystem(fullConfig, true)).not.toMatch(/primary changes/i);
+  });
+
+  test("states a size-independent subject rule that still allows a mention when it fits", () => {
+    const sys = buildFinalSystem(DEFAULT_CONFIG, false, true);
+    expect(sys).toMatch(/primary changes/i);
+    expect(sys).toMatch(/subject line/i);
+    expect(sys).toMatch(/however small|no matter how small|one-line primary/i);
+    expect(sys).toMatch(/too small/i);
+    expect(sys).toMatch(/only if they fit/i);
+  });
+
+  test("names only the type, scope, gitmoji and body clauses the config enables", () => {
+    const plain = buildFinalSystem(DEFAULT_CONFIG, false, true);
+    expect(plain).not.toMatch(/gitmoji|emoji/i);
+    expect(plain).not.toMatch(/\btype\b|\bscope\b/);
+    expect(plain).not.toMatch(/low-priority changes briefly/);
+    expect(plain).toContain("Output only the single subject line");
+
+    const full = buildFinalSystem(fullConfig, false, true);
+    expect(full).toMatch(/type and scope[^.]*primary changes/);
+    expect(full).toMatch(/gitmoji[^.]*primary changes/);
+    expect(full).toMatch(
+      /primary changes first[^.]*low-priority changes briefly/,
+    );
+    expect(full).not.toContain("Output only the single subject line");
+  });
+
+  test("the weighting rule comes after the subject rules and before the body rule", () => {
+    const sys = buildFinalSystem(fullConfig, false, true);
+    const subjectRule = sys.indexOf("Conventional Commit");
+    const weighting = sys.indexOf("primary changes");
+    const bodyRule = sys.indexOf("After the subject line");
+    expect(subjectRule).toBeLessThan(weighting);
+    expect(weighting).toBeLessThan(bodyRule);
+  });
+});
+
+describe("buildFinalUser with low-priority summaries", () => {
+  const mixed = [
+    ...primary("fix null deref in parser"),
+    ...low("regenerated skill docs", "bumped lockfile"),
+  ];
+
+  test("groups summaries under primary and low-priority headings, primary first", () => {
+    const user = buildFinalUser(mixed, 1);
+    const primaryAt = user.indexOf("Primary changes");
+    const lowAt = user.indexOf("Low-priority changes");
+    expect(primaryAt).toBeGreaterThan(-1);
+    expect(lowAt).toBeGreaterThan(primaryAt);
+    expect(user.indexOf("fix null deref")).toBeLessThan(lowAt);
+    expect(user.indexOf("regenerated skill docs")).toBeGreaterThan(lowAt);
+    expect(user.indexOf("bumped lockfile")).toBeGreaterThan(lowAt);
+  });
+
+  test("closes with an anchor to the primary changes rather than restating the rule", () => {
+    for (const user of [
+      buildFinalUser(mixed, 1),
+      buildFinalUser(mixed, 1, true),
+      buildFinalUser(mixed, 3, false),
+      buildFinalUser(mixed, 3, true),
+    ]) {
+      expect(user).toMatch(/primary changes above/);
+      // The rule itself lives in the system prompt.
+      expect(user).not.toMatch(/gitmoji|scope/);
+    }
+    // The anchor is the last thing before the single-message ask.
+    const single = buildFinalUser(mixed, 1);
+    expect(single.trimEnd()).toMatch(/primary changes above\.$/);
+  });
+
+  test("multi-option variety is scoped to the primary changes when both groups exist", () => {
+    for (const user of [
+      buildFinalUser(mixed, 3, false),
+      buildFinalUser(mixed, 3, true),
+    ]) {
+      expect(user).toContain("exactly 3 distinct");
+      expect(user).toMatch(/aspect of the primary changes/);
+      expect(user).toMatch(
+        /each option'?s subject line describes the primary changes/i,
+      );
+      expect(user).not.toContain("structure");
+    }
+  });
+
+  test("multi-option wording is unchanged when there is a single group", () => {
+    for (const user of [
+      buildFinalUser(primary("x"), 3, false),
+      buildFinalUser(primary("x"), 3, true),
+    ]) {
+      expect(user).toContain("different in wording and emphasis");
+      expect(user).not.toMatch(/primary changes/);
+    }
+  });
+
+  test("numbers parts within each group", () => {
+    const user = buildFinalUser(
+      [...primary("one", "two"), ...low("three", "four")],
+      1,
+    );
+    expect(user).toContain("Part 1:");
+    expect(user).toContain("Part 2:");
+    expect(user).not.toContain("Part 3:");
+  });
+
+  test("with a single group there is no heading and no anchor", () => {
+    for (const user of [
+      buildFinalUser(primary("only primary"), 1),
+      buildFinalUser(low("only low - already promoted upstream"), 1),
+    ]) {
+      expect(user).not.toContain("Primary changes");
+      expect(user).not.toContain("Low-priority changes");
+      expect(user).not.toMatch(/primary changes/i);
+    }
   });
 });
 
@@ -162,11 +324,11 @@ describe("structured output", () => {
   });
 
   test("buildFinalUser structured mode asks for the messages array, not a delimiter", () => {
-    const one = buildFinalUser(["did a thing"], 1, true);
+    const one = buildFinalUser(primary("did a thing"), 1, true);
     expect(one).toContain('"messages" array');
     expect(one).not.toContain(OPTION_DELIMITER);
 
-    const many = buildFinalUser(["did a thing"], 3, true);
+    const many = buildFinalUser(primary("did a thing"), 3, true);
     expect(many).toContain("exactly 3 distinct");
     expect(many).toContain('"messages" array');
     expect(many).not.toContain(OPTION_DELIMITER);

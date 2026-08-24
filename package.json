@@ -31,6 +31,12 @@
     },
     "maxChunkTokens": 600000,
     "charsPerToken": 3.5,
+    "lowPriorityPaths": [
+      ".agents/skills/*-skilld",
+      ".agents/skills/skilld-lock.yaml",
+      "bun.lock",
+      ".serena"
+    ],
     "allowApiKey": false
   },
   "devDependencies": {

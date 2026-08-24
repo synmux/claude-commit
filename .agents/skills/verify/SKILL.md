@@ -21,6 +21,19 @@ verification means running the CLI against real staged changes.
    `--model-summary` (not `--model-final`) so the run fails before any paid
    summary call.
 4. Interactive mode: `bun run bin/cco.ts --dry-run -i` (OpenTUI; needs a TTY).
+5. Low-priority weighting: this repo's `package.json` deprioritises
+   `.agents/skills/*-skilld`, `skilld-lock.yaml`, `bun.lock` and `.serena`.
+   Stage a small code change together with a large change under one of
+   those paths and run step 2: `--verbose` prints
+   `low-priority paths: matched N of M files` and labels the low-priority
+   summaries, and the subject line must describe the code change. Re-run
+   with `--no-low-priority-paths` for the A/B. A clean reproduction that
+   needs no real churn: build a scratch repo (see
+   `docs/superpowers/specs/2026-08-24-low-priority-paths-design.md`) with a
+   `.claude-commit.json` listing `generated/**` and `bun.lock`, stage a
+   20-line fix plus thousands of regenerated lines, and run `cco` from a
+   subdirectory with `git config diff.relative true` set - the readers must
+   still see the whole staged set with `a/`/`b/` prefixes.
 
 ## Gotchas
 

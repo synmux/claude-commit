@@ -1,5 +1,12 @@
 import { test, expect, describe } from "bun:test";
-import { redactOpaqueRuns, splitDiff, splitDiffToFit } from "../src/diff";
+import {
+  partitionDiff,
+  redactOpaqueRuns,
+  sectionPaths,
+  splitDiff,
+  splitDiffToFit,
+} from "../src/diff";
+import { createLowPriorityMatcher } from "../src/paths";
 import { estimateDiffTokens } from "../src/tokens";
 
 const armorLine = (index: number) =>
@@ -211,5 +218,253 @@ describe("redactOpaqueRuns", () => {
   test("shrinks an armor-heavy diff below any real budget", () => {
     const redacted = redactOpaqueRuns(armorFile(5_000));
     expect(estimateDiffTokens(redacted, 3.5)).toBeLessThan(200);
+  });
+});
+
+describe("sectionPaths", () => {
+  test("reads the source and destination of a modified file", () => {
+    expect(sectionPaths(fileA)).toEqual(["a.txt"]);
+  });
+
+  test("skips /dev/null for added and deleted files", () => {
+    const added = [
+      "diff --git a/added.txt b/added.txt",
+      "new file mode 100644",
+      "index 0000000..a702f6c",
+      "--- /dev/null",
+      "+++ b/added.txt",
+      "@@ -0,0 +1 @@",
+      "+brand",
+    ].join("\n");
+    const deleted = [
+      "diff --git a/gone.txt b/gone.txt",
+      "deleted file mode 100644",
+      "index 286c5f5..0000000",
+      "--- a/gone.txt",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-gone",
+    ].join("\n");
+    expect(sectionPaths(added)).toEqual(["added.txt"]);
+    expect(sectionPaths(deleted)).toEqual(["gone.txt"]);
+  });
+
+  test("reports both sides of a rename", () => {
+    const rename = [
+      "diff --git a/dir/old.txt b/dir/new.txt",
+      "similarity index 100%",
+      "rename from dir/old.txt",
+      "rename to dir/new.txt",
+    ].join("\n");
+    expect(sectionPaths(rename)).toEqual(["dir/old.txt", "dir/new.txt"]);
+  });
+
+  test("reports both sides of a copy", () => {
+    const copy = [
+      "diff --git a/src/a.ts b/src/b.ts",
+      "similarity index 100%",
+      "copy from src/a.ts",
+      "copy to src/b.ts",
+    ].join("\n");
+    expect(sectionPaths(copy)).toEqual(["src/a.ts", "src/b.ts"]);
+  });
+
+  test("falls back to the header for binary and mode-only sections", () => {
+    const binary = [
+      "diff --git a/img.png b/img.png",
+      "index a6a3e7f..1d518ed 100644",
+      "Binary files a/img.png and b/img.png differ",
+    ].join("\n");
+    const mode = [
+      "diff --git a/mode.sh b/mode.sh",
+      "old mode 100644",
+      "new mode 100755",
+    ].join("\n");
+    expect(sectionPaths(binary)).toEqual(["img.png"]);
+    expect(sectionPaths(mode)).toEqual(["mode.sh"]);
+  });
+
+  test("strips the tab git appends after a path containing spaces", () => {
+    const spaced = [
+      "diff --git a/my file.txt b/my file.txt",
+      "index 5626abf..814f4a4 100644",
+      "--- a/my file.txt\t",
+      "+++ b/my file.txt\t",
+      "@@ -1 +1,2 @@",
+      " one",
+      "+two",
+    ].join("\n");
+    expect(sectionPaths(spaced)).toEqual(["my file.txt"]);
+  });
+
+  test("resolves a header whose path itself contains ' b/'", () => {
+    const tricky = [
+      "diff --git a/sub b/file.txt b/sub b/file.txt",
+      "old mode 100644",
+      "new mode 100755",
+    ].join("\n");
+    expect(sectionPaths(tricky)).toEqual(["sub b/file.txt"]);
+  });
+
+  test("unquotes C-style quoted paths, including octal UTF-8 escapes", () => {
+    const quoted = [
+      'diff --git "a/quo\\"te.txt" "b/quo\\"te.txt"',
+      "index bca70f3..45279bd 100644",
+      '--- "a/quo\\"te.txt"',
+      '+++ "b/quo\\"te.txt"',
+      "@@ -1 +1,2 @@",
+      " q",
+      "+qq",
+    ].join("\n");
+    const unicode = [
+      'diff --git "a/\\303\\274n\\303\\257code.txt" "b/\\303\\274n\\303\\257code.txt"',
+      "index 4ae8ef0..fe57971 100644",
+      '--- "a/\\303\\274n\\303\\257code.txt"',
+      '+++ "b/\\303\\274n\\303\\257code.txt"',
+      "@@ -1 +1,2 @@",
+      " u",
+      "+uu",
+    ].join("\n");
+    const quotedMode = [
+      'diff --git "a/tab\\there.txt" "b/tab\\there.txt"',
+      "old mode 100644",
+      "new mode 100755",
+    ].join("\n");
+    expect(sectionPaths(quoted)).toEqual(['quo"te.txt']);
+    expect(sectionPaths(unicode)).toEqual(["ünïcode.txt"]);
+    expect(sectionPaths(quotedMode)).toEqual(["tab\there.txt"]);
+  });
+
+  test("tolerates diffs generated without the a/ b/ prefixes", () => {
+    const noPrefix = [
+      "diff --git added.txt added.txt",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ added.txt",
+      "@@ -0,0 +1 @@",
+      "+brand",
+    ].join("\n");
+    expect(sectionPaths(noPrefix)).toEqual(["added.txt"]);
+  });
+
+  test("ignores '---' and '+++' lines inside hunk bodies", () => {
+    const tricky = [
+      "diff --git a/notes.md b/notes.md",
+      "index 111..222 100644",
+      "--- a/notes.md",
+      "+++ b/notes.md",
+      "@@ -1,2 +1,2 @@",
+      "--- a/looks-like-a-header.txt",
+      "+++ b/also-looks-like-one.txt",
+    ].join("\n");
+    expect(sectionPaths(tricky)).toEqual(["notes.md"]);
+  });
+
+  test("returns nothing for a preamble without a file header", () => {
+    expect(sectionPaths("* Unmerged path foo.txt")).toEqual([]);
+  });
+});
+
+describe("partitionDiff", () => {
+  const never = () => false;
+  const lowFor =
+    (...paths: string[]) =>
+    (path: string) =>
+      paths.includes(path);
+
+  test("with a matcher that matches nothing, everything is primary", () => {
+    const diff = `${fileA}\n${fileB}`;
+    expect(partitionDiff(diff, never)).toEqual({
+      primary: diff,
+      lowPriority: "",
+      matchedFiles: 0,
+      totalFiles: 2,
+      promoted: false,
+    });
+  });
+
+  test("counts the file sections that matched", () => {
+    const diff = `${fileA}\n${fileB}`;
+    expect(partitionDiff(diff, lowFor("b.txt"))).toMatchObject({
+      matchedFiles: 1,
+      totalFiles: 2,
+      promoted: false,
+    });
+  });
+
+  test("sorts file sections by whether their paths match, preserving content", () => {
+    const diff = `${fileA}\n${fileB}\n`;
+    const { primary, lowPriority } = partitionDiff(diff, lowFor("b.txt"));
+    expect(primary).toBe(fileA);
+    expect(lowPriority).toBe(`${fileB}\n`);
+  });
+
+  test("keeps the original order within each partition", () => {
+    const fileC = fileB.replace(/b\.txt/g, "c.txt");
+    const diff = `${fileB}\n${fileA}\n${fileC}`;
+    const { primary, lowPriority } = partitionDiff(
+      diff,
+      lowFor("b.txt", "c.txt"),
+    );
+    expect(primary).toBe(fileA);
+    expect(lowPriority).toBe(`${fileB}\n${fileC}`);
+  });
+
+  test("promotes the low-priority partition when nothing else changed", () => {
+    const diff = `${fileA}\n${fileB}`;
+    expect(partitionDiff(diff, lowFor("a.txt", "b.txt"))).toEqual({
+      primary: diff,
+      lowPriority: "",
+      matchedFiles: 2,
+      totalFiles: 2,
+      promoted: true,
+    });
+  });
+
+  test("a negated pattern keeps a file in the primary partition", () => {
+    const matcher = createLowPriorityMatcher(["*.txt", "!a.txt"]);
+    const diff = `${fileA}\n${fileB}`;
+    expect(partitionDiff(diff, matcher)).toMatchObject({
+      primary: fileA,
+      lowPriority: fileB,
+      matchedFiles: 1,
+      totalFiles: 2,
+    });
+  });
+
+  test("a rename is low priority only when both sides match", () => {
+    const rename = [
+      "diff --git a/dist/old.js b/src/new.js",
+      "similarity index 100%",
+      "rename from dist/old.js",
+      "rename to src/new.js",
+    ].join("\n");
+    const diff = `${fileA}\n${rename}`;
+    expect(partitionDiff(diff, lowFor("dist/old.js")).lowPriority).toBe("");
+    expect(
+      partitionDiff(diff, lowFor("dist/old.js", "src/new.js")).lowPriority,
+    ).toBe(rename);
+  });
+
+  test("a section with no recognisable path stays primary and is not counted as a file", () => {
+    const preamble = "* Unmerged path weird.txt";
+    const diff = `${preamble}\n${fileB}`;
+    const partition = partitionDiff(diff, () => true);
+    // Everything matched except the preamble, so the preamble is the only
+    // primary content and fileB is genuinely low priority.
+    expect(partition.primary).toBe(preamble);
+    expect(partition.lowPriority).toBe(fileB);
+    expect(partition.totalFiles).toBe(1);
+    expect(partition.matchedFiles).toBe(1);
+  });
+
+  test("an empty diff yields two empty partitions", () => {
+    expect(partitionDiff("", never)).toEqual({
+      primary: "",
+      lowPriority: "",
+      matchedFiles: 0,
+      totalFiles: 0,
+      promoted: false,
+    });
   });
 });

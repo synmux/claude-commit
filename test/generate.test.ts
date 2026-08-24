@@ -32,17 +32,33 @@ index 111..222 100644
 -old line
 +new line`;
 
+/** One summary-stage request as seen by the stub runner. */
+interface SummaryCall {
+  prompt: string;
+  system: string;
+}
+
 /**
  * Runner stub mirroring the real contract: summary calls (no outputFormat)
  * return text, final-stage structured calls return a schema-shaped message
- * list. `beforeCall` can throw to simulate backend rejections.
+ * list. `beforeCall` can throw to simulate backend rejections. Every
+ * summary request is recorded (prompt and system prompt) along with the
+ * final-stage prompt, so tests can assert on what reached each stage.
  */
 function stubRunner(
   beforeCall?: (prompt: string, summaryCallIndex: number) => void,
-): { runner: Runner; summaryPrompts: string[] } {
+): {
+  runner: Runner;
+  summaryPrompts: string[];
+  summaryCalls: SummaryCall[];
+  finalPrompts: string[];
+} {
   const summaryPrompts: string[] = [];
+  const summaryCalls: SummaryCall[] = [];
+  const finalPrompts: string[] = [];
   const runner: Runner = async (prompt, opts): Promise<ModelResult> => {
     if (opts.outputFormat) {
+      finalPrompts.push(prompt);
       return {
         text: "",
         costUsd: 0.001,
@@ -51,10 +67,30 @@ function stubRunner(
     }
     beforeCall?.(prompt, summaryPrompts.length);
     summaryPrompts.push(prompt);
+    summaryCalls.push({ prompt, system: opts.system });
     return { text: `summary of ${prompt.length} chars`, costUsd: 0.002 };
   };
-  return { runner, summaryPrompts };
+  return { runner, summaryPrompts, summaryCalls, finalPrompts };
 }
+
+const LOW_PRIORITY_SYSTEM = /low[- ]priority/i;
+
+/** A generated skill doc under the path this repo deprioritises. */
+const skillDiff = [
+  "diff --git a/.agents/skills/ora-skilld/SKILL.md b/.agents/skills/ora-skilld/SKILL.md",
+  "index 111..222 100644",
+  "--- a/.agents/skills/ora-skilld/SKILL.md",
+  "+++ b/.agents/skills/ora-skilld/SKILL.md",
+  "@@ -1,2 +1,2 @@",
+  " # ora",
+  "-generated 2026-07-01",
+  "+generated 2026-08-24",
+].join("\n");
+
+const lowPriorityConfig: Config = {
+  ...baseConfig,
+  lowPriorityPaths: [".agents/skills/*-skilld", "*.age"],
+};
 
 const promptTooLong = () =>
   new ClaudeCommitError(
@@ -120,6 +156,151 @@ describe("generateCommit", () => {
     await expect(
       generateCommit(armorDiff(100), config, { runner }),
     ).rejects.toThrow(/prompt is too long/i);
+  });
+
+  test("summaries are tagged primary when no low-priority paths are configured", async () => {
+    const { runner, summaryCalls } = stubRunner();
+    const result = await generateCommit(
+      `${textDiff}\n${skillDiff}`,
+      baseConfig,
+      { runner },
+    );
+    expect(result.summaries.map((summary) => summary.priority)).toEqual([
+      "primary",
+    ]);
+    expect(summaryCalls[0]!.prompt).toContain("old line");
+    expect(summaryCalls[0]!.prompt).toContain("generated 2026-08-24");
+    expect(summaryCalls[0]!.system).not.toMatch(LOW_PRIORITY_SYSTEM);
+  });
+
+  test("low-priority sections are summarised separately, after the primary ones, with their own prompt", async () => {
+    const { runner, summaryCalls, finalPrompts } = stubRunner();
+    const result = await generateCommit(
+      `${skillDiff}\n${textDiff}`,
+      lowPriorityConfig,
+      { runner },
+    );
+
+    expect(summaryCalls.length).toBe(2);
+    const [primaryCall, lowCall] = summaryCalls as [SummaryCall, SummaryCall];
+    // Primary first, even though the skill doc came first in the diff.
+    expect(primaryCall.prompt).toContain("old line");
+    expect(primaryCall.prompt).not.toContain("SKILL.md");
+    expect(primaryCall.system).not.toMatch(LOW_PRIORITY_SYSTEM);
+    expect(lowCall.prompt).toContain("SKILL.md");
+    expect(lowCall.prompt).not.toContain("old line");
+    expect(lowCall.prompt).toMatch(LOW_PRIORITY_SYSTEM);
+    expect(lowCall.system).toMatch(LOW_PRIORITY_SYSTEM);
+
+    expect(result.summaries.map((summary) => summary.priority)).toEqual([
+      "primary",
+      "low",
+    ]);
+    expect(result.chunkCount).toBe(2);
+    expect(finalPrompts[0]).toContain("Primary changes");
+    expect(finalPrompts[0]).toContain("Low-priority changes");
+  });
+
+  test("a diff made only of low-priority paths is promoted and treated as primary", async () => {
+    const { runner, summaryCalls, finalPrompts } = stubRunner();
+    const result = await generateCommit(skillDiff, lowPriorityConfig, {
+      runner,
+    });
+    expect(summaryCalls.length).toBe(1);
+    expect(summaryCalls[0]!.system).not.toMatch(LOW_PRIORITY_SYSTEM);
+    expect(result.summaries.map((summary) => summary.priority)).toEqual([
+      "primary",
+    ]);
+    expect(finalPrompts[0]).not.toContain("Low-priority changes");
+  });
+
+  test("progress labels distinguish the low-priority partition", async () => {
+    const { runner } = stubRunner();
+    const labels: string[] = [];
+    await generateCommit(`${textDiff}\n${skillDiff}`, lowPriorityConfig, {
+      runner,
+      progress: { onPhase: (label) => labels.push(label) },
+    });
+    expect(labels[0]).toBe("Reading diff");
+    expect(labels[1]).toBe("Reading low-priority diff");
+    expect(labels[2]).toMatch(/^Writing commit message/);
+  });
+
+  test("overflow retries re-split within the low-priority partition", async () => {
+    let rejected = false;
+    const { runner, summaryCalls } = stubRunner((prompt, _index) => {
+      if (!rejected && prompt.includes("secret.age")) {
+        rejected = true;
+        throw promptTooLong();
+      }
+    });
+    const config: Config = { ...lowPriorityConfig, maxChunkTokens: 100_000 };
+    const result = await generateCommit(
+      `${textDiff}\n${armorDiff(1_000)}`,
+      config,
+      { runner },
+    );
+    expect(rejected).toBe(true);
+    // One primary chunk, then several low-priority pieces after the retry.
+    expect(result.summaries[0]!.priority).toBe("primary");
+    const lowSummaries = result.summaries.slice(1);
+    expect(lowSummaries.length).toBeGreaterThan(1);
+    expect(lowSummaries.every((summary) => summary.priority === "low")).toBe(
+      true,
+    );
+    expect(result.chunkCount).toBe(result.summaries.length);
+    // Multi-part low-priority chunks are labelled as such.
+    expect(
+      summaryCalls
+        .slice(1)
+        .every((call) =>
+          /part \d+ of \d+ of a larger low-priority diff/.test(call.prompt),
+        ),
+    ).toBe(true);
+  });
+
+  test("reports how many file sections matched the low-priority patterns", async () => {
+    const { runner } = stubRunner();
+    const mixed = await generateCommit(
+      `${textDiff}\n${skillDiff}`,
+      lowPriorityConfig,
+      { runner },
+    );
+    expect(mixed.lowPriority).toEqual({
+      matchedFiles: 1,
+      totalFiles: 2,
+      promoted: false,
+    });
+
+    const allLow = await generateCommit(skillDiff, lowPriorityConfig, {
+      runner,
+    });
+    expect(allLow.lowPriority).toEqual({
+      matchedFiles: 1,
+      totalFiles: 1,
+      promoted: true,
+    });
+
+    const none = await generateCommit(textDiff, baseConfig, { runner });
+    expect(none.lowPriority).toEqual({
+      matchedFiles: 0,
+      totalFiles: 1,
+      promoted: false,
+    });
+  });
+
+  test("skipArmored redaction applies before partitioning", async () => {
+    const { runner, summaryCalls } = stubRunner();
+    const config: Config = { ...lowPriorityConfig, skipArmored: true };
+    await generateCommit(`${textDiff}\n${armorDiff(400)}`, config, {
+      runner,
+    });
+    expect(summaryCalls.length).toBe(2);
+    expect(summaryCalls[1]!.system).toMatch(LOW_PRIORITY_SYSTEM);
+    expect(summaryCalls[1]!.prompt).toContain(
+      "[cco: 400 armored/encoded lines omitted]",
+    );
+    expect(summaryCalls[1]!.prompt).not.toContain("Ab9Xy");
   });
 
   test("skipArmored redacts ciphertext before it reaches the model", async () => {
