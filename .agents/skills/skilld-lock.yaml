@@ -25,11 +25,11 @@ skills:
     generator: skilld
   opentui-core-skilld:
     packageName: "@opentui/core"
-    version: 0.4.5
-    packages: "@opentui/core@0.4.5"
+    version: 0.5.7
+    packages: "@opentui/core@0.5.7"
     repo: anomalyco/opentui
-    source: "https://github.com/anomalyco/opentui/tree/v0.4.5/docs"
-    syncedAt: 2026-07-23
+    source: "https://github.com/anomalyco/opentui/tree/v0.5.7/docs"
+    syncedAt: 2026-08-24
     generator: skilld
   anthropic-ai-claude-agent-sdk-skilld:
     packageName: "@anthropic-ai/claude-agent-sdk"
