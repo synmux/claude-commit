@@ -19,7 +19,7 @@ The user can define the model, for example `ornith-1.5:35b`, in the config where
 
 You'll need to understand the Ollama API. From what I understand it has some partial compatibility with both the OpenAI API shape and the Anthropic API shape. It also might have its own unique API shape entirely. You're welcome to use whichever is most appropriate.
 
-Start your research from https://docs.ollama.com/llms.txt .
+Start your research from <https://docs.ollama.com/llms.txt> .
 
 ---
 
