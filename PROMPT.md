@@ -18,3 +18,7 @@ You'll need to understand the Ollama API. From what I understand it has some par
 Start your research from <https://docs.ollama.com/llms.txt> and your `ollama-api` skill.
 
 An additional change, while you’re at it at the same time; an `ignore:` directive to go along with `lowPriorityPaths:` to list paths to totally ignore entirely.
+
+---
+
+OpenTUI is pleasant enough, but it requires Bun. Rewrite using another UX framework and validate that everything else works under Node too. OpenTUI is probably too heavyweight for the TUI needs we have in this code anyway.
