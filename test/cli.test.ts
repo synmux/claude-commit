@@ -1,6 +1,7 @@
 import { test, expect, describe } from "bun:test";
 import {
   buildProgram,
+  describeIgnoreStats,
   describeLowPriorityStats,
   flagsToConfig,
   resolveInteractiveMode,
@@ -121,6 +122,84 @@ describe("describeLowPriorityStats", () => {
       }),
     ).toBe(
       "low-priority paths: matched all 1 file - nothing else changed, so treated as primary",
+    );
+  });
+});
+
+describe("ignore flags", () => {
+  test("--no-ignore clears the configured patterns for one run", () => {
+    expect(flagsToConfig({ ignore: false }).ignore).toEqual([]);
+  });
+
+  test("leaving the flag off does not touch the config", () => {
+    expect(flagsToConfig({}).ignore).toBeUndefined();
+  });
+
+  test("the program accepts --no-ignore", () => {
+    const program = buildProgram();
+    program.parse(["--no-ignore"], { from: "user" });
+    expect(program.opts().ignore).toBe(false);
+  });
+});
+
+describe("ollama flags", () => {
+  test("--ollama-host maps onto the config block", () => {
+    expect(flagsToConfig({ ollamaHost: "http://box:11434" }).ollama).toEqual({
+      host: "http://box:11434",
+    });
+  });
+
+  test("--ollama-context maps onto the config block", () => {
+    expect(flagsToConfig({ ollamaContext: 16384 }).ollama).toEqual({
+      contextTokens: 16384,
+    });
+  });
+
+  test("no ollama flags means no ollama override", () => {
+    expect(flagsToConfig({}).ollama).toBeUndefined();
+  });
+
+  test("an unparseable context length is dropped rather than sent", () => {
+    expect(flagsToConfig({ ollamaContext: NaN }).ollama).toBeUndefined();
+  });
+
+  test("the program parses both flags", () => {
+    const program = buildProgram();
+    program.parse(
+      ["--ollama-host", "http://box:11434", "--ollama-context", "16384"],
+      { from: "user" },
+    );
+    expect(program.opts().ollamaHost).toBe("http://box:11434");
+    expect(program.opts().ollamaContext).toBe(16384);
+  });
+
+  test("an ollama: model passes through --model-summary unchanged", () => {
+    const program = buildProgram();
+    program.parse(["--model-summary", "ollama:ornith-1.5:35b"], {
+      from: "user",
+    });
+    expect(flagsToConfig(program.opts()).models).toEqual({
+      summary: "ollama:ornith-1.5:35b",
+    });
+  });
+});
+
+describe("describeIgnoreStats", () => {
+  test("distinguishes a pattern that matched nothing", () => {
+    expect(describeIgnoreStats({ ignoredFiles: 0, totalFiles: 12 })).toBe(
+      "ignore: matched none of 12 files",
+    );
+  });
+
+  test("reports what it removed", () => {
+    expect(describeIgnoreStats({ ignoredFiles: 3, totalFiles: 12 })).toBe(
+      "ignore: dropped 3 of 12 files before reading",
+    );
+  });
+
+  test("gets the singular right", () => {
+    expect(describeIgnoreStats({ ignoredFiles: 1, totalFiles: 1 })).toBe(
+      "ignore: dropped 1 of 1 file before reading",
     );
   });
 });

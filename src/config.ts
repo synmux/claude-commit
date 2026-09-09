@@ -11,7 +11,8 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { ClaudeCommitError } from "./errors";
 import { DEFAULT_SPINNER, isSpinnerName } from "./ui/spinner";
-import type { Config, ModelConfig, PartialConfig } from "./types";
+import { DEFAULT_OLLAMA_CONTEXT_TOKENS, DEFAULT_OLLAMA_HOST } from "./models";
+import type { Config, ModelConfig, OllamaConfig, PartialConfig } from "./types";
 
 export const DEFAULT_CONFIG: Config = {
   conventionalCommits: false,
@@ -31,6 +32,12 @@ export const DEFAULT_CONFIG: Config = {
   charsPerToken: 3.5,
   skipArmored: false,
   lowPriorityPaths: [],
+  ignore: [],
+  ollama: {
+    host: DEFAULT_OLLAMA_HOST,
+    contextTokens: DEFAULT_OLLAMA_CONTEXT_TOKENS,
+    keepAlive: null,
+  },
   allowApiKey: false,
 };
 
@@ -74,17 +81,27 @@ async function findGlobalConfigFile(
 }
 
 /**
- * Deep-ish merge of a partial config over a base config: `models` is merged
- * key by key, `lowPriorityPaths` is replaced whole (a higher layer's list
- * wins outright, so a project can drop a global pattern) and copied so the
- * result never aliases the base's array.
+ * Deep-ish merge of a partial config over a base config: `models` and
+ * `ollama` are merged key by key; the path lists (`lowPriorityPaths`,
+ * `ignore`) are replaced whole - a higher layer's list wins outright, so a
+ * project can drop a global pattern - and copied so the result never
+ * aliases the base's array.
  */
 export function mergeConfig(base: Config, override: PartialConfig): Config {
   const models: ModelConfig = { ...base.models, ...(override.models ?? {}) };
+  const ollama: OllamaConfig = { ...base.ollama, ...(override.ollama ?? {}) };
   const lowPriorityPaths = [
     ...(override.lowPriorityPaths ?? base.lowPriorityPaths),
   ];
-  const merged: Config = { ...base, ...override, models, lowPriorityPaths };
+  const ignore = [...(override.ignore ?? base.ignore)];
+  const merged: Config = {
+    ...base,
+    ...override,
+    models,
+    ollama,
+    lowPriorityPaths,
+    ignore,
+  };
   return merged;
 }
 
@@ -136,24 +153,60 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   if (typeof obj.charsPerToken === "number" && obj.charsPerToken > 0) {
     out.charsPerToken = obj.charsPerToken;
   }
+  // An explicit empty list is meaningful for either path option: it clears
+  // patterns inherited from a lower layer, so it is kept rather than
+  // treated as "unset".
   if (Array.isArray(obj.lowPriorityPaths)) {
-    // An explicit empty list is meaningful: it clears patterns inherited
-    // from a lower layer, so it is kept rather than treated as "unset".
-    out.lowPriorityPaths = obj.lowPriorityPaths
-      .filter((entry): entry is string => typeof entry === "string")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry !== "");
+    out.lowPriorityPaths = cleanPatternList(obj.lowPriorityPaths);
+  }
+  if (Array.isArray(obj.ignore)) {
+    out.ignore = cleanPatternList(obj.ignore);
   }
 
   if (obj.models && typeof obj.models === "object") {
     const m = obj.models as Record<string, unknown>;
     const models: Partial<ModelConfig> = {};
-    if (typeof m.summary === "string") models.summary = m.summary;
-    if (typeof m.final === "string") models.final = m.final;
+    // A blank model name is not an override, it is a mistake: leaving the
+    // key unset keeps the layer below, which is a working model.
+    if (typeof m.summary === "string" && m.summary.trim() !== "") {
+      models.summary = m.summary.trim();
+    }
+    if (typeof m.final === "string" && m.final.trim() !== "") {
+      models.final = m.final.trim();
+    }
     if (Object.keys(models).length) out.models = models;
   }
 
+  if (obj.ollama && typeof obj.ollama === "object") {
+    const o = obj.ollama as Record<string, unknown>;
+    const ollama: Partial<OllamaConfig> = {};
+    if (typeof o.host === "string" && o.host.trim() !== "") {
+      ollama.host = o.host.trim();
+    }
+    if (typeof o.contextTokens === "number" && o.contextTokens > 0) {
+      ollama.contextTokens = Math.floor(o.contextTokens);
+    }
+    if (typeof o.keepAlive === "string" || typeof o.keepAlive === "number") {
+      ollama.keepAlive = o.keepAlive;
+    } else if (o.keepAlive === null) {
+      ollama.keepAlive = null;
+    }
+    if (Object.keys(ollama).length) out.ollama = ollama;
+  }
+
   return out;
+}
+
+/**
+ * Clean one raw path-pattern list: drop non-strings and blanks, trim the
+ * rest. Shared by `lowPriorityPaths` and `ignore`, which take the same
+ * pattern language (see `src/paths.ts`).
+ */
+function cleanPatternList(raw: unknown[]): string[] {
+  return raw
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
 }
 
 async function readJsonIfExists(path: string): Promise<unknown | undefined> {
@@ -251,9 +304,9 @@ export async function loadFileConfig(
 }
 
 /**
- * Merge two partial configs: `models` is merged key by key; every other key,
- * including the `lowPriorityPaths` list, is taken whole from the override
- * when present.
+ * Merge two partial configs: `models` and `ollama` are merged key by key;
+ * every other key, including both path lists, is taken whole from the
+ * override when present.
  */
 export function mergePartial(
   base: PartialConfig,
@@ -263,8 +316,13 @@ export function mergePartial(
   if (base.models || override.models) {
     out.models = { ...base.models, ...override.models };
   }
+  if (base.ollama || override.ollama) {
+    out.ollama = { ...base.ollama, ...override.ollama };
+  }
   const lowPriorityPaths = override.lowPriorityPaths ?? base.lowPriorityPaths;
   if (lowPriorityPaths) out.lowPriorityPaths = [...lowPriorityPaths];
+  const ignore = override.ignore ?? base.ignore;
+  if (ignore) out.ignore = [...ignore];
   return out;
 }
 

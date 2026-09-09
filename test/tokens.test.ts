@@ -2,6 +2,7 @@ import { test, expect, describe } from "bun:test";
 import {
   clampChunkTokens,
   CONTEXT_RESERVE_TOKENS,
+  contextReserveTokens,
   contextWindowTokens,
   estimateDiffTokens,
   estimateTokens,
@@ -141,5 +142,66 @@ describe("clampChunkTokens", () => {
   test("never raises a budget below the clamp", () => {
     expect(clampChunkTokens("haiku", 100_000)).toBe(100_000);
     expect(clampChunkTokens("sonnet", 50_000)).toBe(50_000);
+  });
+});
+
+describe("context reserve", () => {
+  test("both Claude tiers keep the full flat reserve, unchanged", () => {
+    expect(contextReserveTokens(200_000)).toBe(CONTEXT_RESERVE_TOKENS);
+    expect(contextReserveTokens(1_000_000)).toBe(CONTEXT_RESERVE_TOKENS);
+  });
+
+  test("a small window reserves a quarter instead of being swallowed whole", () => {
+    // A flat 32k reserve against a 32k window would leave a budget of zero.
+    expect(contextReserveTokens(32_768)).toBe(8_192);
+    expect(contextReserveTokens(4_096)).toBe(1_024);
+  });
+
+  test("the crossover is where a quarter of the window equals the flat reserve", () => {
+    expect(contextReserveTokens(128_000)).toBe(CONTEXT_RESERVE_TOKENS);
+    expect(contextReserveTokens(127_996)).toBe(31_999);
+  });
+});
+
+describe("Ollama context windows", () => {
+  test("an ollama: model's window is whatever the config asked for", () => {
+    expect(contextWindowTokens("ollama:gemma4", 16_384)).toBe(16_384);
+    expect(contextWindowTokens("ollama:ornith-1.5:35b", 65_536)).toBe(65_536);
+  });
+
+  test("the model name never implies a window for Ollama", () => {
+    // "sonnet" inside an Ollama tag must not trip the 1M regex.
+    expect(contextWindowTokens("ollama:my-sonnet-clone:8b", 8_192)).toBe(8_192);
+  });
+
+  test("falls back to the documented default", () => {
+    expect(contextWindowTokens("ollama:gemma4")).toBe(32_768);
+  });
+
+  test("Claude models ignore the Ollama context argument entirely", () => {
+    expect(contextWindowTokens("sonnet", 8_192)).toBe(1_000_000);
+    expect(contextWindowTokens("haiku", 8_192)).toBe(200_000);
+  });
+
+  test("clampChunkTokens sizes chunks for the Ollama window", () => {
+    // 32768 - 8192 reserve, well under the configured 600k cap.
+    expect(clampChunkTokens("ollama:gemma4", 600_000, 32_768)).toBe(24_576);
+  });
+
+  test("a generous config still cannot exceed the window", () => {
+    expect(clampChunkTokens("ollama:gemma4", 600_000, 8_192)).toBe(6_144);
+  });
+
+  test("a tighter maxChunkTokens still wins", () => {
+    expect(clampChunkTokens("ollama:gemma4", 1_000, 32_768)).toBe(1_000);
+  });
+
+  test("never returns a budget of zero, whatever the numbers say", () => {
+    expect(clampChunkTokens("ollama:tiny", 600_000, 1)).toBeGreaterThan(0);
+  });
+
+  test("Claude budgets are exactly what they were before", () => {
+    expect(clampChunkTokens("sonnet", 600_000)).toBe(600_000);
+    expect(clampChunkTokens("haiku", 600_000)).toBe(200_000 - 32_000);
   });
 });

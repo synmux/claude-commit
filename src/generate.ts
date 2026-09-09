@@ -1,11 +1,17 @@
 /**
  * The commit-message pipeline:
  *
- *   diff ──partition──▶ primary diff, low-priority diff
+ *   diff ──ignore──▶ ──partition──▶ primary diff, low-priority diff
  *        ──split──▶ [chunk, chunk, ...] ──summary model──▶ [summary, ...]
  *        ──final model──▶ commit message(s)
  *
- * The diff is first partitioned by the configured `lowPriorityPaths`: file
+ * The `ignore` patterns run first and remove file sections outright, so
+ * ignored content is never chunked, never sent and never paid for. Those
+ * files are still committed - `ignore` governs what the model reads, not
+ * what git stages - but when it matches *everything* there is nothing left
+ * to describe and the run stops rather than inventing a message.
+ *
+ * The remaining diff is partitioned by the configured `lowPriorityPaths`: file
  * sections under those paths (generated docs, lockfiles, ...) form a
  * low-priority partition that is summarised after, and more briefly than,
  * the primary one, and the final model is told which is which so the
@@ -23,8 +29,13 @@
  * message(s), applying the configured formatting rules.
  */
 import { runPrompt } from "./agent";
-import { partitionDiff, redactOpaqueRuns, splitDiffToFit } from "./diff";
-import { createLowPriorityMatcher } from "./paths";
+import {
+  applyIgnorePatterns,
+  partitionDiff,
+  redactOpaqueRuns,
+  splitDiffToFit,
+} from "./diff";
+import { createPathMatcher } from "./paths";
 import { clampChunkTokens } from "./tokens";
 import { ClaudeCommitError, isPromptTooLongError } from "./errors";
 import {
@@ -60,6 +71,14 @@ export interface GenerateOptions {
   runner?: typeof runPrompt;
 }
 
+/** How the `ignore` patterns applied to this diff (for `--verbose`). */
+export interface IgnoreStats {
+  /** File sections dropped before any model saw them. */
+  ignoredFiles: number;
+  /** File sections in the staged diff with a recognisable path. */
+  totalFiles: number;
+}
+
 /** How the `lowPriorityPaths` patterns applied to this diff (for `--verbose`). */
 export interface LowPriorityStats {
   /** File sections whose paths all matched a pattern. */
@@ -81,6 +100,8 @@ export interface GenerateResult {
   costUsd: number;
   /** How the low-priority patterns applied to this diff. */
   lowPriority: LowPriorityStats;
+  /** How the ignore patterns applied to this diff. */
+  ignored: IgnoreStats;
 }
 
 /**
@@ -133,6 +154,7 @@ async function summarizePartition(
   const chunkTokens = clampChunkTokens(
     config.models.summary,
     config.maxChunkTokens,
+    config.ollama.contextTokens,
   );
   const chunks = splitDiffToFit(diff, chunkTokens, config.charsPerToken);
 
@@ -153,6 +175,7 @@ async function summarizePartition(
           model: config.models.summary,
           system: summarySystem,
           allowApiKey: config.allowApiKey,
+          ollama: config.ollama,
           ...(abortController ? { abortController } : {}),
         },
       );
@@ -198,10 +221,27 @@ export async function generateCommit(
     runner = runPrompt,
   } = options;
 
-  const effectiveDiff = config.skipArmored ? redactOpaqueRuns(diff) : diff;
+  // Ignore first: dropped sections cost nothing downstream. Unlike a
+  // low-priority partition, an ignored one has nowhere to be promoted to,
+  // so matching every file is a dead end rather than a special case.
+  const ignoreResult = applyIgnorePatterns(
+    diff,
+    createPathMatcher(config.ignore),
+  );
+  const ignored: IgnoreStats = {
+    ignoredFiles: ignoreResult.ignoredFiles,
+    totalFiles: ignoreResult.totalFiles,
+  };
+  if (ignoreResult.diff.trim() === "" && ignoreResult.ignoredFiles > 0) {
+    throw new ClaudeCommitError(describeFullyIgnored(ignored));
+  }
+
+  const effectiveDiff = config.skipArmored
+    ? redactOpaqueRuns(ignoreResult.diff)
+    : ignoreResult.diff;
   const partition = partitionDiff(
     effectiveDiff,
-    createLowPriorityMatcher(config.lowPriorityPaths),
+    createPathMatcher(config.lowPriorityPaths),
   );
   if (partition.primary.trim() === "") {
     throw new ClaudeCommitError("There are no staged changes to summarize.");
@@ -250,6 +290,7 @@ export async function generateCommit(
   const baseOpts = {
     model: config.models.final,
     allowApiKey: config.allowApiKey,
+    ollama: config.ollama,
     ...(abortController ? { abortController } : {}),
   };
   const temperature =
@@ -323,7 +364,27 @@ export async function generateCommit(
       totalFiles: partition.totalFiles,
       promoted: partition.promoted,
     },
+    ignored,
   };
+}
+
+/**
+ * The error for a commit whose every changed file matched `ignore`.
+ *
+ * There is no sensible fallback here. Describing the ignored files anyway
+ * would contradict the directive the user wrote; committing an empty or
+ * invented message would be worse. Naming the directive and the count makes
+ * the cause obvious, because the alternative - a run that mysteriously
+ * reports no staged changes when `git status` plainly disagrees - is the
+ * kind of bug people spend an afternoon on.
+ */
+export function describeFullyIgnored(stats: IgnoreStats): string {
+  const files = `${stats.ignoredFiles} staged file${stats.ignoredFiles === 1 ? "" : "s"}`;
+  return (
+    `Every one of the ${files} matches an "ignore" pattern, so there is ` +
+    `nothing left to describe. Narrow the patterns, or pass --no-ignore to ` +
+    `write a message about these changes for this commit.`
+  );
 }
 
 function dedupe(items: string[]): string[] {

@@ -1,6 +1,6 @@
 ---
 name: cli-spinners-skilld
-description: "ALWAYS use when writing code importing \"cli-spinners\". Consult for debugging, best practices, or modifying cli-spinners, cli spinners."
+description: 'ALWAYS use when writing code importing "cli-spinners". Consult for debugging, best practices, or modifying cli-spinners, cli spinners.'
 metadata:
   version: 3.4.0
   generated_by: "Ollama · gemma4:e2b-it-qat"
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # sindresorhus/cli-spinners `cli-spinners@3.4.0`
+
 **Tags:** latest: 3.4.0
 
 **References:** [package.json](./.skilld/pkg/package.json) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p cli-spinners` instead of grepping `.skilld/` directories. Run `skilld search --guide -p cli-spinners` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## API Changes
 
 This section documents version-specific API changes — prioritize recent major/minor releases.
@@ -54,9 +56,11 @@ This section documents version-specific API changes — prioritize recent major/
 - NEW: `spinners.status()` — new method to check the status of running spinners [source](./.skilld/releases/v3.4.0.md#new-features)
 
 - Also changed: `client.connect()` · `config.maxRetries` · `spinners.start()`
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Best Practices
 
 - Use the `createX()` helper function instead of manually wiring up individual spinners — this ensures proper resource cleanup and handles complex edge cases automatically [source](./.skilld/docs/api.md#createx)
@@ -84,4 +88,5 @@ This section documents version-specific API changes — prioritize recent major/
 - Always validate the configuration schema before initialization using `validateConfig()` — this catches common setup errors early, improving developer experience [source](./.skilld/docs/validation.md:L78)
 
 - For cross-platform compatibility, ensure that all spinner configurations adhere to the `PlatformConfig` interface, explicitly defining platform-specific behaviors where necessary [source](./.skilld/docs/platform.md:L10)
+
 <!-- /skilld:best-practices -->

@@ -9,13 +9,28 @@ export type {
   GenerateOptions,
   GenerateProgress,
   GenerateResult,
+  IgnoreStats,
   LowPriorityStats,
 } from "./src/generate";
-export { runPrompt } from "./src/agent";
+export { runClaudePrompt, runPrompt } from "./src/agent";
 export type { RunPromptOptions } from "./src/agent";
-export { partitionDiff, sectionPaths, splitDiff } from "./src/diff";
-export type { DiffPartition } from "./src/diff";
-export { createLowPriorityMatcher, isLowPriorityPath } from "./src/paths";
+export { runOllamaPrompt, resolveOllamaHost } from "./src/ollama";
+export {
+  DEFAULT_OLLAMA_CONTEXT_TOKENS,
+  DEFAULT_OLLAMA_HOST,
+  isOllamaModel,
+  OLLAMA_PREFIX,
+  parseModelRef,
+} from "./src/models";
+export type { ModelProvider, ModelRef } from "./src/models";
+export {
+  applyIgnorePatterns,
+  partitionDiff,
+  sectionPaths,
+  splitDiff,
+} from "./src/diff";
+export type { DiffPartition, IgnoreResult } from "./src/diff";
+export { createPathMatcher, matchesPathPatterns } from "./src/paths";
 export type { PathMatcher } from "./src/paths";
 export {
   DEFAULT_CONFIG,
@@ -40,6 +55,7 @@ export type {
   Config,
   DiffSummary,
   ModelConfig,
+  OllamaConfig,
   PartialConfig,
   ModelResult,
   FileChange,

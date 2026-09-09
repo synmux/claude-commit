@@ -405,3 +405,142 @@ describe("global config (XDG)", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("ignore", () => {
+  test("sanitizePartial cleans the list like lowPriorityPaths", () => {
+    const out = sanitizePartial({
+      ignore: ["  vendor/**  ", "", 42, "bun.lock", null],
+    });
+    expect(out.ignore).toEqual(["vendor/**", "bun.lock"]);
+  });
+
+  test("an explicit empty list is an override, not an omission", () => {
+    expect(sanitizePartial({ ignore: [] }).ignore).toEqual([]);
+  });
+
+  test("a non-array leaves the key unset, so the layer below survives", () => {
+    expect(sanitizePartial({ ignore: "vendor/**" }).ignore).toBeUndefined();
+  });
+
+  test("defaults to empty", () => {
+    expect(DEFAULT_CONFIG.ignore).toEqual([]);
+  });
+
+  test("a higher layer replaces the list outright, never merging", () => {
+    const merged = mergePartial(
+      { ignore: ["global/**"] },
+      { ignore: ["project/**"] },
+    );
+    expect(merged.ignore).toEqual(["project/**"]);
+  });
+
+  test("an empty list at a higher layer opts out of an inherited one", () => {
+    expect(
+      mergePartial({ ignore: ["global/**"] }, { ignore: [] }).ignore,
+    ).toEqual([]);
+  });
+
+  test("mergeConfig copies the array so a resolved config never aliases the default", () => {
+    const resolved = mergeConfig(DEFAULT_CONFIG, {});
+    resolved.ignore.push("mutated");
+    expect(DEFAULT_CONFIG.ignore).toEqual([]);
+  });
+});
+
+describe("ollama settings", () => {
+  test("sanitizePartial keeps a valid block", () => {
+    const out = sanitizePartial({
+      ollama: {
+        host: "  http://box:11434 ",
+        contextTokens: 65536,
+        keepAlive: "10m",
+      },
+    });
+    expect(out.ollama).toEqual({
+      host: "http://box:11434",
+      contextTokens: 65536,
+      keepAlive: "10m",
+    });
+  });
+
+  test("drops values that cannot be used", () => {
+    const out = sanitizePartial({
+      ollama: { host: "   ", contextTokens: 0, keepAlive: true },
+    });
+    expect(out.ollama).toBeUndefined();
+  });
+
+  test("accepts a numeric or null keepAlive", () => {
+    expect(sanitizePartial({ ollama: { keepAlive: 0 } }).ollama).toEqual({
+      keepAlive: 0,
+    });
+    expect(sanitizePartial({ ollama: { keepAlive: null } }).ollama).toEqual({
+      keepAlive: null,
+    });
+  });
+
+  test("floors a fractional context length", () => {
+    expect(
+      sanitizePartial({ ollama: { contextTokens: 8192.7 } }).ollama
+        ?.contextTokens,
+    ).toBe(8192);
+  });
+
+  test("merges key by key, like models", () => {
+    const merged = mergePartial(
+      { ollama: { host: "http://global:1", contextTokens: 4096 } },
+      { ollama: { contextTokens: 32768 } },
+    );
+    expect(merged.ollama).toEqual({
+      host: "http://global:1",
+      contextTokens: 32768,
+    });
+  });
+
+  test("resolveConfig fills the unset half from the defaults", () => {
+    const config = resolveConfig({ ollama: { contextTokens: 16384 } }, {});
+    expect(config.ollama).toEqual({
+      host: DEFAULT_CONFIG.ollama.host,
+      contextTokens: 16384,
+      keepAlive: null,
+    });
+  });
+
+  test("ships a default host and window", () => {
+    expect(DEFAULT_CONFIG.ollama).toEqual({
+      host: "http://localhost:11434",
+      contextTokens: 32768,
+      keepAlive: null,
+    });
+  });
+});
+
+describe("model names", () => {
+  test("an ollama: model survives sanitisation with its tag intact", () => {
+    const out = sanitizePartial({
+      models: { summary: "ollama:ornith-1.5:35b", final: "sonnet" },
+    });
+    expect(out.models).toEqual({
+      summary: "ollama:ornith-1.5:35b",
+      final: "sonnet",
+    });
+  });
+
+  test("a blank model name is a mistake, not an override", () => {
+    // Keeping "" would resolve to a model no provider can serve.
+    expect(
+      sanitizePartial({ models: { summary: "  " } }).models,
+    ).toBeUndefined();
+  });
+
+  test("a mixed-provider config resolves both stages independently", () => {
+    const config = resolveConfig(
+      { models: { summary: "ollama:ornith-1.5:35b" } },
+      {},
+    );
+    expect(config.models).toEqual({
+      summary: "ollama:ornith-1.5:35b",
+      final: "sonnet",
+    });
+  });
+});

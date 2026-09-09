@@ -1,6 +1,13 @@
 /**
- * Thin wrapper around the Claude Agent SDK that turns a single prompt into a
- * single text completion.
+ * The model-call layer: {@link runPrompt} turns one prompt into one text
+ * completion, routing to whichever backend the model name asks for.
+ *
+ * A bare model name goes to Claude, through the Agent SDK, below. An
+ * `ollama:`-prefixed one goes to `src/ollama.ts` instead. Both return the
+ * same {@link ModelResult}, so the pipeline in `src/generate.ts` - and the
+ * injectable runner its tests use - never learns which provider ran.
+ *
+ * The Claude path, in detail:
  *
  * The Agent SDK spawns a bundled `claude` binary, so authentication follows
  * Claude Code's own resolution order over the environment we hand it. By
@@ -19,47 +26,12 @@ import {
   type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { ClaudeCommitError } from "./errors";
-import type { ModelResult } from "./types";
+import { parseModelRef } from "./models";
+import { runOllamaPrompt } from "./ollama";
+import type { ModelResult, RunPromptOptions } from "./types";
 
-export interface RunPromptOptions {
-  /** Model string (alias like `sonnet`, `haiku`, or a full model id). */
-  model: string;
-  /** Full custom system prompt. */
-  system: string;
-  /** Receives assistant text as it streams in (enables partial messages). */
-  onText?: (delta: string) => void;
-  /** Abort the in-flight request. */
-  abortController?: AbortController;
-  /** Receives the underlying CLI's stderr (for `--verbose`). */
-  onStderr?: (data: string) => void;
-  /**
-   * Sampling temperature. Passed to the model via `CLAUDE_CODE_EXTRA_BODY`.
-   * Used to add variety when generating several interactive options. Models
-   * that don't accept a temperature override will reject the request, so the
-   * caller should be prepared to retry without it.
-   */
-  temperature?: number;
-  /**
-   * Request a structured JSON response matching this schema. The parsed object
-   * is returned on {@link ModelResult.structured}. Models that don't support
-   * structured outputs will reject the request, so the caller should be
-   * prepared to retry without it.
-   */
-  outputFormat?: { type: "json_schema"; schema: Record<string, unknown> };
-  /**
-   * Allow API credentials from the environment to reach the SDK subprocess.
-   * Defaults to false: `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` are
-   * stripped so the run is billed to the Claude subscription.
-   */
-  allowApiKey?: boolean;
-}
+export type { RunPromptOptions } from "./types";
 
-/**
- * Environment variables that carry Claude API credentials. Their presence
- * switches the spawned `claude` binary from subscription auth to
- * pay-as-you-go API billing, so they are stripped from the subprocess
- * environment unless the user opts in via the `allowApiKey` config option.
- */
 export const GATED_CREDENTIAL_VARS = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
@@ -195,11 +167,11 @@ export function buildQueryOptions(
 }
 
 /**
- * Run a single prompt and return the model's text response.
+ * Run a single prompt against a Claude model via the Agent SDK.
  *
  * Throws {@link ClaudeCommitError} on any model/authentication/quota failure.
  */
-export async function runPrompt(
+export async function runClaudePrompt(
   prompt: string,
   opts: RunPromptOptions,
 ): Promise<ModelResult> {
@@ -284,4 +256,25 @@ export async function runPrompt(
     ...(model ? { model } : {}),
     ...(structured !== undefined ? { structured } : {}),
   };
+}
+
+/**
+ * Run a single prompt against whichever provider `opts.model` names, and
+ * return its text response.
+ *
+ * This is the single seam every caller uses; `generate.ts` accepts a
+ * replacement of exactly this shape so the pipeline can be tested without a
+ * model of either kind.
+ *
+ * Throws {@link ClaudeCommitError} on any model, authentication, transport
+ * or quota failure.
+ */
+export async function runPrompt(
+  prompt: string,
+  opts: RunPromptOptions,
+): Promise<ModelResult> {
+  const { provider } = parseModelRef(opts.model);
+  return provider === "ollama"
+    ? runOllamaPrompt(prompt, opts)
+    : runClaudePrompt(prompt, opts);
 }

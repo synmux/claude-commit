@@ -1,6 +1,6 @@
 ---
 name: anthropic-ai-claude-agent-sdk-skilld
-description: "ALWAYS use when writing code importing \"@anthropic-ai/claude-agent-sdk\". Consult for debugging, best practices, or modifying @anthropic-ai/claude-agent-sdk, anthropic-ai/claude-agent-sdk, anthropic-ai claude-agent-sdk, anthropic ai claude agent sdk, claude-agent-sdk-typescript, claude agent sdk typescript."
+description: 'ALWAYS use when writing code importing "@anthropic-ai/claude-agent-sdk". Consult for debugging, best practices, or modifying @anthropic-ai/claude-agent-sdk, anthropic-ai/claude-agent-sdk, anthropic-ai claude-agent-sdk, anthropic ai claude agent sdk, claude-agent-sdk-typescript, claude agent sdk typescript.'
 metadata:
   version: 0.3.241
   generated_by: "Ollama · gemma4:e2b-it-qat"
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # anthropics/claude-agent-sdk-typescript `@anthropic-ai/claude-agent-sdk@0.3.241`
+
 **Tags:** latest: 0.3.241, next: 0.3.241
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p @anthropic-ai/claude-agent-sdk` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @anthropic-ai/claude-agent-sdk` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## API Changes
 
 This section documents version-specific API changes — prioritize recent major/minor releases.
@@ -42,9 +44,11 @@ This section documents version-specific API changes — prioritize recent major/
 - NEW: `toolCallResponse` — new in v3.2, structured response for tool calls [source](./.skilld/releases/v3.2.0.md#new-features)
 
 - Also changed: `defineModel()` stable v3.4 · `createClient()` signature update · `streamMessages()` options added · `toolCall` and `toolCallResponse` introduced.
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Best Practices
 
 - Use the `createX()` helper function for client initialization instead of direct instantiation to ensure proper resource cleanup and automatic connection management [source](./.skilld/docs/client.md#createx)
@@ -72,4 +76,5 @@ This section documents version-specific API changes — prioritize recent major/
 - Always validate the output structure against the expected schema using the provided type definitions before consuming the result, especially when dealing with complex tool outputs [source](./.skilld/docs/types.md#output-validation)
 
 - Configure the SDK to use a dedicated, isolated client instance for high-throughput scenarios to prevent resource contention across different agent tasks [source](./.skilld/docs/client.md#isolation)
+
 <!-- /skilld:best-practices -->

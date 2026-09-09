@@ -14,12 +14,16 @@ import {
 } from "./git";
 import { presentCredentialVars } from "./agent";
 import { loadFileConfig, resolveConfig } from "./config";
-import { generateCommit, type LowPriorityStats } from "./generate";
+import {
+  generateCommit,
+  type IgnoreStats,
+  type LowPriorityStats,
+} from "./generate";
 import { Spinner } from "./ui/spinner";
 import { confirmCommit, editInEditor } from "./ui/editor";
 import { color } from "./ui/colors";
 import { ClaudeCommitError } from "./errors";
-import type { ModelConfig, PartialConfig } from "./types";
+import type { ModelConfig, OllamaConfig, PartialConfig } from "./types";
 
 export const VERSION = getVersion();
 
@@ -42,6 +46,10 @@ interface CliOptions {
   skipArmored?: boolean;
   /** `false` when `--no-low-priority-paths` was passed (Commander's negated-flag shape). */
   lowPriorityPaths?: boolean;
+  /** `false` when `--no-ignore` was passed (Commander's negated-flag shape). */
+  ignore?: boolean;
+  ollamaHost?: string;
+  ollamaContext?: number;
 }
 
 /** Build the Commander program. Exported for tests. */
@@ -86,6 +94,20 @@ export function buildProgram(): Command {
       'ignore the "lowPriorityPaths" config for this run, so every change ' +
         "weighs the same",
     )
+    .option(
+      "--no-ignore",
+      'disregard the "ignore" config for this run, so every staged change is ' +
+        "read",
+    )
+    .option(
+      "--ollama-host <url>",
+      "base URL of the Ollama server for ollama: models",
+    )
+    .option(
+      "--ollama-context <tokens>",
+      "context window requested from Ollama models",
+      (v) => parseInt(v, 10),
+    )
     .option("-d, --dry-run", "print the message to stdout without committing")
     .option("-y, --yes", "commit without asking for confirmation")
     .option("--no-spinner", "disable the progress spinner")
@@ -96,15 +118,24 @@ export function buildProgram(): Command {
       [
         "",
         "Authentication:",
-        "  Uses the Claude Agent SDK with your Claude Code subscription (run",
-        "  `claude login`). ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are ignored",
-        '  unless the config sets "allowApiKey": true (pay-as-you-go billing).',
+        "  Claude models use the Claude Agent SDK with your Claude Code",
+        "  subscription (run `claude login`). ANTHROPIC_API_KEY /",
+        "  ANTHROPIC_AUTH_TOKEN are ignored unless the config sets",
+        '  "allowApiKey": true (pay-as-you-go billing).',
+        "",
+        "Ollama models:",
+        "  Prefix a model with `ollama:` to run it on a local Ollama server,",
+        "  e.g. --model-summary ollama:ornith-1.5:35b. Everything after the",
+        "  prefix is the Ollama model name, tag included. The server needs no",
+        "  credential; point cco at it with --ollama-host or $OLLAMA_HOST.",
         "",
         "Examples:",
         "  cco                     generate and commit a message for staged changes",
         "  cco -a -c               stage everything and write a Conventional Commit",
         "  cco -i                  pick from several options interactively",
         "  cco --dry-run | cat     print a message without committing",
+        "  cco --model-summary ollama:ornith-1.5:35b",
+        "                          read the diff locally, write the message with Claude",
       ].join("\n"),
     );
   return program;
@@ -127,6 +158,13 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
   // A negated flag arrives as `false`; an empty list overrides any
   // configured patterns because lists replace rather than merge.
   if (opts.lowPriorityPaths === false) cfg.lowPriorityPaths = [];
+  if (opts.ignore === false) cfg.ignore = [];
+  const ollama: Partial<OllamaConfig> = {};
+  if (opts.ollamaHost) ollama.host = opts.ollamaHost;
+  if (opts.ollamaContext !== undefined && Number.isFinite(opts.ollamaContext)) {
+    ollama.contextTokens = Math.max(1, opts.ollamaContext);
+  }
+  if (Object.keys(ollama).length) cfg.ollama = ollama;
   if (opts.count !== undefined && Number.isFinite(opts.count)) {
     cfg.interactiveCount = Math.max(1, opts.count);
   }
@@ -292,6 +330,11 @@ async function runNonInteractive(
         `${result.chunkCount} chunk(s), cost $${result.costUsd.toFixed(4)}`,
       ) + "\n",
     );
+    if (config.ignore.length > 0) {
+      process.stderr.write(
+        color("90", describeIgnoreStats(result.ignored)) + "\n",
+      );
+    }
     if (config.lowPriorityPaths.length > 0) {
       process.stderr.write(
         color("90", describeLowPriorityStats(result.lowPriority)) + "\n",
@@ -353,6 +396,18 @@ export function describeLowPriorityStats(stats: LowPriorityStats): string {
     return `low-priority paths: matched all ${files} - nothing else changed, so treated as primary`;
   }
   return `low-priority paths: matched ${stats.matchedFiles} of ${files}`;
+}
+
+/**
+ * One verbose line saying how the ignore patterns applied. The counts are
+ * the only way to tell a pattern that quietly matched nothing from one that
+ * quietly removed half the commit.
+ */
+export function describeIgnoreStats(stats: IgnoreStats): string {
+  const files = `${stats.totalFiles} file${stats.totalFiles === 1 ? "" : "s"}`;
+  return stats.ignoredFiles === 0
+    ? `ignore: matched none of ${files}`
+    : `ignore: dropped ${stats.ignoredFiles} of ${files} before reading`;
 }
 
 function firstLine(text: string): string {

@@ -1,6 +1,6 @@
 ---
 name: skilld-skilld
-description: "ALWAYS use when writing code importing \"skilld\". Consult for debugging, best practices, or modifying skilld."
+description: 'ALWAYS use when writing code importing "skilld". Consult for debugging, best practices, or modifying skilld.'
 metadata:
   version: 2.3.0
   generated_by: "Ollama · gemma4:e2b-it-qat"
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # skilld-dev/skilld `skilld@2.3.0`
+
 **Tags:** latest: 2.3.0, beta: 3.0.0-beta.1
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p skilld` instead of grepping `.skilld/` directories. Run `skilld search --guide -p skilld` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## API Changes
 
 This section documents version-specific API changes — prioritize recent major/minor releases (v2.x migration).
@@ -50,9 +52,11 @@ This section documents version-specific API changes — prioritize recent major/
 - BREAKING: `createClient` — v2.3 now requires a `clientConfig` object instead of positional arguments [source](./.skilld/releases/v2.3.0.md:L10)
 
 - Also changed: `defineModel` (stable v3.4) · `onWatcherCleanup` (new v3.5) · `Suspense` (stable v3.5)
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Best Practices
 
 - Use the `withContext()` helper when dealing with nested skill configurations to ensure proper scope isolation and prevent variable leakage across different modules [source](./.skilld/docs/config.md:L45:109)
@@ -80,4 +84,5 @@ This section documents version-specific API changes — prioritize recent major/
 - For performance-critical paths, consider pre-fetching data using the `prefetchData()` method during the skill initialization phase rather than fetching data on every request [source](./.skilld/docs/performance.md:L45:109)
 
 - Mark any newly introduced or unstable features with the `(experimental)` suffix in the description to alert users to potential breaking changes [source](./.skilld/docs/changelog.md:L10:109)
+
 <!-- /skilld:best-practices -->

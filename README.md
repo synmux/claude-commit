@@ -20,20 +20,24 @@ feat(auth): add error handling and refresh token rotation to login
 Want more details? See [WALKTHROUGH.md](WALKTHROUGH.md).
 
 ```plaintext
-staged diff ──split──▶ [chunk, …] ──sonnet──▶ summaries ──sonnet──▶ commit message
+staged diff ──ignore──▶ ──split──▶ [chunk, …] ──sonnet──▶ summaries ──sonnet──▶ commit message
 ```
 
 1. **Summarize** - the diff is split into chunks that fit the context window and
    each chunk is summarized by a strong model (`sonnet`, which carries a native
    1M-token context). Diffs larger than 1M tokens simply produce more chunks.
-   Changes under configured [low-priority paths](#low-priority-paths) are
-   summarized separately, so churn cannot crowd out the code.
+   Paths listed in [`ignore`](#ignoring-paths-entirely) are dropped first and
+   never read at all; changes under configured
+   [low-priority paths](#low-priority-paths) are summarized separately, so churn
+   cannot crowd out the code.
 2. **Write** - the summaries are handed to the same model (`sonnet`) to write the
    final commit message according to your formatting rules. The message is the
    whole point of the tool, and its input is tiny, so a strong model here costs
    almost nothing extra.
 
-Both stages run through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
+Either stage can run on a local [Ollama](#ollama-models) model instead; by
+default both go through the
+[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
 
 ## Install
 
@@ -66,6 +70,9 @@ instead (pay-as-you-go), opt in explicitly in your configuration:
 { "allowApiKey": true }
 ```
 
+Ollama models sit outside all of this: they run on a server you control, over
+plain HTTP, with no credential at all. See [Ollama models](#ollama-models).
+
 ## Usage
 
 ```sh
@@ -92,6 +99,9 @@ and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 | `--model-final <model>`                  | Model used to write the message (default `sonnet`)                                      |
 | `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff       |
 | `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                 |
+| `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                         |
+| `--ollama-host <url>`                    | Base URL of the Ollama server for `ollama:` models                                      |
+| `--ollama-context <tokens>`              | Context window requested from Ollama models                                             |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                          |
 | `-y, --yes`                              | Commit without asking for confirmation                                                  |
 | `--no-spinner`                           | Disable the progress spinner                                                            |
@@ -164,6 +174,12 @@ keys are valid at every level:
   "charsPerToken": 3.5,
   "skipArmored": false,
   "lowPriorityPaths": [],
+  "ignore": [],
+  "ollama": {
+    "host": "http://localhost:11434",
+    "contextTokens": 32768,
+    "keepAlive": null
+  },
   "allowApiKey": false
 }
 ```
@@ -259,6 +275,117 @@ cost. To skip content outright, see `skipArmored`. Under `--verbose`, `cco`
 reports how many files matched (`low-priority paths: matched 3 of 41 files`),
 which is the only way to tell a pattern that matched nothing from one that
 matched everything and was promoted.
+
+### Ignoring paths entirely
+
+`lowPriorityPaths` still reads everything it deprioritises, and pays for it.
+Some content is worth neither the tokens nor the time: a vendored dependency
+tree, a generated API client, a data fixture that changes wholesale.
+
+`ignore` takes the same gitignore-style patterns and removes those file
+sections from the diff **before anything else looks at it** - before the
+low-priority partition, before chunking, before any model call:
+
+```json
+{ "ignore": ["vendor/**", "**/__snapshots__", "*.generated.ts"] }
+```
+
+The stages compose in the order their names suggest:
+
+```text
+diff ─ ignore ─▶ ─ skipArmored ─▶ ─ lowPriorityPaths ─▶ chunks ─▶ summaries
+```
+
+Two things worth being clear about:
+
+- **The files are still committed.** `ignore` governs what the model reads,
+  never what git stages. `cco` is writing a message, not choosing a changeset.
+- **When it matches _everything_, `cco` stops** with an error naming the
+  directive, rather than inventing a message about changes you told it not to
+  read. This is deliberately unlike `lowPriorityPaths`, which promotes its
+  partition in the same situation - "this matters less" can degrade
+  gracefully, "do not look at this" has nothing to degrade to. Pass
+  `--no-ignore` for that one commit.
+
+As with `lowPriorityPaths`, a section is dropped only when it names at least
+one path and _all_ of them match, so a rename out of an ignored directory
+survives. `--verbose` reports the count
+(`ignore: dropped 3 of 41 files before reading`).
+
+## Ollama models
+
+Any model can be run on a local (or self-hosted) [Ollama](https://ollama.com)
+server instead of Claude, by prefixing its name with `ollama:`. Everything
+after the prefix is the Ollama model name **verbatim**, tag included:
+
+```json
+{
+  "models": {
+    "summary": "ollama:ornith-1.5:35b",
+    "final": "sonnet"
+  }
+}
+```
+
+The two stages resolve independently, so that mixed setup is the interesting
+one: reading the diff is the bulk of the work and the most sensitive thing
+`cco` touches, so it runs locally and free, while the final message - one
+short, quality-sensitive call on a summary - still goes to Claude. The prefix
+works anywhere a model name does, including the flags:
+
+```sh
+cco --model-summary ollama:ornith-1.5:35b --dry-run -v
+```
+
+The server needs no credential. `cco` talks to Ollama's native `/api/chat`
+endpoint, not either of its OpenAI/Anthropic compatibility layers, because
+only the native API can set a context length.
+
+### Context length is the setting that matters
+
+Ollama picks a default context window from available VRAM (4k / 32k / 256k),
+and a prompt that exceeds it is truncated **silently** - HTTP 200, oldest
+content dropped, nothing on the response to say so. A summary written from
+half a diff is worse than no summary, so `cco` never inherits that default:
+it sends an explicit window on every request, sizes its diff chunks against
+the same number, and checks the token counts afterwards to catch a truncation
+that happened anyway (in which case it re-splits the chunk and retries,
+exactly as it does for a Claude context overflow).
+
+```json
+{
+  "ollama": {
+    "host": "http://localhost:11434",
+    "contextTokens": 32768,
+    "keepAlive": "10m"
+  }
+}
+```
+
+- `host` - defaults to `$OLLAMA_HOST`, then `http://localhost:11434`. A bare
+  `box.local:11434` gains an `http://`, matching Ollama's own convention.
+- `contextTokens` - defaults to 32768. **Set this to what the machine can
+  hold, not what the model advertises**: memory use scales with it (and is
+  multiplied by `OLLAMA_NUM_PARALLEL`), so a model whose maximum is 131072
+  may still only be worth running at 32768. A smaller window is not a
+  correctness problem - `cco` just splits the diff into more chunks.
+- `keepAlive` - how long the server keeps the model loaded after a request: a
+  duration string (`"10m"`), seconds as a number, `0` to unload immediately,
+  or negative to pin it. `null` leaves the server's own default. Pinning is
+  worth it if you commit often; a 35b model takes a while to load.
+
+### What differs from a Claude model
+
+- **Cost is reported as zero**, because local inference is not billed. In a
+  mixed run, `--verbose`'s total is exactly the Claude half.
+- **Structured output** is requested through Ollama's `format` field. A model
+  or server that cannot honour it (Ollama Cloud does not support it at all)
+  falls back to plain-text parsing automatically.
+- **A missing model is an error, not a download.** `cco` tells you to run
+  `ollama pull <model>` rather than pulling tens of gigabytes on your behalf.
+- **Reasoning is never requested**, and any the model volunteers is
+  discarded - models disagree about whether thinking can even be switched
+  off, and asking is a good way to earn a 400.
 
 ## Development
 

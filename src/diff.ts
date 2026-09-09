@@ -8,9 +8,10 @@
  * split, its header (`diff --git ... / --- / +++`) is repeated at the top of
  * every piece so each chunk remains a self-contained, interpretable diff.
  *
- * `partitionDiff` sorts whole file sections into a primary and a low-priority
- * diff (see `lowPriorityPaths` in the config) using the paths `sectionPaths`
- * recovers from each section's header lines.
+ * `applyIgnorePatterns` drops whole file sections outright (see `ignore` in
+ * the config) and `partitionDiff` sorts what remains into a primary and a
+ * low-priority diff (see `lowPriorityPaths`), both using the paths
+ * `sectionPaths` recovers from each section's header lines.
  */
 
 import type { PathMatcher } from "./paths";
@@ -482,6 +483,49 @@ export function partitionDiff(
     totalFiles,
     promoted: false,
   };
+}
+
+/** What `ignore` removed from a diff. */
+export interface IgnoreResult {
+  /** The diff with every ignored file section removed. May be `""`. */
+  diff: string;
+  /** File sections dropped because all of their paths matched. */
+  ignoredFiles: number;
+  /** File sections in the original diff with at least one recognisable path. */
+  totalFiles: number;
+}
+
+/**
+ * Drop the file sections whose every path matches, returning the rest.
+ *
+ * The rule is `partitionDiff`'s: a section is removed only when it names at
+ * least one path and all of them match, so a rename out of an ignored
+ * directory - which is news - survives, as does anything whose path cannot
+ * be read. Surviving sections keep their order and are joined with
+ * newlines, so the result is itself a valid unified diff.
+ *
+ * This runs before everything else in the pipeline, so ignored content is
+ * never chunked, never sent, and never paid for.
+ */
+export function applyIgnorePatterns(
+  diff: string,
+  isIgnored: PathMatcher,
+): IgnoreResult {
+  if (diff === "") return { diff: "", ignoredFiles: 0, totalFiles: 0 };
+
+  const kept: string[] = [];
+  let ignoredFiles = 0;
+  let totalFiles = 0;
+  for (const section of splitFileSections(diff)) {
+    const paths = sectionPaths(section);
+    if (paths.length > 0) totalFiles += 1;
+    if (paths.length > 0 && paths.every(isIgnored)) {
+      ignoredFiles += 1;
+      continue;
+    }
+    kept.push(section);
+  }
+  return { diff: kept.join("\n"), ignoredFiles, totalFiles };
 }
 
 /**

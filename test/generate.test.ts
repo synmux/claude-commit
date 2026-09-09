@@ -315,3 +315,148 @@ describe("generateCommit", () => {
     expect(summaryPrompts[0]).toContain("a/secret.age");
   });
 });
+
+describe("ignore", () => {
+  const codeFile = [
+    "diff --git a/src/app.ts b/src/app.ts",
+    "--- a/src/app.ts",
+    "+++ b/src/app.ts",
+    "@@ -1 +1 @@",
+    "-const a = 1;",
+    "+const a = 2;",
+  ].join("\n");
+
+  const vendorFile = [
+    "diff --git a/vendor/big.js b/vendor/big.js",
+    "--- a/vendor/big.js",
+    "+++ b/vendor/big.js",
+    "@@ -1 +1 @@",
+    "-old",
+    "+new",
+  ].join("\n");
+
+  /** A runner that records every prompt it was handed. */
+  function recordingRunner(prompts: string[]): Runner {
+    return (async (prompt: string) => {
+      prompts.push(prompt);
+      return { text: "A summary", costUsd: 0 } satisfies ModelResult;
+    }) as Runner;
+  }
+
+  test("never sends ignored content to any model", async () => {
+    const prompts: string[] = [];
+    await generateCommit(
+      `${codeFile}\n${vendorFile}`,
+      { ...baseConfig, ignore: ["vendor/**"] },
+      { runner: recordingRunner(prompts) },
+    );
+    expect(prompts.some((p) => p.includes("vendor/big.js"))).toBe(false);
+    expect(prompts.some((p) => p.includes("src/app.ts"))).toBe(true);
+  });
+
+  test("reports what it dropped", async () => {
+    const result = await generateCommit(
+      `${codeFile}\n${vendorFile}`,
+      { ...baseConfig, ignore: ["vendor/**"] },
+      { runner: recordingRunner([]) },
+    );
+    expect(result.ignored).toEqual({ ignoredFiles: 1, totalFiles: 2 });
+  });
+
+  test("reports zero when the patterns matched nothing", async () => {
+    const result = await generateCommit(
+      codeFile,
+      { ...baseConfig, ignore: ["node_modules/**"] },
+      { runner: recordingRunner([]) },
+    );
+    expect(result.ignored).toEqual({ ignoredFiles: 0, totalFiles: 1 });
+  });
+
+  test("stops rather than describing a commit it was told not to read", async () => {
+    const prompts: string[] = [];
+    const promise = generateCommit(
+      vendorFile,
+      { ...baseConfig, ignore: ["vendor/**"] },
+      { runner: recordingRunner(prompts) },
+    );
+    await expect(promise).rejects.toThrow(ClaudeCommitError);
+    await expect(promise).rejects.toThrow(/"ignore" pattern/);
+    // And it stopped before spending anything.
+    expect(prompts).toEqual([]);
+  });
+
+  test("the fully-ignored error points at the way out", async () => {
+    const error = await generateCommit(
+      vendorFile,
+      { ...baseConfig, ignore: ["vendor/**"] },
+      { runner: recordingRunner([]) },
+    ).catch((e) => e);
+    expect(error.message).toMatch(/--no-ignore/);
+  });
+
+  test("runs ahead of the low-priority partition", async () => {
+    const prompts: string[] = [];
+    // vendor/ is ignored outright; app.ts is all that is left, so there is
+    // no low-priority group and the primary prompt is the only one.
+    const result = await generateCommit(
+      `${codeFile}\n${vendorFile}`,
+      { ...baseConfig, ignore: ["vendor/**"], lowPriorityPaths: ["vendor/**"] },
+      { runner: recordingRunner(prompts) },
+    );
+    expect(result.lowPriority.matchedFiles).toBe(0);
+    expect(result.summaries.every((s) => s.priority === "primary")).toBe(true);
+  });
+
+  test("an empty pattern list changes nothing", async () => {
+    const result = await generateCommit(
+      `${codeFile}\n${vendorFile}`,
+      { ...baseConfig, ignore: [] },
+      { runner: recordingRunner([]) },
+    );
+    expect(result.ignored.ignoredFiles).toBe(0);
+  });
+});
+
+describe("Ollama chunk sizing", () => {
+  test("sizes summary chunks against the configured Ollama window", async () => {
+    const prompts: string[] = [];
+    const runner = (async (prompt: string) => {
+      prompts.push(prompt);
+      return { text: "A summary", costUsd: 0 } satisfies ModelResult;
+    }) as Runner;
+
+    // ~200k characters of ordinary diff: one chunk at Claude's 1M window,
+    // several at an Ollama 8k one.
+    const big = armorFreeDiff(4_000);
+    const claudeRun = await generateCommit(big, baseConfig, { runner });
+    const claudeChunks = claudeRun.chunkCount;
+
+    prompts.length = 0;
+    const ollamaRun = await generateCommit(
+      big,
+      {
+        ...baseConfig,
+        models: { summary: "ollama:gemma4", final: "sonnet" },
+        ollama: { ...baseConfig.ollama, contextTokens: 8_192 },
+      },
+      { runner },
+    );
+    expect(claudeChunks).toBe(1);
+    expect(ollamaRun.chunkCount).toBeGreaterThan(1);
+  });
+});
+
+/** A plain (non-armored) diff of roughly `lines` changed lines. */
+function armorFreeDiff(lines: number): string {
+  const body = Array.from(
+    { length: lines },
+    (_, i) => `+  const value${i} = compute(${i}); // a line of ordinary code`,
+  );
+  return [
+    "diff --git a/src/big.ts b/src/big.ts",
+    "--- a/src/big.ts",
+    "+++ b/src/big.ts",
+    `@@ -1 +1,${lines} @@`,
+    ...body,
+  ].join("\n");
+}

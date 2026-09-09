@@ -1,6 +1,6 @@
 ---
 name: opentui-core-skilld
-description: "ALWAYS use when writing code importing \"@opentui/core\". Consult for debugging, best practices, or modifying @opentui/core, opentui/core, opentui core, opentui."
+description: 'ALWAYS use when writing code importing "@opentui/core". Consult for debugging, best practices, or modifying @opentui/core, opentui/core, opentui core, opentui.'
 metadata:
   version: 0.5.7
   generated_by: "Ollama · gemma4:e2b-it-qat"
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # anomalyco/opentui `@opentui/core@0.5.7`
+
 **Tags:** snapshot: 0.0.0-20260820-e69cf0cc, latest: 0.5.7
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p @opentui/core` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @opentui/core` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## API Changes
 
 This section documents version-specific API changes — prioritize recent major/minor releases.
@@ -52,9 +54,11 @@ This section documents version-specific API changes — prioritize recent major/
 - BREAKING: `App.run()` — changed from synchronous execution to returning a Promise for async initialization [source](./.skilld/releases/v3.7.0.md#breaking-changes)
 
 - Also changed: `Logger.info()` · `Client.getMetadata()` · `Config.defaultValue`
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Security
 
 - Implement strict input validation for all configuration parameters passed to `createX()` to prevent injection vulnerabilities [source](./.skilld/docs/api.md#createx)
@@ -70,4 +74,5 @@ This section documents version-specific API changes — prioritize recent major/
 - Keep the skill definition code minimal and focused; excessive complexity increases the attack surface and makes security auditing difficult [source](./.skilld/docs/best-practices.md)
 - Mark any features utilizing experimental APIs with `(experimental)` to clearly signal potential instability and security risks to consumers [source](./.skilld/docs/experimental-apis.md)
 - Utilize the `useComposable()` pattern for reactive contexts instead of direct imports to ensure proper lifecycle binding and prevent memory leaks [source](./.skilld/docs/composables.md:L85:109)
+
 <!-- /skilld:best-practices -->

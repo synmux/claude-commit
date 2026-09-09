@@ -1,6 +1,6 @@
 ---
 name: anthropic-ai-claude-code-skilld
-description: "ALWAYS use when writing code importing \"@anthropic-ai/claude-code\". Consult for debugging, best practices, or modifying @anthropic-ai/claude-code, anthropic-ai/claude-code, anthropic-ai claude-code, anthropic ai claude code, claude-code-2.1.88, claude code 2.1.88."
+description: 'ALWAYS use when writing code importing "@anthropic-ai/claude-code". Consult for debugging, best practices, or modifying @anthropic-ai/claude-code, anthropic-ai/claude-code, anthropic-ai claude-code, anthropic ai claude code, claude-code-2.1.88, claude code 2.1.88.'
 metadata:
   version: 2.1.241
   generated_by: "Ollama · gemma4:e2b-it-qat"
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # Exhen/claude-code-2.1.88 `@anthropic-ai/claude-code@2.1.241`
+
 **Tags:** stable: 2.1.231, latest: 2.1.241, next: 2.1.241
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p @anthropic-ai/claude-code` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @anthropic-ai/claude-code` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## API Changes
 
 This section documents version-specific API changes — prioritize recent major/minor releases.
@@ -50,9 +52,11 @@ This section documents version-specific API changes — prioritize recent major/
 - NEW: `client.get_status()` — new in v3.5, provides real-time connection status [source](./.skilld/docs/client.md:L30)
 
 - Also changed: `client.connect()` · DEPRECATED · `legacy_auth_header()` · RENAMED · `onWatcherCleanup()` · DEPRECATED · `parse_json_v1()` · DEPRECATED · `generate_prompt()` · RENAMED · `client.get_status()`
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Best Practices
 
 - Use the `streamWithContext` method instead of sequential calls for complex multi-turn interactions — this pattern ensures optimal token usage and reduces latency by batching requests where possible [source](./.skilld/docs/api.md#streamwithcontext)
@@ -80,4 +84,5 @@ This section documents version-specific API changes — prioritize recent major/
 - Use the `client.onStream` event listener to handle partial response updates asynchronously — this is crucial for building real-time user interfaces and improving perceived performance [source](./.skilld/docs/events.md#on-stream-events)
 
 - For production resilience, set a `timeout` on all network requests — this prevents indefinite hanging and allows for graceful failure handling in critical workflows [source](./.skilld/docs/advanced.md#timeouts)
+
 <!-- /skilld:best-practices -->

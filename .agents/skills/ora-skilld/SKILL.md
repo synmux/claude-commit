@@ -1,6 +1,6 @@
 ---
 name: ora-skilld
-description: "ALWAYS use when writing code importing \"ora\". Consult for debugging, best practices, or modifying ora."
+description: 'ALWAYS use when writing code importing "ora". Consult for debugging, best practices, or modifying ora.'
 metadata:
   version: 9.4.1
   generated_by: "Ollama · gemma4:e2b-it-qat"
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # sindresorhus/ora `ora@9.4.1`
+
 **Tags:** latest: 9.4.1
 
 **References:** [package.json](./.skilld/pkg/package.json) • [Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p ora` instead of grepping `.skilld/` directories. Run `skilld search --guide -p ora` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## API Changes
 
 This section documents version-specific API changes — prioritize recent major/minor releases.
@@ -54,9 +56,11 @@ This section documents version-specific API changes — prioritize recent major/
 - NEW: `utils.parseJSON()` — new in v9.4.1, handles complex nested JSON structures [source](./.skilld/releases/v9.4.1.md#new-features)
 
 - Also changed: `defineModel()` · `onWatcherCleanup()` · `config.timeout` · `legacy.fetchData()` · `storage.readLocal()`
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Best Practices
 
 - Use `defineConfig()` to pass configuration objects rather than individual options — this enables type inference and ensures correct merging of plugins [source](./.skilld/docs/config.md:L22)
@@ -84,4 +88,5 @@ This section documents version-specific API changes — prioritize recent major/
 - When defining custom hooks, ensure they are memoized correctly using `useMemo` or `useCallback` if they depend on props or state — this prevents unnecessary re-renders in performance-critical components [source](./.skilld/docs/composables.md:L210)
 
 - Use the `onAfterUpdate` lifecycle hook for side effects that must occur after the component has finished rendering — this is distinct from `onBeforeUpdate` and is useful for post-render logic [source](./.skilld/docs/lifecycle.md:L315)
+
 <!-- /skilld:best-practices -->

@@ -1,6 +1,6 @@
 ---
 name: types-bun-skilld
-description: "ALWAYS use when writing code importing \"@types/bun\". Consult for debugging, best practices, or modifying @types/bun, types/bun, types bun, DefinitelyTyped."
+description: 'ALWAYS use when writing code importing "@types/bun". Consult for debugging, best practices, or modifying @types/bun, types/bun, types bun, DefinitelyTyped.'
 metadata:
   version: 1.4.0
   generated_by: "Ollama · gemma4:e2b-it-qat"
@@ -8,6 +8,7 @@ metadata:
 ---
 
 # DefinitelyTyped/DefinitelyTyped `@types/bun@1.4.0`
+
 **Tags:** ts4.6: 1.0.8, ts4.7: 1.1.5, ts4.9: 1.1.13
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Discussions](./.skilld/discussions/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
@@ -17,6 +18,7 @@ metadata:
 Use `skilld search "query" -p @types/bun` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @types/bun` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
+
 ## API Changes
 
 This section documents version-specific API changes — prioritize recent major/minor releases.
@@ -52,9 +54,11 @@ This section documents version-specific API changes — prioritize recent major/
 - NEW: `Bun.inspectObject` — New function for deep object inspection, providing structured output instead of raw string representation [source](./.skilld/releases/v1.4.0.md#new-features)
 
 - Also changed: `Bun.env` · Deprecated in v1.4.0. Use `Bun.env.get()` instead · `Bun.run` · Renamed to `Bun.runSync` for synchronous execution
+
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
+
 ## Best Practices
 
 - Use the `createX()` helper function for all network clients and services instead of manual instantiation to ensure proper resource cleanup and lifecycle management [source](./.skilld/docs/api.md#createx)
@@ -82,4 +86,5 @@ This section documents version-specific API changes — prioritize recent major/
 - When working with Bun's internal module resolution, ensure that `no_ignore: true` is passed to package searches to avoid silent failures when dealing with deeply nested or non-standard dependency structures [source](./.skilld/pkg-bun/index.d.ts:L5)
 
 - Mark any custom or experimental API usage with the `(experimental)` tag in the type definition to clearly signal instability to other developers [source](./.skilld/docs/experimental-apis.md)
+
 <!-- /skilld:best-practices -->

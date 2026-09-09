@@ -52,6 +52,19 @@ verification means running the CLI against real staged changes.
   total a few hundred tokens. When reading usage, sum `input_tokens` +
   `cache_creation_input_tokens` + `cache_read_input_tokens` - Claude Code
   auto-caches the prompt, so `input_tokens` alone can read as ~10.
+- Ollama's context window is the thing that breaks. A prompt over `num_ctx`
+  is truncated _silently_ (HTTP 200, oldest content dropped), so a summary
+  that reads like it only saw half the diff is exactly that. cco pins
+  `options.num_ctx` and cross-checks `prompt_eval_count`; to see the check
+  fire, run with `--ollama-context 512` - it reports the truncation against
+  a real server in seconds, and is the cheapest proof the safety net works.
+  Verify what the server actually
+  loaded with `curl -s localhost:11434/api/ps | jq '.models[].context_length'`
+  while a model is resident.
+- A first Ollama run pays model load time (tens of seconds for a 35b), which
+  looks like a hang behind the spinner. Set `"keepAlive": "10m"` while
+  iterating, or pre-warm with
+  `curl -s localhost:11434/api/chat -d '{"model":"<m>","messages":[]}'`.
 - Token-density check for armored content: age/gpg armor tokenizes at ~1.14
   chars/token on current models (measured 2026-07-23), not the ~3.5 of prose.
   A "Prompt is too long" error whose reported request size is ~3-4x the

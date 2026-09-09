@@ -1,5 +1,7 @@
 /**
- * Path matching for the `lowPriorityPaths` configuration option.
+ * Path matching for the path-list configuration options - `lowPriorityPaths`
+ * (weigh these changes less) and `ignore` (do not read these changes at all).
+ * Both take the same pattern language, so both compile through here.
  *
  * Patterns follow gitignore conventions rather than raw glob semantics,
  * because that is what users reach for when they write
@@ -18,7 +20,7 @@
  *   trailing `/` is accepted (gitignore's "directory only" marker) and
  *   ignored, since the ancestor rule already covers a directory's contents.
  * - A leading `!` negates: patterns are evaluated in order and the last one
- *   that matches decides, so `["docs/**", "!docs/adr/**"]` deprioritises
+ *   that matches decides, so `["docs/**", "!docs/adr/**"]` selects
  *   docs except the ADRs. `\!` matches a literal leading bang.
  *
  * Paths are always repository-root-relative with `/` separators, which is
@@ -111,7 +113,7 @@ function matchesCompiled(
  * Build a matcher for a list of gitignore-style patterns. Compile once per
  * run and reuse it across every path in the diff.
  */
-export function createLowPriorityMatcher(patterns: string[]): PathMatcher {
+export function createPathMatcher(patterns: string[]): PathMatcher {
   const compiled = patterns
     .map(compilePattern)
     .filter((entry): entry is CompiledPattern => entry !== null);
@@ -132,6 +134,6 @@ export function createLowPriorityMatcher(patterns: string[]): PathMatcher {
 }
 
 /** Whether `path` matches any of the gitignore-style `patterns`. */
-export function isLowPriorityPath(path: string, patterns: string[]): boolean {
-  return createLowPriorityMatcher(patterns)(path);
+export function matchesPathPatterns(path: string, patterns: string[]): boolean {
+  return createPathMatcher(patterns)(path);
 }

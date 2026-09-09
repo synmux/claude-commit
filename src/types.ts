@@ -2,12 +2,53 @@
  * Shared types for claude-commit.
  */
 
-/** Which models to use for each stage of the pipeline. */
+/**
+ * Which models to use for each stage of the pipeline.
+ *
+ * A bare name (`sonnet`, `haiku`, a full `claude-*` id) runs through the
+ * Claude Agent SDK. An `ollama:`-prefixed name runs against a local or
+ * self-hosted Ollama server instead, with everything after the prefix taken
+ * as the Ollama model name verbatim - tag included, so
+ * `ollama:ornith-1.5:35b` means the model `ornith-1.5:35b`. The two stages
+ * are resolved independently, so mixing providers is normal.
+ */
 export interface ModelConfig {
   /** Model used to read diffs and write summaries. Defaults to `sonnet`. */
   summary: string;
   /** Model used to turn summaries into the final commit message. Defaults to `sonnet`. */
   final: string;
+}
+
+/** Settings for the Ollama backend, used only by `ollama:`-prefixed models. */
+export interface OllamaConfig {
+  /**
+   * Base URL of the Ollama server. Defaults to `$OLLAMA_HOST`, falling back
+   * to `http://localhost:11434`. A bare `host:port` (Ollama's own
+   * convention for that variable) is given an `http://` scheme.
+   */
+  host: string;
+  /**
+   * Context window, in tokens, requested for every Ollama call
+   * (`options.num_ctx`) and used to size diff chunks.
+   *
+   * This is always sent explicitly, never left to the server: Ollama's own
+   * default depends on available VRAM (4k/32k/256k tiers), and a prompt over
+   * that limit is truncated *silently* - HTTP 200, oldest content dropped,
+   * no flag on the response. A summary written from half a diff is worse
+   * than an error, so cco pins the number it sized its chunks against.
+   *
+   * Set it to what the machine can hold, not what the model advertises:
+   * memory scales with this value (multiplied by `OLLAMA_NUM_PARALLEL`), so
+   * a model whose maximum is 131072 may still only run at 32768 here.
+   */
+  contextTokens: number;
+  /**
+   * How long the server keeps the model loaded after a request: a duration
+   * string (`"10m"`), seconds as a number, `0` to unload immediately, or a
+   * negative value to pin it. `null` leaves the server's own default (which
+   * is itself 5 minutes unless `OLLAMA_KEEP_ALIVE` says otherwise).
+   */
+  keepAlive: string | number | null;
 }
 
 /** Fully-resolved configuration after merging defaults, file config and CLI flags. */
@@ -77,6 +118,23 @@ export interface Config {
    */
   lowPriorityPaths: string[];
   /**
+   * Gitignore-style patterns - the same language as `lowPriorityPaths` - for
+   * paths whose changes should not be read at all: vendored dependency
+   * trees, generated clients, bulk data fixtures. Matching diff sections are
+   * dropped before anything else looks at the diff, so they cost no tokens
+   * and cannot influence the message.
+   *
+   * The files are still committed; this governs only what the model reads.
+   * When every changed file matches, there is nothing left to describe and
+   * the run stops with an error naming the directive - unlike
+   * `lowPriorityPaths`, which promotes its partition in that case, because
+   * "this matters less" can degrade gracefully and "do not look at this"
+   * cannot.
+   */
+  ignore: string[];
+  /** Settings for the Ollama backend (`ollama:`-prefixed models). */
+  ollama: OllamaConfig;
+  /**
    * Allow API credentials from the environment (`ANTHROPIC_API_KEY` /
    * `ANTHROPIC_AUTH_TOKEN`) to be used, billing pay-as-you-go instead of the
    * Claude subscription. When false (the default) those variables are
@@ -88,7 +146,11 @@ export interface Config {
 
 /** Partial config as it may appear in a config file or be produced by flags. */
 export type PartialConfig = {
-  [K in keyof Config]?: K extends "models" ? Partial<ModelConfig> : Config[K];
+  [K in keyof Config]?: K extends "models"
+    ? Partial<ModelConfig>
+    : K extends "ollama"
+      ? Partial<OllamaConfig>
+      : Config[K];
 };
 
 /**
@@ -123,4 +185,48 @@ export interface FileChange {
   status: string;
   /** Path of the file (the destination path for renames). */
   path: string;
+}
+
+/**
+ * One prompt to one model, whichever provider serves it.
+ *
+ * `model` carries the provider: bare names go to Claude, `ollama:`-prefixed
+ * ones to Ollama (see {@link ModelConfig}). Some options only apply to one
+ * provider - `allowApiKey` gates Claude credentials, `ollama` supplies the
+ * host and context window - and each is simply ignored by the other.
+ */
+export interface RunPromptOptions {
+  /** Model string: an alias (`sonnet`), a full id, or `ollama:<name>[:<tag>]`. */
+  model: string;
+  /** Full custom system prompt. */
+  system: string;
+  /** Receives assistant text as it streams in (enables partial messages). */
+  onText?: (delta: string) => void;
+  /** Abort the in-flight request. */
+  abortController?: AbortController;
+  /** Receives the underlying CLI's stderr (for `--verbose`). Claude only. */
+  onStderr?: (data: string) => void;
+  /**
+   * Sampling temperature. Used to add variety when generating several
+   * interactive options. Models that don't accept a temperature override
+   * will reject the request, so the caller should be prepared to retry
+   * without it.
+   */
+  temperature?: number;
+  /**
+   * Request a structured JSON response matching this schema. The parsed object
+   * is returned on {@link ModelResult.structured}. Models that don't support
+   * structured outputs will reject the request or return unparseable content,
+   * so the caller should be prepared to retry without it.
+   */
+  outputFormat?: { type: "json_schema"; schema: Record<string, unknown> };
+  /**
+   * Allow API credentials from the environment to reach the Claude Agent SDK
+   * subprocess. Defaults to false: `ANTHROPIC_API_KEY` /
+   * `ANTHROPIC_AUTH_TOKEN` are stripped so the run is billed to the Claude
+   * subscription. Has no meaning for Ollama, which takes no credential.
+   */
+  allowApiKey?: boolean;
+  /** Ollama host and context settings; required for an `ollama:` model. */
+  ollama?: OllamaConfig;
 }

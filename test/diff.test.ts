@@ -1,12 +1,13 @@
 import { test, expect, describe } from "bun:test";
 import {
+  applyIgnorePatterns,
   partitionDiff,
   redactOpaqueRuns,
   sectionPaths,
   splitDiff,
   splitDiffToFit,
 } from "../src/diff";
-import { createLowPriorityMatcher } from "../src/paths";
+import { createPathMatcher } from "../src/paths";
 import { estimateDiffTokens } from "../src/tokens";
 
 const armorLine = (index: number) =>
@@ -422,7 +423,7 @@ describe("partitionDiff", () => {
   });
 
   test("a negated pattern keeps a file in the primary partition", () => {
-    const matcher = createLowPriorityMatcher(["*.txt", "!a.txt"]);
+    const matcher = createPathMatcher(["*.txt", "!a.txt"]);
     const diff = `${fileA}\n${fileB}`;
     expect(partitionDiff(diff, matcher)).toMatchObject({
       primary: fileA,
@@ -466,5 +467,120 @@ describe("partitionDiff", () => {
       totalFiles: 0,
       promoted: false,
     });
+  });
+});
+
+describe("applyIgnorePatterns", () => {
+  const codeFile = [
+    "diff --git a/src/app.ts b/src/app.ts",
+    "--- a/src/app.ts",
+    "+++ b/src/app.ts",
+    "@@ -1 +1 @@",
+    "-const a = 1;",
+    "+const a = 2;",
+  ].join("\n");
+
+  const vendorFile = [
+    "diff --git a/vendor/lib.js b/vendor/lib.js",
+    "--- a/vendor/lib.js",
+    "+++ b/vendor/lib.js",
+    "@@ -1 +1 @@",
+    "-old",
+    "+new",
+  ].join("\n");
+
+  const lockFile = [
+    "diff --git a/bun.lock b/bun.lock",
+    "--- a/bun.lock",
+    "+++ b/bun.lock",
+    "@@ -1 +1 @@",
+    "-x",
+    "+y",
+  ].join("\n");
+
+  test("returns the diff untouched when nothing matches", () => {
+    const result = applyIgnorePatterns(
+      `${codeFile}\n${vendorFile}`,
+      createPathMatcher(["node_modules"]),
+    );
+    expect(result.diff).toBe(`${codeFile}\n${vendorFile}`);
+    expect(result.ignoredFiles).toBe(0);
+    expect(result.totalFiles).toBe(2);
+  });
+
+  test("drops a matching section and keeps the rest a valid diff", () => {
+    const result = applyIgnorePatterns(
+      `${codeFile}\n${vendorFile}`,
+      createPathMatcher(["vendor/**"]),
+    );
+    expect(result.diff).toBe(codeFile);
+    expect(result.ignoredFiles).toBe(1);
+    expect(result.totalFiles).toBe(2);
+  });
+
+  test("drops several sections from anywhere in the diff", () => {
+    const result = applyIgnorePatterns(
+      `${vendorFile}\n${codeFile}\n${lockFile}`,
+      createPathMatcher(["vendor/**", "bun.lock"]),
+    );
+    expect(result.diff).toBe(codeFile);
+    expect(result.ignoredFiles).toBe(2);
+    expect(result.totalFiles).toBe(3);
+  });
+
+  test("can empty the diff entirely - the caller decides what that means", () => {
+    const result = applyIgnorePatterns(
+      `${vendorFile}\n${lockFile}`,
+      createPathMatcher(["vendor/**", "bun.lock"]),
+    );
+    expect(result.diff).toBe("");
+    expect(result.ignoredFiles).toBe(2);
+    expect(result.totalFiles).toBe(2);
+  });
+
+  test("keeps a rename out of an ignored path, because that is news", () => {
+    const renamed = [
+      "diff --git a/vendor/lib.js b/src/lib.js",
+      "similarity index 100%",
+      "rename from vendor/lib.js",
+      "rename to src/lib.js",
+    ].join("\n");
+    const result = applyIgnorePatterns(
+      renamed,
+      createPathMatcher(["vendor/**"]),
+    );
+    expect(result.diff).toBe(renamed);
+    expect(result.ignoredFiles).toBe(0);
+  });
+
+  test("keeps a section whose path cannot be recognised", () => {
+    const odd = "some preamble that is not a diff section at all";
+    const result = applyIgnorePatterns(
+      `${odd}\n${vendorFile}`,
+      createPathMatcher(["vendor/**"]),
+    );
+    expect(result.diff).toBe(odd);
+    expect(result.totalFiles).toBe(1);
+    expect(result.ignoredFiles).toBe(1);
+  });
+
+  test("honours a negation, last match winning", () => {
+    const result = applyIgnorePatterns(
+      `${codeFile}\n${vendorFile}\n${lockFile}`,
+      createPathMatcher(["vendor/**", "bun.lock", "!bun.lock"]),
+    );
+    expect(result.diff).toBe(`${codeFile}\n${lockFile}`);
+    expect(result.ignoredFiles).toBe(1);
+  });
+
+  test("handles an empty diff", () => {
+    const result = applyIgnorePatterns("", createPathMatcher(["x"]));
+    expect(result).toEqual({ diff: "", ignoredFiles: 0, totalFiles: 0 });
+  });
+
+  test("an empty pattern list drops nothing", () => {
+    const result = applyIgnorePatterns(codeFile, createPathMatcher([]));
+    expect(result.diff).toBe(codeFile);
+    expect(result.ignoredFiles).toBe(0);
   });
 });
