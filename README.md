@@ -403,6 +403,10 @@ bun test          # run the test suite
 bun run typecheck # tsc --noEmit
 ```
 
+What changed between versions is in [CHANGELOG.md](CHANGELOG.md), and at
+greater length on the
+[releases page](https://github.com/synmux/claude-commit/releases).
+
 ## Did you vibe this?
 
 I distinguish vibe coding and AI-assisted development by
