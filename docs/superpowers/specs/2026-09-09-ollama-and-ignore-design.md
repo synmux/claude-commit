@@ -7,7 +7,7 @@ Two independent changes shipped together.
 
 ## Part 1: Ollama models
 
-### Problem
+### Part 1: Problem
 
 Every model call goes through the Claude Agent SDK, which spawns the bundled
 `claude` binary. That binds cco to Claude models and to a Claude subscription.
@@ -15,7 +15,7 @@ Summarising a diff is a dull, high-volume, low-stakes job - exactly the kind
 of work a local model can do for free - and the diff is the most sensitive
 thing cco touches, so keeping it on the machine has value beyond cost.
 
-### Decision
+### Part 1: Decision
 
 A model string may carry an `ollama:` prefix. Everything after the prefix is
 the Ollama model name **verbatim**, tags and all, so
@@ -156,14 +156,14 @@ the Claude path.
 
 ## Part 2: `ignore`
 
-### Problem
+### Part 2: Problem
 
 `lowPriorityPaths` deprioritises churn; it still reads and pays for all of
 it. Some content is worth neither: a vendored dependency tree, a generated
 API client, a data fixture that changes wholesale. Reading it costs tokens
 and time and cannot improve the message.
 
-### Decision
+### Part 2: Decision
 
 `ignore: string[]` (default `[]`) takes the same gitignore-style patterns as
 `lowPriorityPaths`. Matching file sections are removed from the diff before
