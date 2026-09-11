@@ -16,6 +16,10 @@ The codebase is intentionally small. The core path is:
 7. Ask a final model to turn the summaries into one or more commit messages.
 8. Print, prompt, edit, or commit depending on CLI mode.
 
+With `filenamesOnly: true` (`-f` / `--filenames-only`), steps 5 and 6 are
+skipped. Step 7 receives only the filenames from the filtered, priority-grouped
+diff. The final model writes a broader message without seeing file changes.
+
 ## Repository Map
 
 ```text
@@ -160,6 +164,8 @@ Defaults worth knowing:
 
 - Summary model: `sonnet`
 - Final model: `sonnet`
+- `filenamesOnly`: `false` (when true, skip summarisation and send filenames
+  directly to the final model)
 - `maxChunkTokens`: `600_000` (clamped at generation time to the summary
   model's context window minus a fixed reserve - `clampChunkTokens` in
   `src/tokens.ts` - so a chunk can never overflow the model)
@@ -184,8 +190,13 @@ chunk count, and reported model cost.
 
 ```mermaid
 flowchart LR
-  diff[Staged diff] --> redact[redactOpaqueRuns when skipArmored]
+  diff[Staged diff] --> ignore[applyIgnorePatterns]
+  ignore --> mode{filenamesOnly?}
+  mode -->|No| redact[redactOpaqueRuns when skipArmored]
   redact --> partition[partitionDiff by lowPriorityPaths]
+  mode -->|Yes| namesPartition[partitionDiff by lowPriorityPaths]
+  namesPartition --> paths[diffPaths for each priority]
+  paths --> filenamesPrompt[buildFilenamesUser]
   partition --> primary[Primary partition]
   partition --> low[Low-priority partition]
   primary --> budget[clampChunkTokens + splitDiffToFit]
@@ -194,13 +205,14 @@ flowchart LR
   chunks --> summaryLoop[For each chunk: summary prompt for its priority]
   summaryLoop --> summaries[DiffSummary list - primary first]
   summaries --> finalPrompt[Final prompt - grouped when both priorities]
+  filenamesPrompt --> finalModel
   finalPrompt --> finalModel[Final model]
   finalModel --> clean[parseOptions + cleanMessage]
   clean --> result[GenerateResult]
 ```
 
 Before either model stage, `partitionDiff()` (`src/diff.ts`) sorts the diff's
-file sections by the `lowPriorityPaths` matcher (`createLowPriorityMatcher()`
+file sections by the `lowPriorityPaths` matcher (`createPathMatcher()`
 in `src/paths.ts`, gitignore semantics on top of `Bun.Glob`). A section is
 low priority only when every path it names matches - `sectionPaths()` reads
 them from the `---`/`+++`/`rename`/`copy` header lines, unquoting git's
@@ -211,7 +223,16 @@ reports `matchedFiles` / `totalFiles` / `promoted`, surfaced as
 `GenerateResult.lowPriority` for the `--verbose` line - the only way to tell a
 pattern that matched nothing from one that matched everything.
 
-The pipeline then has two model stages:
+In filenames-only mode, `diffPaths()` reuses `sectionPaths()` to recover unique
+filenames, including both paths of renames and copies. `buildFilenamesUser()`
+JSON-quotes the names and retains priority grouping. The shared final-stage
+request builder preserves structured output, interactive variety and text
+fallbacks. `buildFinalSystem()` asks for general descriptions and forbids
+invented edits, motivations and test results. No summary-model context is
+resolved or loaded, even when it is configured as an Ollama model. Results
+have `summaries: []`, `chunkCount: 0` and only final-stage costs.
+
+Otherwise, the pipeline has two model stages:
 
 1. **Summarization stage** (`summarizePartition()`, run for the primary
    partition first and then the low-priority one)

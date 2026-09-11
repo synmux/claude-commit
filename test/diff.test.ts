@@ -1,6 +1,7 @@
 import { test, expect, describe } from "bun:test";
 import {
   applyIgnorePatterns,
+  diffPaths,
   partitionDiff,
   redactOpaqueRuns,
   sectionPaths,
@@ -39,6 +40,44 @@ index 333..444 100644
 @@ -1,1 +1,1 @@
 -bee
 +honey`;
+
+describe("diffPaths", () => {
+  test("returns unique names in encounter order without hunk contents", () => {
+    expect(diffPaths(`${fileB}\n${fileA}\n${fileB}`)).toEqual([
+      "b.txt",
+      "a.txt",
+    ]);
+    expect(diffPaths(" \n")).toEqual([]);
+  });
+
+  test("preserves both rename paths alongside additions, deletions and binaries", () => {
+    const diff = [
+      "diff --git a/old name.txt b/new name.txt",
+      "similarity index 100%",
+      "rename from old name.txt",
+      "rename to new name.txt",
+      "diff --git a/added.txt b/added.txt",
+      "--- /dev/null",
+      "+++ b/added.txt",
+      "@@ -0,0 +1 @@",
+      "+content",
+      "diff --git a/deleted.txt b/deleted.txt",
+      "--- a/deleted.txt",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-content",
+      "diff --git a/image.png b/image.png",
+      "Binary files a/image.png and b/image.png differ",
+    ].join("\n");
+    expect(diffPaths(diff)).toEqual([
+      "old name.txt",
+      "new name.txt",
+      "added.txt",
+      "deleted.txt",
+      "image.png",
+    ]);
+  });
+});
 
 describe("splitDiff", () => {
   test("empty diff yields no chunks", () => {

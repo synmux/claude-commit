@@ -2,8 +2,14 @@
 
 ## Architecture
 
-`cco` reads a staged diff and writes a commit message in two model stages.
+`cco` reads a staged diff and normally writes a commit message in two model stages.
 The pipeline lives in `src/generate.ts`; everything else feeds it.
+
+With `filenamesOnly: true` (`-f` / `--filenames-only`), it skips summarisation
+and sends only paths to the final model. Ignore and priority matching still
+apply. Use `diffPaths` for filename extraction and `buildFilenamesUser` for
+the final prompt; never pass diff bodies or preload the summary model in
+this mode. Results contain no summaries and report zero chunks.
 
 ```plaintext
 git.ts ─▶ diff.ts (ignore, partition, chunk) ─▶ generate.ts ─▶ agent.ts ─▶ Claude | Ollama

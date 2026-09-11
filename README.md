@@ -39,6 +39,9 @@ Either stage can run on a local [Ollama](#ollama-models) model instead; by
 default both go through the
 [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
 
+For less model work at the cost of less useful messages, enable
+[`filenamesOnly`](#filenames-only-mode) to skip summarisation entirely.
+
 ## Install
 
 Requires [Bun](https://bun.sh).
@@ -95,6 +98,7 @@ and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 | `-m, --multiline` / `--no-multiline`     | Write a multi-line commit (subject + body), or force a single line                      |
 | `-t, --template <tpl>`                   | Template for the first line, e.g. `"[PROJ-1] {message}"`                                |
 | `-p, --prompt <text>`                    | Extra instructions appended to the prompt                                               |
+| `-f, --filenames-only`                   | Skip summarisation and send only filenames to the final model                           |
 | `--model-summary <model>`                | Model used to summarize the diff (default `sonnet`)                                     |
 | `--model-final <model>`                  | Model used to write the message (default `sonnet`)                                      |
 | `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff       |
@@ -115,12 +119,38 @@ cco                      # generate, confirm, and commit staged changes
 cco -a -c                # stage everything and write a Conventional Commit
 cco -c -g -m             # conventional + gitmoji + a body
 cco -i -n 5              # pick from 5 options interactively
+cco -f --dry-run         # generate from filenames only, without committing
 cco --dry-run | cat      # print a message without committing (TUI-free, pipe-safe)
 git commit -F <(cco -d)  # use the message with your own git invocation
 ```
 
 In a pipe (no TTY) there is no spinner and no confirmation prompt - `cco` just
 generates and commits (or prints, with `--dry-run`).
+
+## Filenames-only mode
+
+Set `"filenamesOnly": true` in any config layer, or pass `-f` /
+`--filenames-only`, to send only the list of filenames touched by staged
+changes to `models.final`. The default is `false`.
+
+```json
+{ "filenamesOnly": true }
+```
+
+The summariser is skipped entirely: no diff chunks, summary calls, or
+summary-model preload. The final model receives no file contents or diff
+hunks, so expect broader, less useful messages. It is instructed to describe
+the affected areas without inventing specific edits or reasons for them.
+Normal formatting, custom instructions and interactive options still apply.
+
+`ignore` still removes matching file sections, and `lowPriorityPaths` still
+groups and weights the remaining filenames. Renames and copies include both
+paths; additions, deletions, binary files and mode changes are included.
+If every staged file is ignored, generation still stops with an error.
+
+`models.summary`, `maxChunkTokens`, `charsPerToken` and `skipArmored` have no
+effect in this mode. `--verbose` reports that the summariser was skipped;
+library results have an empty `summaries` array and `chunkCount: 0`.
 
 ## Interactive mode
 
@@ -172,6 +202,7 @@ keys are valid at every level:
   },
   "maxChunkTokens": 600000,
   "charsPerToken": 3.5,
+  "filenamesOnly": false,
   "skipArmored": false,
   "lowPriorityPaths": [],
   "ignore": [],

@@ -66,6 +66,35 @@ describe("default config", () => {
   });
 });
 
+describe("filenamesOnly", () => {
+  test("accepts only booleans and defaults to false", () => {
+    expect(DEFAULT_CONFIG.filenamesOnly).toBe(false);
+    expect(sanitizePartial({ filenamesOnly: true }).filenamesOnly).toBe(true);
+    expect(sanitizePartial({ filenamesOnly: false }).filenamesOnly).toBe(false);
+    for (const invalid of ["true", "false", 1, 0, null, [], {}]) {
+      expect(
+        sanitizePartial({ filenamesOnly: invalid }).filenamesOnly,
+      ).toBeUndefined();
+    }
+  });
+
+  test("higher layers can enable or disable an inherited mode", () => {
+    expect(resolveConfig({ filenamesOnly: true }, {}).filenamesOnly).toBe(true);
+    expect(
+      resolveConfig({ filenamesOnly: false }, { filenamesOnly: true })
+        .filenamesOnly,
+    ).toBe(true);
+    expect(
+      resolveConfig({ filenamesOnly: true }, { filenamesOnly: false })
+        .filenamesOnly,
+    ).toBe(false);
+    expect(
+      mergePartial({ filenamesOnly: true }, { filenamesOnly: false })
+        .filenamesOnly,
+    ).toBe(false);
+  });
+});
+
 describe("skipArmored", () => {
   test("sanitizes to booleans only and defaults to false", () => {
     expect(sanitizePartial({ skipArmored: true }).skipArmored).toBe(true);
@@ -241,6 +270,26 @@ describe("loadFileConfig", () => {
     );
     const cfg = await loadFileConfig(dir, dir);
     expect(cfg.conventionalCommits).toBe(true);
+  });
+
+  test("reads filenamesOnly from package.json and allows a project override", async () => {
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({
+        "claude-commit": { filenamesOnly: true },
+      }),
+    );
+    expect((await loadFileConfig(dir, dir)).filenamesOnly).toBe(true);
+    await writeFile(
+      join(dir, ".claude-commit.json"),
+      JSON.stringify({ filenamesOnly: false }),
+    );
+    expect((await loadFileConfig(dir, dir)).filenamesOnly).toBe(false);
+    await writeFile(
+      join(dir, ".claude-commit.json"),
+      JSON.stringify({ filenamesOnly: true }),
+    );
+    expect((await loadFileConfig(dir, dir)).filenamesOnly).toBe(true);
   });
 
   test("reads allowApiKey from a config file", async () => {

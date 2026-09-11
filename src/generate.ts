@@ -27,12 +27,15 @@
  * not billed, so the API acts as the final arbiter of token counts. The
  * final model (default `sonnet`) turns the summaries into the commit
  * message(s), applying the configured formatting rules.
+ * With filenamesOnly, the summary stage is skipped entirely and the final
+ * model receives only paths from the filtered, priority-grouped diff.
  */
 import { runPrompt } from "./agent";
 import { isOllamaModel } from "./models";
 import { resolveOllamaContext } from "./ollama";
 import {
   applyIgnorePatterns,
+  diffPaths,
   partitionDiff,
   redactOpaqueRuns,
   splitDiffToFit,
@@ -43,6 +46,7 @@ import { ClaudeCommitError, isPromptTooLongError } from "./errors";
 import {
   buildFinalSystem,
   buildFinalUser,
+  buildFilenamesUser,
   buildSummarySystem,
   buildSummaryUser,
   cleanMessage,
@@ -115,7 +119,7 @@ export interface LowPriorityStats {
 export interface GenerateResult {
   /** Candidate commit messages (length 1 in non-interactive mode). */
   messages: string[];
-  /** The intermediate summaries, primary first, each tagged with its priority. */
+  /** Intermediate summaries, primary first. Empty when filenamesOnly is enabled. */
   summaries: DiffSummary[];
   /** Number of diff chunks the summary stage processed, across both partitions. */
   chunkCount: number;
@@ -311,9 +315,10 @@ export async function generateCommit(
     throw new ClaudeCommitError(describeFullyIgnored(ignored));
   }
 
-  const effectiveDiff = config.skipArmored
-    ? redactOpaqueRuns(ignoreResult.diff)
-    : ignoreResult.diff;
+  const effectiveDiff =
+    config.skipArmored && !config.filenamesOnly
+      ? redactOpaqueRuns(ignoreResult.diff)
+      : ignoreResult.diff;
   const partition = partitionDiff(
     effectiveDiff,
     createPathMatcher(config.lowPriorityPaths),
@@ -322,36 +327,52 @@ export async function generateCommit(
     throw new ClaudeCommitError("There are no staged changes to summarize.");
   }
 
-  // Stage 1: summarise the primary partition first - fail fast on the part
-  // that matters - then the low-priority one (skipped when empty).
-  const partitionOptions: PartitionSummaryOptions = {
-    config,
-    runner,
-    progress,
-    contexts,
-    ...(abortController ? { abortController } : {}),
-  };
-  const primaryStage = await summarizePartition(
-    partition.primary,
-    "primary",
-    partitionOptions,
-  );
-  const lowPriorityStage =
-    partition.lowPriority.trim() === ""
-      ? { summaries: [], costUsd: 0 }
-      : await summarizePartition(
-          partition.lowPriority,
-          "low",
-          partitionOptions,
-        );
-  const summaries = [...primaryStage.summaries, ...lowPriorityStage.summaries];
-  if (summaries.length === 0) {
-    throw new ClaudeCommitError("There are no staged changes to summarize.");
+  const filenames = config.filenamesOnly
+    ? {
+        primary: diffPaths(partition.primary),
+        lowPriority: diffPaths(partition.lowPriority),
+      }
+    : undefined;
+  const summaries: DiffSummary[] = [];
+  let costUsd = 0;
+  if (filenames) {
+    if (filenames.primary.length + filenames.lowPriority.length === 0) {
+      throw new ClaudeCommitError("There are no staged filenames to describe.");
+    }
+  } else {
+    // Stage 1: primary first, then low priority. filenamesOnly bypasses
+    // chunking, summary calls and even the summary model's context probe.
+    const partitionOptions: PartitionSummaryOptions = {
+      config,
+      runner,
+      progress,
+      contexts,
+      ...(abortController ? { abortController } : {}),
+    };
+    const primaryStage = await summarizePartition(
+      partition.primary,
+      "primary",
+      partitionOptions,
+    );
+    const lowPriorityStage =
+      partition.lowPriority.trim() === ""
+        ? { summaries: [], costUsd: 0 }
+        : await summarizePartition(
+            partition.lowPriority,
+            "low",
+            partitionOptions,
+          );
+    summaries.push(...primaryStage.summaries, ...lowPriorityStage.summaries);
+    if (summaries.length === 0) {
+      throw new ClaudeCommitError("There are no staged changes to summarize.");
+    }
+    costUsd = primaryStage.costUsd + lowPriorityStage.costUsd;
   }
-  let costUsd = primaryStage.costUsd + lowPriorityStage.costUsd;
-  const hasLowPriority = hasLowPrioritySummaries(summaries);
+  const hasLowPriority = filenames
+    ? filenames.primary.length > 0 && filenames.lowPriority.length > 0
+    : hasLowPrioritySummaries(summaries);
 
-  // Stage 2: write the commit message(s) from the summaries.
+  // Final stage: write the commit message(s) from summaries or filenames.
   //
   // Prefer a structured (JSON-schema) response so parsing is robust regardless
   // of how the model formats its prose. We try, in order: structured output
@@ -385,7 +406,9 @@ export async function generateCommit(
   for (const attempt of attempts) {
     try {
       const result = await runner(
-        buildFinalUser(summaries, count, attempt.structured),
+        filenames
+          ? buildFilenamesUser(filenames, count, attempt.structured)
+          : buildFinalUser(summaries, count, attempt.structured),
         {
           ...baseOpts,
           system: buildFinalSystem(config, attempt.structured, hasLowPriority),

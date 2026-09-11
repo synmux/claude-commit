@@ -7,6 +7,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each version also has a [GitHub release](https://github.com/synmux/claude-commit/releases)
 carrying the same notes at greater length.
 
+## [1.0.4] - 2026-09-11
+
+### [1.0.4] - Added
+
+- **Filenames-only mode.** Set `"filenamesOnly": true` in your config, or
+  pass `-f` / `--filenames-only`, to skip the summariser and send only
+  filenames to the final model. This reduces model work at the cost of
+  broader, less useful messages; the default remains `false`.
+- Filename lists retain `ignore` filtering and `lowPriorityPaths` weighting,
+  including both paths of renames and copies. Formatting, templates, custom
+  instructions and interactive options still apply; the model is instructed
+  to avoid inventing specific edits or motivations from filenames alone.
+- Verbose output identifies when the summariser was skipped. In this mode,
+  library results contain an empty `summaries` array and `chunkCount: 0`,
+  and the summary model is never called or preloaded.
+
 ## [1.0.3] - 2026-09-11
 
 ### Added
@@ -176,6 +192,7 @@ and `claude-commit` binaries.
   pay-as-you-go billing, because the SDK subprocess inherits `process.env`.
   Those credentials are stripped unless you opt in.
 
+[1.0.4]: https://github.com/synmux/claude-commit/compare/1.0.3...1.0.4
 [1.0.3]: https://github.com/synmux/claude-commit/compare/1.0.2...1.0.3
 [1.0.2]: https://github.com/synmux/claude-commit/compare/1.0.1...1.0.2
 [1.0.1]: https://github.com/synmux/claude-commit/compare/1.0.0...1.0.1

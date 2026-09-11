@@ -316,6 +316,167 @@ describe("generateCommit", () => {
   });
 });
 
+describe("filenamesOnly", () => {
+  const config: Config = { ...lowPriorityConfig, filenamesOnly: true };
+
+  test("skips the summariser and sends only filenames to the final model", async () => {
+    const calls: Array<{ prompt: string; model: string; system: string }> = [];
+    const phases: string[] = [];
+    const result = await generateCommit(
+      `${skillDiff}\n${textDiff}`,
+      {
+        ...config,
+        models: { summary: "ollama:unavailable", final: "final-model" },
+        maxChunkTokens: 1,
+      },
+      {
+        runner: async (prompt, options) => {
+          calls.push({ prompt, model: options.model, system: options.system });
+          return {
+            text: "",
+            costUsd: 0.012,
+            structured: { messages: ["Update files"] },
+          };
+        },
+        resolveOllamaContext: async () => {
+          throw new Error("The summary model must not be loaded");
+        },
+        progress: { onPhase: (phase) => phases.push(phase) },
+      },
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.model).toBe("final-model");
+    expect(calls[0]!.prompt).toContain('"a.txt"');
+    expect(calls[0]!.prompt).toContain('".agents/skills/ora-skilld/SKILL.md"');
+    expect(calls[0]!.prompt).toContain("Low-priority changes");
+    expect(calls[0]!.prompt).not.toMatch(
+      /old line|new line|generated 2026|diff --git|@@|summary of/,
+    );
+    expect(calls[0]!.system).toContain("only the filenames");
+    expect(result.messages).toEqual(["Update files"]);
+    expect(result.chunkCount).toBe(0);
+    expect(result.summaries).toEqual([]);
+    expect(result.costUsd).toBe(0.012);
+    expect(result.ollamaContexts).toEqual([]);
+    expect(phases).toEqual(["Writing commit message"]);
+    expect(result.lowPriority).toEqual({
+      matchedFiles: 1,
+      totalFiles: 2,
+      promoted: false,
+    });
+  });
+
+  test("ignore removes filenames and fully ignored changes fail before a call", async () => {
+    const { runner, finalPrompts, summaryPrompts } = stubRunner();
+    const ignoredConfig = { ...config, ignore: [".agents/**"] };
+    const result = await generateCommit(
+      `${textDiff}\n${skillDiff}`,
+      ignoredConfig,
+      { runner },
+    );
+    expect(finalPrompts[0]).toContain('"a.txt"');
+    expect(finalPrompts[0]).not.toContain("SKILL.md");
+    expect(result.ignored).toEqual({ ignoredFiles: 1, totalFiles: 2 });
+    await expect(
+      generateCommit(skillDiff, ignoredConfig, { runner }),
+    ).rejects.toThrow(/"ignore" pattern/);
+    expect(finalPrompts).toHaveLength(1);
+    expect(summaryPrompts).toEqual([]);
+  });
+
+  test("all-low-priority filenames are promoted", async () => {
+    const { runner, finalPrompts } = stubRunner();
+    const result = await generateCommit(skillDiff, config, { runner });
+    expect(result.lowPriority.promoted).toBe(true);
+    expect(finalPrompts[0]).toContain("SKILL.md");
+    expect(finalPrompts[0]).not.toContain("Low-priority changes");
+  });
+
+  test("armoured content is never sent, regardless of skipArmored", async () => {
+    for (const skipArmored of [false, true]) {
+      const { runner, finalPrompts, summaryPrompts } = stubRunner();
+      await generateCommit(
+        armorDiff(400),
+        { ...config, skipArmored },
+        { runner },
+      );
+      expect(summaryPrompts).toEqual([]);
+      expect(finalPrompts[0]).toContain('"secret.age"');
+      expect(finalPrompts[0]).not.toMatch(/Ab9Xy|omitted|@@/);
+    }
+  });
+
+  test("interactive fallbacks keep filename input and resolve only the final Ollama model", async () => {
+    const prompts: string[] = [];
+    const temperatures: Array<number | undefined> = [];
+    const probes: string[] = [];
+    const abortController = new AbortController();
+    const streamed: string[] = [];
+    const result = await generateCommit(
+      textDiff,
+      {
+        ...config,
+        models: { summary: "ollama:summary", final: "ollama:final" },
+      },
+      {
+        count: 2,
+        abortController,
+        progress: { onText: (text) => streamed.push(text) },
+        resolveOllamaContext: async (model) => {
+          probes.push(model);
+          return 8192;
+        },
+        runner: async (prompt, options) => {
+          prompts.push(prompt);
+          temperatures.push(options.temperature);
+          expect(options.model).toBe("ollama:final");
+          expect(options.ollama?.context).toBe(8192);
+          expect(options.abortController).toBe(abortController);
+          expect(options.allowApiKey).toBe(false);
+          if (options.outputFormat)
+            return { text: "invalid JSON", costUsd: 0.001 };
+          options.onText?.("Update files");
+          return {
+            text: "===OPTION===\nUpdate files\n===OPTION===\nRefresh files",
+            costUsd: 0.002,
+          };
+        },
+      },
+    );
+    expect(probes).toEqual(["ollama:final"]);
+    expect(temperatures).toEqual([
+      config.interactiveTemperature ?? undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(prompts).toHaveLength(3);
+    for (const prompt of prompts) {
+      expect(prompt).toContain('"a.txt"');
+      expect(prompt).toContain("exactly 2 distinct");
+      expect(prompt).not.toMatch(/old line|new line|diff --git|@@/);
+    }
+    expect(result.messages).toEqual(["Update files", "Refresh files"]);
+    expect(result.costUsd).toBeCloseTo(0.004);
+    expect(result.chunkCount).toBe(0);
+    expect(streamed).toEqual(["Update files"]);
+    expect(result.ollamaContexts).toEqual([
+      { model: "ollama:final", tokens: 8192, source: "auto" },
+    ]);
+  });
+
+  test.each(["", " \n", "unrecognisable input"])(
+    "rejects input without filenames: %p",
+    async (diff) => {
+      const { runner, finalPrompts, summaryPrompts } = stubRunner();
+      await expect(generateCommit(diff, config, { runner })).rejects.toThrow(
+        /no staged/i,
+      );
+      expect(finalPrompts).toEqual([]);
+      expect(summaryPrompts).toEqual([]);
+    },
+  );
+});
+
 describe("ignore", () => {
   const codeFile = [
     "diff --git a/src/app.ts b/src/app.ts",

@@ -7,6 +7,30 @@ import {
   flagsToConfig,
   resolveInteractiveMode,
 } from "../src/cli";
+import { resolveConfig } from "../src/config";
+
+describe("filenames-only flags", () => {
+  test.each(["-f", "--filenames-only"])("%s enables the mode", (flag) => {
+    const program = buildProgram();
+    program.parse([flag], { from: "user" });
+    const flags = flagsToConfig(program.opts());
+    expect(flags.filenamesOnly).toBe(true);
+    expect(resolveConfig({ filenamesOnly: false }, flags).filenamesOnly).toBe(
+      true,
+    );
+  });
+
+  test("omitting the flag preserves the configured mode", () => {
+    const program = buildProgram();
+    program.parse([], { from: "user" });
+    const flags = flagsToConfig(program.opts());
+    expect(flags.filenamesOnly).toBeUndefined();
+    expect(resolveConfig({ filenamesOnly: true }, flags).filenamesOnly).toBe(
+      true,
+    );
+    expect(resolveConfig({}, flags).filenamesOnly).toBe(false);
+  });
+});
 
 describe("resolveInteractiveMode", () => {
   const base = {

@@ -30,6 +30,7 @@ export const DEFAULT_CONFIG: Config = {
   },
   maxChunkTokens: 600_000,
   charsPerToken: 3.5,
+  filenamesOnly: false,
   skipArmored: false,
   lowPriorityPaths: [],
   ignore: [],
@@ -120,6 +121,7 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   bool("multiline");
   bool("interactive");
   bool("skipArmored");
+  bool("filenamesOnly");
   bool("allowApiKey");
 
   if (typeof obj.template === "string") out.template = obj.template;

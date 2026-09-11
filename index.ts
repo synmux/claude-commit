@@ -32,6 +32,7 @@ export {
 export type { ModelProvider, ModelRef } from "./src/models";
 export {
   applyIgnorePatterns,
+  diffPaths,
   partitionDiff,
   sectionPaths,
   splitDiff,
@@ -52,6 +53,7 @@ export {
   buildSummaryUser,
   buildFinalSystem,
   buildFinalUser,
+  buildFilenamesUser,
   parseOptions,
   cleanMessage,
 } from "./src/prompts";

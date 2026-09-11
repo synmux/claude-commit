@@ -431,6 +431,15 @@ export function sectionPaths(section: string): string[] {
 }
 
 /**
+ * Unique repository-relative filenames touched by a diff, in encounter
+ * order. Includes both paths of renames and copies. Uses the same header
+ * parser as ignore/priority matching, so hunk contents cannot become names.
+ */
+export function diffPaths(diff: string): string[] {
+  return [...new Set(splitFileSections(diff).flatMap(sectionPaths))];
+}
+
+/**
  * Sort a diff's file sections into a primary and a low-priority diff.
  *
  * A section is low priority only when it names at least one path and every

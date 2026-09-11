@@ -45,6 +45,7 @@ interface CliOptions {
   config?: string;
   verbose?: boolean;
   skipArmored?: boolean;
+  filenamesOnly?: boolean;
   /** `false` when `--no-low-priority-paths` was passed (Commander's negated-flag shape). */
   lowPriorityPaths?: boolean;
   /** `false` when `--no-ignore` was passed (Commander's negated-flag shape). */
@@ -83,6 +84,10 @@ export function buildProgram(): Command {
       'template for the first line, e.g. "[PROJ-1] {message}"',
     )
     .option("-p, --prompt <text>", "extra instructions appended to the prompt")
+    .option(
+      "-f, --filenames-only",
+      "skip summarisation and use only filenames (faster, less useful messages)",
+    )
     .option("--model-summary <model>", "model used to summarize the diff")
     .option("--model-final <model>", "model used to write the final message")
     .option(
@@ -162,6 +167,7 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
   if (opts.template !== undefined) cfg.template = opts.template;
   if (opts.prompt !== undefined) cfg.customPrompt = opts.prompt;
   if (opts.skipArmored !== undefined) cfg.skipArmored = opts.skipArmored;
+  if (opts.filenamesOnly !== undefined) cfg.filenamesOnly = opts.filenamesOnly;
   // A negated flag arrives as `false`; an empty list overrides any
   // configured patterns because lists replace rather than merge.
   if (opts.lowPriorityPaths === false) cfg.lowPriorityPaths = [];
@@ -322,7 +328,7 @@ async function runNonInteractive(
   const useSpinner = opts.spinner !== false && process.stderr.isTTY;
   const spinner = new Spinner(useSpinner, config.spinner);
 
-  spinner.start("Reading diff");
+  spinner.start(config.filenamesOnly ? "Reading filenames" : "Reading diff");
   let result;
   try {
     result = await generateCommit(diff, config, {
@@ -339,7 +345,7 @@ async function runNonInteractive(
     process.stderr.write(
       color(
         "90",
-        `${result.chunkCount} chunk(s), cost $${result.costUsd.toFixed(4)}`,
+        `${config.filenamesOnly ? "filenames only (summariser skipped)" : `${result.chunkCount} chunk(s)`}, cost $${result.costUsd.toFixed(4)}`,
       ) + "\n",
     );
     for (const window of result.ollamaContexts) {

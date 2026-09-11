@@ -96,6 +96,12 @@ export interface Config {
   /** Models for each pipeline stage. */
   models: ModelConfig;
   /**
+   * Skip diff summarisation and send only changed filenames to the final
+   * model. Uses less time and tokens at the cost of less useful messages.
+   * Defaults to false; ignore and lowPriorityPaths still apply.
+   */
+  filenamesOnly: boolean;
+  /**
    * Approximate maximum number of tokens of diff to send to the summary model
    * in a single request. Diffs larger than this are split across requests.
    */

@@ -1,7 +1,7 @@
 {
   "name": "@synmux/claude-commit",
-  "version": "1.0.3",
-  "description": "Generate git commit messages with Claude, using your Claude Code subscription.",
+  "version": "1.0.4",
+  "description": "Generate git commit messages with Claude, using your Claude Code subscription and/or Ollama.",
   "main": "index.ts",
   "module": "index.ts",
   "type": "module",
@@ -21,6 +21,7 @@
     "charsPerToken": 3.5,
     "conventionalCommits": true,
     "customPrompt": null,
+    "filenamesOnly": true,
     "gitmoji": true,
     "interactive": false,
     "interactiveCount": 10,
@@ -31,10 +32,10 @@
       "bun.lock",
       ".serena"
     ],
-    "maxChunkTokens": 1000000,
+    "maxChunkTokens": 32768,
     "models": {
-      "summary": "fable",
-      "final": "fable"
+      "summary": "ollama:gemma4:e4b-mlx",
+      "final": "ollama:gemma4:e4b-mlx"
     },
     "multiline": true,
     "ollama": {
