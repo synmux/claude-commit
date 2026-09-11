@@ -16,28 +16,34 @@
     "index.ts"
   ],
   "claude-commit": {
-    "conventionalCommits": true,
-    "gitmoji": true,
-    "multiline": true,
-    "template": null,
-    "customPrompt": null,
-    "interactive": false,
-    "interactiveCount": 3,
-    "interactiveTemperature": 1,
-    "spinner": "material",
-    "models": {
-      "summary": "sonnet",
-      "final": "sonnet"
-    },
-    "maxChunkTokens": 600000,
+    "allowApiKey": false,
     "charsPerToken": 3.5,
+    "conventionalCommits": true,
+    "customPrompt": null,
+    "gitmoji": true,
+    "interactive": false,
+    "interactiveCount": 10,
+    "interactiveTemperature": 1,
     "lowPriorityPaths": [
-      ".agents/skills/*-skilld",
-      ".agents/skills/skilld-lock.yaml",
+      ".agents/**",
+      ".claude/**",
       "bun.lock",
       ".serena"
     ],
-    "allowApiKey": false
+    "maxChunkTokens": 1000000,
+    "models": {
+      "summary": "fable",
+      "final": "fable"
+    },
+    "multiline": true,
+    "ollama": {
+      "host": "http://localhost:11434",
+      "context": "auto",
+      "keepAlive": "10m"
+    },
+    "skipArmored": true,
+    "spinner": "pong",
+    "template": null
   },
   "devDependencies": {
     "@anthropic-ai/claude-code": "^2.1.241",
