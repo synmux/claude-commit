@@ -48,13 +48,13 @@ carrying the same notes at greater length.
 
 ## [1.0.2] - 2026-07-27
 
-### Changed
+### [1.0.2] - Changed
 
 - The default spinner is now `dwarfFortress` instead of `bouncingBall`.
 
 ## [1.0.1] - 2026-07-27
 
-### Added
+### [1.0.1] - Added
 
 - **A configurable spinner.** The `spinner` config key accepts any name from
   the [cli-spinners](https://github.com/sindresorhus/cli-spinners) set bundled
@@ -62,7 +62,7 @@ carrying the same notes at greater length.
   the default rather than throwing, because a cosmetic option must never be
   able to break a commit.
 
-### Changed
+### [1.0.1] - Changed
 
 - The progress spinner is an ora instance rather than a hand-rolled frame
   timer. Enablement is still decided solely by the existing TTY and
@@ -71,7 +71,7 @@ carrying the same notes at greater length.
 
 ## [1.0.0] - 2026-07-24
 
-### Added
+### [1.0.0] - Added
 
 - **`--skip-armored`** and the matching `skipArmored` config key, replacing
   each run of armoured or encoded lines with a short marker. Runs of one or two
@@ -80,7 +80,7 @@ carrying the same notes at greater length.
   `chezmoi re-add`, so this is the recommended mode for repos holding encrypted
   files.
 
-### Fixed
+### [1.0.0] - Fixed
 
 - **Chunks are sized by real token density.** `Prompt is too long` returned,
   and the isolation fix in 0.1.3 turned out to have treated a symptom. Armoured
@@ -95,7 +95,7 @@ carrying the same notes at greater length.
   (its rejection is free, unbilled, and the only authoritative count), the
   budget is halved, that chunk is re-split, and processing continues in place.
 
-### Changed
+### [1.0.0] - Changed
 
 - The 0.1.3 documentation blaming these failures on MCP/skill leakage is
   corrected. That isolation stays as hygiene and cost control, but density was
@@ -103,14 +103,14 @@ carrying the same notes at greater length.
 
 ## [0.1.4] - 2026-07-23
 
-### Fixed
+### [0.1.4] - Fixed
 
 - `cco --version` reported a hardcoded string rather than the installed package
   version.
 
 ## [0.1.3] - 2026-07-23
 
-### Fixed
+### [0.1.3] - Fixed
 
 - **Requests no longer inherit your global Claude Code context.** Runs failed
   reporting ~1,149k tokens against a conversation of only ~301k; the missing
@@ -127,25 +127,25 @@ carrying the same notes at greater length.
   exceed the whole window. It is now a cap rather than a promise, clamped to
   the model's window minus a 32k reserve.
 
-### Added
+### [0.1.3] - Added
 
 - npm publishing on version tags via CI.
 
 ## [0.1.2] - 2026-07-09
 
-### Changed
+### [0.1.2] - Changed
 
 - **Both pipeline stages default to `sonnet`.** The final stage's input is a
   handful of summaries and its output is the entire point of the tool, so a
   strong model there costs almost nothing and writes a visibly better message.
 
-### Added
+### [0.1.2] - Added
 
 - MIT licence.
 
 ## [0.1.1] - 2026-07-02
 
-### Changed
+### [0.1.1] - Changed
 
 - Minor tweaks.
 
@@ -154,7 +154,7 @@ carrying the same notes at greater length.
 The first release, published as `@synmux/claude-commit` and providing the `cco`
 and `claude-commit` binaries.
 
-### Added
+### [0.1.0] - Added
 
 - **The two-stage pipeline.** The diff is split into chunks that fit the
   context window, each chunk is summarised, and the summaries are handed back
