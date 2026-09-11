@@ -21,7 +21,7 @@
     "charsPerToken": 3.5,
     "conventionalCommits": true,
     "customPrompt": null,
-    "filenamesOnly": true,
+    "filenamesOnly": false,
     "gitmoji": true,
     "interactive": false,
     "interactiveCount": 10,
