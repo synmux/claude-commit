@@ -417,6 +417,121 @@ describe("ignore", () => {
   });
 });
 
+describe("Ollama auto context", () => {
+  const stubRunner = (async () => ({
+    text: "A summary",
+    costUsd: 0,
+  })) as Runner;
+  const ollamaConfig = (over: Partial<Config> = {}): Config => ({
+    ...baseConfig,
+    models: { summary: "ollama:gemma4", final: "ollama:gemma4" },
+    ollama: { ...baseConfig.ollama, context: "auto" },
+    ...over,
+  });
+
+  test("resolves the window once per model, before any chunk is sized", async () => {
+    const asked: string[] = [];
+    const result = await generateCommit(armorFreeDiff(4_000), ollamaConfig(), {
+      runner: stubRunner,
+      resolveOllamaContext: async (model) => {
+        asked.push(model);
+        return 8_192;
+      },
+    });
+    // Summary and final are the same model: one probe serves both stages.
+    expect(asked).toEqual(["ollama:gemma4"]);
+    expect(result.ollamaContexts).toEqual([
+      { model: "ollama:gemma4", tokens: 8_192, source: "auto" },
+    ]);
+    // And the probed 8k window, not the 32k fallback, sized the chunks.
+    expect(result.chunkCount).toBeGreaterThan(1);
+  });
+
+  test("probes each distinct model, in the order it is first needed", async () => {
+    const asked: string[] = [];
+    await generateCommit(
+      armorFreeDiff(10),
+      ollamaConfig({
+        models: { summary: "ollama:small", final: "ollama:big" },
+      }),
+      {
+        runner: stubRunner,
+        resolveOllamaContext: async (model) => {
+          asked.push(model);
+          return 32_768;
+        },
+      },
+    );
+    expect(asked).toEqual(["ollama:small", "ollama:big"]);
+  });
+
+  test("hands the runner a pinned number, never auto", async () => {
+    const seen: unknown[] = [];
+    const runner = (async (
+      _prompt: string,
+      opts: { ollama?: { context: unknown } },
+    ) => {
+      seen.push(opts.ollama?.context);
+      return { text: "A summary", costUsd: 0 };
+    }) as unknown as Runner;
+    await generateCommit(armorFreeDiff(10), ollamaConfig(), {
+      runner,
+      resolveOllamaContext: async () => 65_536,
+    });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((c) => c === 65_536)).toBe(true);
+  });
+
+  test("a configured number is reported as such and never probed for", async () => {
+    let probes = 0;
+    const result = await generateCommit(
+      armorFreeDiff(10),
+      ollamaConfig({ ollama: { ...baseConfig.ollama, context: 16_384 } }),
+      {
+        runner: stubRunner,
+        resolveOllamaContext: async (model, config) => {
+          probes += 1;
+          // The real resolver short-circuits on a number; mirror that.
+          return typeof config?.context === "number" ? config.context : 0;
+        },
+      },
+    );
+    expect(probes).toBe(1);
+    expect(result.ollamaContexts).toEqual([
+      { model: "ollama:gemma4", tokens: 16_384, source: "config" },
+    ]);
+  });
+
+  test("Claude models are never asked", async () => {
+    let probes = 0;
+    const result = await generateCommit(armorFreeDiff(10), baseConfig, {
+      runner: stubRunner,
+      resolveOllamaContext: async () => {
+        probes += 1;
+        return 1;
+      },
+    });
+    expect(probes).toBe(0);
+    expect(result.ollamaContexts).toEqual([]);
+  });
+
+  test("a failed probe fails the run before any model call", async () => {
+    let calls = 0;
+    const runner = (async () => {
+      calls += 1;
+      return { text: "x", costUsd: 0 };
+    }) as Runner;
+    const promise = generateCommit(armorFreeDiff(10), ollamaConfig(), {
+      runner,
+      resolveOllamaContext: async () => {
+        throw new ClaudeCommitError("Cannot reach the Ollama server");
+      },
+    });
+    await expect(promise).rejects.toThrow(/Cannot reach/);
+    expect(calls).toBe(0);
+  });
+});
+
 describe("Ollama chunk sizing", () => {
   test("sizes summary chunks against the configured Ollama window", async () => {
     const prompts: string[] = [];
@@ -437,7 +552,7 @@ describe("Ollama chunk sizing", () => {
       {
         ...baseConfig,
         models: { summary: "ollama:gemma4", final: "sonnet" },
-        ollama: { ...baseConfig.ollama, contextTokens: 8_192 },
+        ollama: { ...baseConfig.ollama, context: 8_192 },
       },
       { runner },
     );

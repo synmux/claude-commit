@@ -39,15 +39,20 @@ export interface ModelRef {
 export const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
 
 /**
- * Default context window requested for Ollama models, in tokens.
- *
- * Ollama's own default is chosen from available VRAM (4k / 32k / 256k), so
- * the same config behaves differently on a laptop and a workstation, and a
- * prompt over the limit is truncated silently. cco therefore always states a
- * number. 32768 is the middle tier: comfortably more than a typical diff
- * chunk needs, and within reach of most machines that can run a useful
- * summarisation model at all. Raise it in config when the hardware allows -
- * memory use scales with it.
+ * Default `ollama.context`: ask the server what window it would run the
+ * model with on this machine, rather than guess (see `probeOllamaContext`
+ * in `src/ollama.ts`). Ollama's choice is made from available VRAM and
+ * capped at the model's trained maximum, so it is the largest window the
+ * server believes it can actually load.
+ */
+export const DEFAULT_OLLAMA_CONTEXT = "auto" as const;
+
+/**
+ * The window assumed for an `ollama:` model when nothing better is known:
+ * the synchronous fallback in `contextWindowTokens` for callers that size
+ * chunks without first resolving the context. The pipeline never relies on
+ * it - it resolves `"auto"` to a real number before sizing - so this only
+ * matters to direct library use. 32768 is Ollama's middle VRAM tier.
  */
 export const DEFAULT_OLLAMA_CONTEXT_TOKENS = 32_768;
 

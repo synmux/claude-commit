@@ -2,17 +2,18 @@ import { test, expect, describe, afterEach } from "bun:test";
 import {
   buildChatRequest,
   normaliseOllamaHost,
+  probeOllamaContext,
   resolveOllamaConfig,
+  resolveOllamaContext,
   resolveOllamaHost,
   runOllamaPrompt,
 } from "../src/ollama";
-import { DEFAULT_OLLAMA_CONTEXT_TOKENS } from "../src/models";
 import { ClaudeCommitError, isPromptTooLongError } from "../src/errors";
 import type { OllamaConfig, RunPromptOptions } from "../src/types";
 
 const ollama: OllamaConfig = {
   host: "http://ollama.test:11434",
-  contextTokens: 8192,
+  context: 8192,
   keepAlive: null,
 };
 
@@ -135,21 +136,21 @@ describe("resolveOllamaHost", () => {
 });
 
 describe("resolveOllamaConfig", () => {
-  test("fills every default when given nothing", () => {
+  test("fills every default when given nothing - and the default asks the server", () => {
     expect(resolveOllamaConfig(undefined, {})).toEqual({
       host: "http://localhost:11434",
-      contextTokens: DEFAULT_OLLAMA_CONTEXT_TOKENS,
+      context: "auto",
       keepAlive: null,
     });
   });
 
-  test("rejects a nonsense context length rather than sending it", () => {
-    expect(resolveOllamaConfig({ contextTokens: 0 }, {}).contextTokens).toBe(
-      DEFAULT_OLLAMA_CONTEXT_TOKENS,
-    );
-    expect(resolveOllamaConfig({ contextTokens: -5 }, {}).contextTokens).toBe(
-      DEFAULT_OLLAMA_CONTEXT_TOKENS,
-    );
+  test("a nonsense context length falls back to asking rather than guessing", () => {
+    expect(resolveOllamaConfig({ context: 0 }, {}).context).toBe("auto");
+    expect(resolveOllamaConfig({ context: -5 }, {}).context).toBe("auto");
+  });
+
+  test("a pinned number stays pinned", () => {
+    expect(resolveOllamaConfig({ context: 65536 }, {}).context).toBe(65536);
   });
 
   test("keeps a keepAlive of either accepted shape", () => {
@@ -527,9 +528,7 @@ describe("runOllamaPrompt - failures", () => {
 
   test("points a 500 at the memory knob that usually causes it", async () => {
     stubFetch(() => jsonResponse({ error: "llama runner terminated" }, 500));
-    expect(runOllamaPrompt("d", baseOpts())).rejects.toThrow(
-      /ollama\.contextTokens/,
-    );
+    expect(runOllamaPrompt("d", baseOpts())).rejects.toThrow(/ollama\.context/);
   });
 
   test("reports an unexpected status rather than hiding it", async () => {
@@ -552,5 +551,202 @@ describe("runOllamaPrompt - failures", () => {
     expect(
       runOllamaPrompt("d", baseOpts({ model: "ollama:" })),
     ).rejects.toThrow(/names no Ollama model/);
+  });
+});
+
+/** A stub server: a preload that succeeds, and a `ps` listing the given models. */
+function stubProbeServer(
+  loaded: Array<Record<string, unknown>>,
+  preloadStatus = 200,
+): { requests: Array<{ url: string; body?: unknown }> } {
+  const requests: Array<{ url: string; body?: unknown }> = [];
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    requests.push({
+      url,
+      ...(init.body ? { body: JSON.parse(String(init.body)) } : {}),
+    });
+    if (url.endsWith("/api/chat")) {
+      return jsonResponse(
+        preloadStatus === 200
+          ? { model: "gemma4:e2b-it-qat", done: true, done_reason: "load" }
+          : { error: "model not found" },
+        preloadStatus,
+      );
+    }
+    if (url.endsWith("/api/ps")) return jsonResponse({ models: loaded });
+    return jsonResponse({}, 500);
+  }) as unknown as typeof fetch;
+  return { requests };
+}
+
+describe("probeOllamaContext", () => {
+  const settings = { host: "http://ollama.test:11434", keepAlive: null };
+
+  test("preloads without a num_ctx so the server makes its own choice", async () => {
+    const { requests } = stubProbeServer([
+      {
+        name: "gemma4:e2b-it-qat",
+        model: "gemma4:e2b-it-qat",
+        context_length: 131072,
+      },
+    ]);
+    await probeOllamaContext("gemma4:e2b-it-qat", settings);
+    const preload = requests[0]!;
+    expect(preload.url).toBe("http://ollama.test:11434/api/chat");
+    expect(preload.body).toMatchObject({
+      model: "gemma4:e2b-it-qat",
+      messages: [],
+    });
+    // The whole point: no options.num_ctx on the preload.
+    expect((preload.body as { options?: unknown }).options).toBeUndefined();
+  });
+
+  test("reads the window the server picked from /api/ps", async () => {
+    stubProbeServer([
+      { name: "other:latest", context_length: 4096 },
+      {
+        name: "gemma4:e2b-it-qat",
+        model: "gemma4:e2b-it-qat",
+        context_length: 131072,
+      },
+    ]);
+    expect(await probeOllamaContext("gemma4:e2b-it-qat", settings)).toBe(
+      131072,
+    );
+  });
+
+  test("passes keep_alive through so the preload does not evict early", async () => {
+    const { requests } = stubProbeServer([
+      { name: "gemma4:e2b-it-qat", context_length: 32768 },
+    ]);
+    await probeOllamaContext("gemma4:e2b-it-qat", {
+      ...settings,
+      keepAlive: "10m",
+    });
+    expect(requests[0]!.body).toMatchObject({ keep_alive: "10m" });
+  });
+
+  test("fails loudly when the model is not in ps afterwards", async () => {
+    stubProbeServer([{ name: "something-else:7b", context_length: 4096 }]);
+    expect(probeOllamaContext("gemma4:e2b-it-qat", settings)).rejects.toThrow(
+      /did not report its context window.*ollama\.context/s,
+    );
+  });
+
+  test("fails loudly when ps has no context_length for it", async () => {
+    stubProbeServer([{ name: "gemma4:e2b-it-qat" }]);
+    expect(probeOllamaContext("gemma4:e2b-it-qat", settings)).rejects.toThrow(
+      /did not report its context window/,
+    );
+  });
+
+  test("surfaces a missing model from the preload as the pull hint", async () => {
+    stubProbeServer([], 404);
+    expect(probeOllamaContext("gemma4:e2b-it-qat", settings)).rejects.toThrow(
+      /ollama pull gemma4:e2b-it-qat/,
+    );
+  });
+
+  test("surfaces an unreachable server", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("ECONNREFUSED");
+    }) as unknown as typeof fetch;
+    expect(probeOllamaContext("gemma4:e2b-it-qat", settings)).rejects.toThrow(
+      /Cannot reach the Ollama server/,
+    );
+  });
+});
+
+describe("resolveOllamaContext", () => {
+  test("a configured number needs no round trip", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return jsonResponse({});
+    }) as unknown as typeof fetch;
+    expect(
+      await resolveOllamaContext("ollama:gemma4", {
+        ...ollama,
+        context: 16384,
+      }),
+    ).toBe(16384);
+    expect(calls).toBe(0);
+  });
+
+  test("auto probes, using the name without cco's prefix", async () => {
+    const { requests } = stubProbeServer([
+      { name: "gemma4:e2b-it-qat", context_length: 131072 },
+    ]);
+    expect(
+      await resolveOllamaContext("ollama:gemma4:e2b-it-qat", {
+        ...ollama,
+        context: "auto",
+      }),
+    ).toBe(131072);
+    expect(requests[0]!.body).toMatchObject({ model: "gemma4:e2b-it-qat" });
+  });
+});
+
+describe("runOllamaPrompt - auto context", () => {
+  test("resolves auto itself and pins the answer on the real request", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      if (init.body) bodies.push(JSON.parse(String(init.body)));
+      if (url.endsWith("/api/ps")) {
+        return jsonResponse({
+          models: [{ name: "gemma4:e2b-it-qat", context_length: 131072 }],
+        });
+      }
+      const body = bodies[bodies.length - 1]!;
+      const isPreload =
+        Array.isArray(body.messages) && body.messages.length === 0;
+      return jsonResponse(
+        isPreload
+          ? { done: true, done_reason: "load" }
+          : {
+              message: { content: "Add a thing" },
+              done: true,
+              done_reason: "stop",
+              prompt_eval_count: 100,
+            },
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await runOllamaPrompt(
+      "diff",
+      baseOpts({ ollama: { ...ollama, context: "auto" } }),
+    );
+    expect(result.text).toBe("Add a thing");
+    const real = bodies.find(
+      (b) => Array.isArray(b.messages) && b.messages.length > 0,
+    )!;
+    expect((real.options as { num_ctx: number }).num_ctx).toBe(131072);
+  });
+
+  test("the truncation check uses the probed window", async () => {
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      if (url.endsWith("/api/ps")) {
+        return jsonResponse({
+          models: [{ name: "gemma4:e2b-it-qat", context_length: 4096 }],
+        });
+      }
+      const body = JSON.parse(String(init.body));
+      return jsonResponse(
+        body.messages.length === 0
+          ? { done: true, done_reason: "load" }
+          : {
+              message: { content: "half" },
+              done: true,
+              done_reason: "stop",
+              prompt_eval_count: 4096,
+            },
+      );
+    }) as unknown as typeof fetch;
+    const error = await runOllamaPrompt(
+      "diff",
+      baseOpts({ ollama: { ...ollama, context: "auto" } }),
+    ).catch((e) => e);
+    expect(isPromptTooLongError(error)).toBe(true);
+    expect(error.message).toMatch(/4096-token/);
   });
 });

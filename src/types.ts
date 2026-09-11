@@ -28,20 +28,26 @@ export interface OllamaConfig {
    */
   host: string;
   /**
-   * Context window, in tokens, requested for every Ollama call
-   * (`options.num_ctx`) and used to size diff chunks.
+   * Context window requested for every Ollama call (`options.num_ctx`) and
+   * used to size diff chunks: a token count, or `"auto"` (the default) to
+   * take the window Ollama itself chooses for the model on this machine.
    *
-   * This is always sent explicitly, never left to the server: Ollama's own
-   * default depends on available VRAM (4k/32k/256k tiers), and a prompt over
-   * that limit is truncated *silently* - HTTP 200, oldest content dropped,
-   * no flag on the response. A summary written from half a diff is worse
-   * than an error, so cco pins the number it sized its chunks against.
+   * The window is always sent explicitly, never left to the server: a
+   * prompt over it is truncated *silently* - HTTP 200, oldest content
+   * dropped, no flag on the response - and a summary written from half a
+   * diff is worse than an error, so cco pins the number it sized its chunks
+   * against and cross-checks the response's token counts.
    *
-   * Set it to what the machine can hold, not what the model advertises:
-   * memory scales with this value (multiplied by `OLLAMA_NUM_PARALLEL`), so
-   * a model whose maximum is 131072 may still only run at 32768 here.
+   * `"auto"` asks Ollama rather than guessing: the model is preloaded with
+   * no `num_ctx`, which makes the server pick from its VRAM tiers (4k / 32k
+   * / 256k, capped at the model's trained maximum), and the choice is read
+   * back from `/api/ps`. That is the largest window the server believes
+   * this machine can run, resolved once per model per run. A number pins
+   * the window instead - lower it when memory is tight (memory scales with
+   * it, multiplied by `OLLAMA_NUM_PARALLEL`), or raise it past the tier if
+   * you know better than the server does.
    */
-  contextTokens: number;
+  context: number | "auto";
   /**
    * How long the server keeps the model loaded after a request: a duration
    * string (`"10m"`), seconds as a number, `0` to unload immediately, or a

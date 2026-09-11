@@ -11,11 +11,18 @@ export type {
   GenerateResult,
   IgnoreStats,
   LowPriorityStats,
+  OllamaContextWindow,
 } from "./src/generate";
 export { runClaudePrompt, runPrompt } from "./src/agent";
 export type { RunPromptOptions } from "./src/agent";
-export { runOllamaPrompt, resolveOllamaHost } from "./src/ollama";
 export {
+  probeOllamaContext,
+  resolveOllamaContext,
+  resolveOllamaHost,
+  runOllamaPrompt,
+} from "./src/ollama";
+export {
+  DEFAULT_OLLAMA_CONTEXT,
   DEFAULT_OLLAMA_CONTEXT_TOKENS,
   DEFAULT_OLLAMA_HOST,
   isOllamaModel,

@@ -3,6 +3,7 @@ import {
   buildProgram,
   describeIgnoreStats,
   describeLowPriorityStats,
+  describeOllamaContext,
   flagsToConfig,
   resolveInteractiveMode,
 } from "../src/cli";
@@ -151,8 +152,17 @@ describe("ollama flags", () => {
 
   test("--ollama-context maps onto the config block", () => {
     expect(flagsToConfig({ ollamaContext: 16384 }).ollama).toEqual({
-      contextTokens: 16384,
+      context: 16384,
     });
+  });
+
+  test("--ollama-context auto asks the server", () => {
+    expect(flagsToConfig({ ollamaContext: "auto" }).ollama).toEqual({
+      context: "auto",
+    });
+    const program = buildProgram();
+    program.parse(["--ollama-context", "AUTO"], { from: "user" });
+    expect(program.opts().ollamaContext).toBe("auto");
   });
 
   test("no ollama flags means no ollama override", () => {
@@ -181,6 +191,27 @@ describe("ollama flags", () => {
     expect(flagsToConfig(program.opts()).models).toEqual({
       summary: "ollama:ornith-1.5:35b",
     });
+  });
+});
+
+describe("describeOllamaContext", () => {
+  test("says where the number came from", () => {
+    expect(
+      describeOllamaContext({
+        model: "ollama:gemma4:e2b-it-qat",
+        tokens: 131072,
+        source: "auto",
+      }),
+    ).toBe(
+      "ollama: ollama:gemma4:e2b-it-qat context 131072 tokens (chosen by the server)",
+    );
+    expect(
+      describeOllamaContext({
+        model: "ollama:x",
+        tokens: 8192,
+        source: "config",
+      }),
+    ).toBe("ollama: ollama:x context 8192 tokens (from config)");
   });
 });
 

@@ -177,7 +177,7 @@ keys are valid at every level:
   "ignore": [],
   "ollama": {
     "host": "http://localhost:11434",
-    "contextTokens": 32768,
+    "context": "auto",
     "keepAlive": null
   },
   "allowApiKey": false
@@ -343,32 +343,41 @@ only the native API can set a context length.
 
 ### Context length is the setting that matters
 
-Ollama picks a default context window from available VRAM (4k / 32k / 256k),
-and a prompt that exceeds it is truncated **silently** - HTTP 200, oldest
-content dropped, nothing on the response to say so. A summary written from
-half a diff is worse than no summary, so `cco` never inherits that default:
-it sends an explicit window on every request, sizes its diff chunks against
-the same number, and checks the token counts afterwards to catch a truncation
+Ollama picks a context window for each model from available VRAM (4k / 32k /
+256k tiers, capped at the model's trained maximum), and a prompt that
+exceeds it is truncated **silently** - HTTP 200, oldest content dropped,
+nothing on the response to say so. A summary written from half a diff is
+worse than no summary, so `cco` never lets that number stay implicit: it
+sends an explicit window on every request, sizes its diff chunks against the
+same number, and checks the token counts afterwards to catch a truncation
 that happened anyway (in which case it re-splits the chunk and retries,
 exactly as it does for a Claude context overflow).
+
+Where the number comes from is `ollama.context`:
 
 ```json
 {
   "ollama": {
     "host": "http://localhost:11434",
-    "contextTokens": 32768,
+    "context": "auto",
     "keepAlive": "10m"
   }
 }
 ```
 
+- `context` - `"auto"` (the default) **asks the server** rather than
+  guessing: the model is preloaded with no window set, so Ollama applies
+  its own VRAM-based choice, and `cco` reads that choice back from
+  `/api/ps` before sizing anything. That is the largest window Ollama
+  believes this machine can actually run - 131072 for a Gemma model on a
+  large Mac, 4096 for the same model on a small laptop - resolved once per
+  model per run, and shown under `--verbose`. A number pins the window
+  instead: lower it when memory is tight (usage scales with it, multiplied
+  by `OLLAMA_NUM_PARALLEL`), or raise it past the tier if you know your
+  hardware better than the server does. A smaller window is never a
+  correctness problem - `cco` just splits the diff into more chunks.
 - `host` - defaults to `$OLLAMA_HOST`, then `http://localhost:11434`. A bare
   `box.local:11434` gains an `http://`, matching Ollama's own convention.
-- `contextTokens` - defaults to 32768. **Set this to what the machine can
-  hold, not what the model advertises**: memory use scales with it (and is
-  multiplied by `OLLAMA_NUM_PARALLEL`), so a model whose maximum is 131072
-  may still only be worth running at 32768. A smaller window is not a
-  correctness problem - `cco` just splits the diff into more chunks.
 - `keepAlive` - how long the server keeps the model loaded after a request: a
   duration string (`"10m"`), seconds as a number, `0` to unload immediately,
   or negative to pin it. `null` leaves the server's own default. Pinning is

@@ -32,7 +32,10 @@ Two behaviours are load-bearing and easy to break:
   widen that by accident.
 - **Ollama truncates an oversized prompt silently.** Every Ollama request
   pins `options.num_ctx` and the response's token counts are checked against
-  it. Do not "simplify" either half away.
+  it. Do not "simplify" either half away. The number comes from
+  `ollama.context`, which by default (`"auto"`) is read from `/api/ps` after
+  a preload with _no_ `num_ctx` - sending one on the preload would defeat
+  the probe.
 
 ## Bun
 

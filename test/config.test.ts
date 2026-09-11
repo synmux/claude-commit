@@ -452,20 +452,20 @@ describe("ollama settings", () => {
     const out = sanitizePartial({
       ollama: {
         host: "  http://box:11434 ",
-        contextTokens: 65536,
+        context: 65536,
         keepAlive: "10m",
       },
     });
     expect(out.ollama).toEqual({
       host: "http://box:11434",
-      contextTokens: 65536,
+      context: 65536,
       keepAlive: "10m",
     });
   });
 
   test("drops values that cannot be used", () => {
     const out = sanitizePartial({
-      ollama: { host: "   ", contextTokens: 0, keepAlive: true },
+      ollama: { host: "   ", context: 0, keepAlive: true },
     });
     expect(out.ollama).toBeUndefined();
   });
@@ -481,35 +481,43 @@ describe("ollama settings", () => {
 
   test("floors a fractional context length", () => {
     expect(
-      sanitizePartial({ ollama: { contextTokens: 8192.7 } }).ollama
-        ?.contextTokens,
+      sanitizePartial({ ollama: { context: 8192.7 } }).ollama?.context,
     ).toBe(8192);
+  });
+
+  test("accepts the literal auto and nothing else that is a string", () => {
+    expect(sanitizePartial({ ollama: { context: "auto" } }).ollama).toEqual({
+      context: "auto",
+    });
+    expect(
+      sanitizePartial({ ollama: { context: "256k" } }).ollama,
+    ).toBeUndefined();
   });
 
   test("merges key by key, like models", () => {
     const merged = mergePartial(
-      { ollama: { host: "http://global:1", contextTokens: 4096 } },
-      { ollama: { contextTokens: 32768 } },
+      { ollama: { host: "http://global:1", context: 4096 } },
+      { ollama: { context: 32768 } },
     );
     expect(merged.ollama).toEqual({
       host: "http://global:1",
-      contextTokens: 32768,
+      context: 32768,
     });
   });
 
   test("resolveConfig fills the unset half from the defaults", () => {
-    const config = resolveConfig({ ollama: { contextTokens: 16384 } }, {});
+    const config = resolveConfig({ ollama: { context: 16384 } }, {});
     expect(config.ollama).toEqual({
       host: DEFAULT_CONFIG.ollama.host,
-      contextTokens: 16384,
+      context: 16384,
       keepAlive: null,
     });
   });
 
-  test("ships a default host and window", () => {
+  test("ships a default host and asks the server for the window", () => {
     expect(DEFAULT_CONFIG.ollama).toEqual({
       host: "http://localhost:11434",
-      contextTokens: 32768,
+      context: "auto",
       keepAlive: null,
     });
   });

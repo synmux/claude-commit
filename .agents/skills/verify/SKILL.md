@@ -58,7 +58,9 @@ verification means running the CLI against real staged changes.
   `options.num_ctx` and cross-checks `prompt_eval_count`; to see the check
   fire, run with `--ollama-context 512` - it reports the truncation against
   a real server in seconds, and is the cheapest proof the safety net works.
-  Verify what the server actually
+  The default `"auto"` reads the window from `/api/ps`; `--verbose` prints
+  `ollama: <model> context N tokens (chosen by the server)`, and that N must
+  equal what `/api/ps` shows. Verify what the server actually
   loaded with `curl -s localhost:11434/api/ps | jq '.models[].context_length'`
   while a model is resident.
 - A first Ollama run pays model load time (tens of seconds for a 35b), which

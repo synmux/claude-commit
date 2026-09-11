@@ -18,6 +18,7 @@ import {
   generateCommit,
   type IgnoreStats,
   type LowPriorityStats,
+  type OllamaContextWindow,
 } from "./generate";
 import { Spinner } from "./ui/spinner";
 import { confirmCommit, editInEditor } from "./ui/editor";
@@ -49,7 +50,7 @@ interface CliOptions {
   /** `false` when `--no-ignore` was passed (Commander's negated-flag shape). */
   ignore?: boolean;
   ollamaHost?: string;
-  ollamaContext?: number;
+  ollamaContext?: number | "auto";
 }
 
 /** Build the Commander program. Exported for tests. */
@@ -104,9 +105,10 @@ export function buildProgram(): Command {
       "base URL of the Ollama server for ollama: models",
     )
     .option(
-      "--ollama-context <tokens>",
-      "context window requested from Ollama models",
-      (v) => parseInt(v, 10),
+      "--ollama-context <tokens|auto>",
+      "context window for Ollama models: a token count, or auto to use " +
+        "the server's own choice for this machine",
+      parseContextFlag,
     )
     .option("-d, --dry-run", "print the message to stdout without committing")
     .option("-y, --yes", "commit without asking for confirmation")
@@ -141,6 +143,11 @@ export function buildProgram(): Command {
   return program;
 }
 
+/** `--ollama-context` accepts a token count or the literal `auto`. */
+function parseContextFlag(value: string): number | "auto" {
+  return value.trim().toLowerCase() === "auto" ? "auto" : parseInt(value, 10);
+}
+
 /**
  * Map parsed CLI flags onto a partial config (only set keys the user
  * provided). Exported for tests.
@@ -161,8 +168,13 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
   if (opts.ignore === false) cfg.ignore = [];
   const ollama: Partial<OllamaConfig> = {};
   if (opts.ollamaHost) ollama.host = opts.ollamaHost;
-  if (opts.ollamaContext !== undefined && Number.isFinite(opts.ollamaContext)) {
-    ollama.contextTokens = Math.max(1, opts.ollamaContext);
+  if (opts.ollamaContext === "auto") {
+    ollama.context = "auto";
+  } else if (
+    opts.ollamaContext !== undefined &&
+    Number.isFinite(opts.ollamaContext)
+  ) {
+    ollama.context = Math.max(1, opts.ollamaContext);
   }
   if (Object.keys(ollama).length) cfg.ollama = ollama;
   if (opts.count !== undefined && Number.isFinite(opts.count)) {
@@ -330,6 +342,9 @@ async function runNonInteractive(
         `${result.chunkCount} chunk(s), cost $${result.costUsd.toFixed(4)}`,
       ) + "\n",
     );
+    for (const window of result.ollamaContexts) {
+      process.stderr.write(color("90", describeOllamaContext(window)) + "\n");
+    }
     if (config.ignore.length > 0) {
       process.stderr.write(
         color("90", describeIgnoreStats(result.ignored)) + "\n",
@@ -396,6 +411,18 @@ export function describeLowPriorityStats(stats: LowPriorityStats): string {
     return `low-priority paths: matched all ${files} - nothing else changed, so treated as primary`;
   }
   return `low-priority paths: matched ${stats.matchedFiles} of ${files}`;
+}
+
+/**
+ * One verbose line per Ollama model naming the context window it ran with
+ * and where the number came from. With `"auto"` this is the only place the
+ * server's choice is visible, and it is the first thing to check when a
+ * summary reads as if it saw half the diff.
+ */
+export function describeOllamaContext(window: OllamaContextWindow): string {
+  const source =
+    window.source === "auto" ? "chosen by the server" : "from config";
+  return `ollama: ${window.model} context ${window.tokens} tokens (${source})`;
 }
 
 /**

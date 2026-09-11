@@ -62,7 +62,7 @@ dropped. A summary of a diff whose second half was thrown away is worse than
 an error, so cco:
 
 1. Sends an explicit `options.num_ctx` on every request, from
-   `ollama.contextTokens` (default 32768). Never inherits the server default.
+   `ollama.context`. Never leaves the window implicit.
 2. Sizes chunks against that same number, via `clampChunkTokens`.
 3. Checks `prompt_eval_count` on the response. At or above `num_ctx` the
    prompt was truncated, and cco raises an error whose text says "prompt is
@@ -74,6 +74,35 @@ an error, so cco:
 `CONTEXT_RESERVE_TOKENS` (32k) is larger than a whole 32k Ollama window, so
 the reserve became proportional: `min(32_000, window / 4)`. Every Claude
 window (200k and 1M) reserves 32k exactly as before.
+
+### Where the window comes from: `"auto"`
+
+The first cut pinned a hardcoded 32768. That is the middle VRAM tier and
+safe everywhere, and on the machine this was built on it lowballed a Gemma
+model by 4x - the server would happily have run it at 131072.
+
+`ollama.context` therefore defaults to `"auto"`, which asks the server
+rather than guessing. Two calls, once per model per run, before any chunk
+is sized: a `/api/chat` with empty `messages` and **no `num_ctx`** preloads
+the model and lets the server apply its own VRAM-tier choice; `/api/ps` then
+reports the `context_length` the loaded model is actually running with.
+That number is pinned as `num_ctx` on every real request (so it matches
+what is resident and causes no reload) and used for chunk sizing and the
+truncation check. The load was going to happen on the first real request
+anyway; the added cost is one `ps` round trip.
+
+Verified against Ollama 0.33.3: the tier is capped at the model's trained
+maximum (`gemma4:e2b-it-qat` reports 131072 in both `/api/show` and
+`/api/ps` on a machine in the top tier). A number in config pins the window
+and skips the probe; a probe that cannot find the model in `ps`, or finds
+it without a `context_length`, fails the run before any model call with a
+message naming the key to pin.
+
+`OllamaContextResolver` in `generate.ts` memoises the answer per model so
+the summary and final stages share one probe when they share a model, and
+hands the runner a config with the number substituted in - `runOllamaPrompt`
+still accepts `"auto"` for direct library use, at the cost of a probe per
+call.
 
 ### Cost, structure, streaming
 
@@ -97,17 +126,18 @@ window (200k and 1M) reserves 32k exactly as before.
 {
   "ollama": {
     "host": "http://localhost:11434",
-    "contextTokens": 32768,
+    "context": "auto",
     "keepAlive": null
   }
 }
 ```
 
 `host` defaults to `$OLLAMA_HOST`, then `http://localhost:11434`; a bare
-`host:port` (Ollama's own convention) gains an `http://`. `contextTokens`
-must fit the machine, not the model - raising it multiplies memory use, so
-the default is deliberately below what most models advertise. `keepAlive` is
-passed through untouched when set.
+`host:port` (Ollama's own convention) gains an `http://`. `context` is
+`"auto"` or a token count (raw integers only - `"256k"`-style suffixes were
+considered and declined as not worth a parser). `keepAlive` is passed
+through untouched when set, including on the probe's preload so it does not
+evict the model early.
 
 The `allowApiKey` credential gate is Claude-only and untouched: Ollama is
 reached over plain HTTP with no credential, and `ANTHROPIC_*` never leaves

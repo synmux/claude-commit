@@ -11,7 +11,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { ClaudeCommitError } from "./errors";
 import { DEFAULT_SPINNER, isSpinnerName } from "./ui/spinner";
-import { DEFAULT_OLLAMA_CONTEXT_TOKENS, DEFAULT_OLLAMA_HOST } from "./models";
+import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST } from "./models";
 import type { Config, ModelConfig, OllamaConfig, PartialConfig } from "./types";
 
 export const DEFAULT_CONFIG: Config = {
@@ -35,7 +35,7 @@ export const DEFAULT_CONFIG: Config = {
   ignore: [],
   ollama: {
     host: DEFAULT_OLLAMA_HOST,
-    contextTokens: DEFAULT_OLLAMA_CONTEXT_TOKENS,
+    context: DEFAULT_OLLAMA_CONTEXT,
     keepAlive: null,
   },
   allowApiKey: false,
@@ -183,8 +183,10 @@ export function sanitizePartial(raw: unknown): PartialConfig {
     if (typeof o.host === "string" && o.host.trim() !== "") {
       ollama.host = o.host.trim();
     }
-    if (typeof o.contextTokens === "number" && o.contextTokens > 0) {
-      ollama.contextTokens = Math.floor(o.contextTokens);
+    if (typeof o.context === "number" && o.context > 0) {
+      ollama.context = Math.floor(o.context);
+    } else if (o.context === "auto") {
+      ollama.context = "auto";
     }
     if (typeof o.keepAlive === "string" || typeof o.keepAlive === "number") {
       ollama.keepAlive = o.keepAlive;

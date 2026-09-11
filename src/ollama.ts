@@ -20,6 +20,9 @@
  * from half a diff is worse than no summary, so every request pins
  * `options.num_ctx` to the same number the chunks were sized against, and
  * the response's `prompt_eval_count` is checked against it afterwards.
+ * Where that number comes from is {@link resolveOllamaContext}: a configured
+ * token count, or - by default - the window Ollama itself picks for the
+ * model on this machine, read back from `/api/ps` after a preload.
  * Reaching the limit means content was dropped, and cco raises an error
  * whose text contains "prompt is too long" - the phrase
  * {@link isPromptTooLongError} matches - so the pipeline's existing
@@ -34,14 +37,21 @@
  */
 import { ClaudeCommitError } from "./errors";
 import {
-  DEFAULT_OLLAMA_CONTEXT_TOKENS,
+  DEFAULT_OLLAMA_CONTEXT,
   DEFAULT_OLLAMA_HOST,
   parseModelRef,
 } from "./models";
 import type { ModelResult, OllamaConfig, RunPromptOptions } from "./types";
 
-/** Resolved settings for one Ollama request. */
-interface ResolvedOllama {
+/** Ollama settings with every default filled in; the context may still be `"auto"`. */
+export interface ResolvedOllama {
+  host: string;
+  context: number | "auto";
+  keepAlive: string | number | null;
+}
+
+/** {@link ResolvedOllama} after `"auto"` has been turned into a number. */
+export interface OllamaRequestSettings {
   host: string;
   contextTokens: number;
   keepAlive: string | number | null;
@@ -72,20 +82,132 @@ export function resolveOllamaHost(
   return normaliseOllamaHost(candidate);
 }
 
-/** Fill in defaults for any Ollama setting the config left out. */
+/**
+ * Fill in defaults for any Ollama setting the config left out. A missing
+ * or unusable `context` becomes `"auto"`; turning that into a number is
+ * {@link resolveOllamaContext}'s job, because it takes a round trip.
+ */
 export function resolveOllamaConfig(
   config: Partial<OllamaConfig> | undefined,
   env: Record<string, string | undefined> = process.env,
 ): ResolvedOllama {
-  const contextTokens = config?.contextTokens;
+  const context = config?.context;
   return {
     host: resolveOllamaHost(config?.host, env),
-    contextTokens:
-      typeof contextTokens === "number" && contextTokens > 0
-        ? Math.floor(contextTokens)
-        : DEFAULT_OLLAMA_CONTEXT_TOKENS,
+    context:
+      typeof context === "number" && context > 0
+        ? Math.floor(context)
+        : DEFAULT_OLLAMA_CONTEXT,
     keepAlive: config?.keepAlive ?? null,
   };
+}
+
+/** The one field of a `/api/ps` entry cco reads, plus the names it matches on. */
+interface OllamaLoadedModel {
+  name?: string;
+  model?: string;
+  context_length?: number;
+}
+
+/**
+ * Ask Ollama what context window it would run `model` with on this machine.
+ *
+ * Two calls. The first is a chat request with no messages, which loads the
+ * model (a no-op if it is already resident) *without* a `num_ctx` - so the
+ * server applies its own choice, made from available VRAM (4k / 32k / 256k
+ * tiers, capped at the model's trained maximum). The second reads that
+ * choice back from `/api/ps`, which reports the window each loaded model is
+ * actually running with. The load was going to happen on the first real
+ * request anyway, so the only added cost is the `ps` round trip.
+ *
+ * This is deliberately not `/api/show`'s `context_length`, which is the
+ * *trained* maximum regardless of hardware - 131072 for a model this
+ * machine may only be able to run at 32768. The number the server picked
+ * is the one it can actually load.
+ */
+export async function probeOllamaContext(
+  model: string,
+  settings: { host: string; keepAlive: string | number | null },
+  signal?: AbortSignal,
+): Promise<number> {
+  const { host, keepAlive } = settings;
+  const preload = await ollamaFetch(
+    `${host}/api/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [],
+        stream: false,
+        ...(keepAlive !== null ? { keep_alive: keepAlive } : {}),
+      }),
+    },
+    host,
+    signal,
+  );
+  if (!preload.ok) {
+    throw new ClaudeCommitError(
+      await describeHttpFailure(preload, host, model),
+    );
+  }
+
+  const ps = await ollamaFetch(
+    `${host}/api/ps`,
+    { method: "GET" },
+    host,
+    signal,
+  );
+  if (!ps.ok) {
+    throw new ClaudeCommitError(await describeHttpFailure(ps, host, model));
+  }
+  const body = (await ps.json()) as { models?: OllamaLoadedModel[] };
+  const loaded = (body.models ?? []).find(
+    (entry) => entry.name === model || entry.model === model,
+  );
+  const contextLength = loaded?.context_length;
+  if (typeof contextLength !== "number" || contextLength <= 0) {
+    throw new ClaudeCommitError(
+      `Ollama loaded "${model}" but did not report its context window in ` +
+        `/api/ps, so cco cannot size the diff for it. Set "ollama.context" ` +
+        `to a token count to pin one.`,
+    );
+  }
+  return Math.floor(contextLength);
+}
+
+/**
+ * The context window to use for `model`: the configured number, or the
+ * server's own choice when the config says `"auto"` (see
+ * {@link probeOllamaContext}). Callers that make several requests to the
+ * same model should resolve once and reuse the result.
+ */
+export async function resolveOllamaContext(
+  model: string,
+  config: Partial<OllamaConfig> | undefined,
+  signal?: AbortSignal,
+): Promise<number> {
+  const resolved = resolveOllamaConfig(config);
+  if (resolved.context !== "auto") return resolved.context;
+  const { name } = parseModelRef(model);
+  return probeOllamaContext(name, resolved, signal);
+}
+
+/** `fetch` with transport failures and cancellation turned into cco errors. */
+async function ollamaFetch(
+  url: string,
+  init: RequestInit,
+  host: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, ...(signal ? { signal } : {}) });
+  } catch (error) {
+    if (signal?.aborted) {
+      throw new ClaudeCommitError("Generation was cancelled.");
+    }
+    throw new ClaudeCommitError(describeTransportFailure(error, host));
+  }
 }
 
 /** The body of a native `/api/chat` request. */
@@ -112,10 +234,10 @@ export interface OllamaChatRequest {
 export function buildChatRequest(
   prompt: string,
   opts: RunPromptOptions,
-  resolved: ResolvedOllama,
+  settings: OllamaRequestSettings,
 ): OllamaChatRequest {
   const { name } = parseModelRef(opts.model);
-  const options: Record<string, unknown> = { num_ctx: resolved.contextTokens };
+  const options: Record<string, unknown> = { num_ctx: settings.contextTokens };
   if (opts.temperature != null) options.temperature = opts.temperature;
 
   return {
@@ -129,7 +251,7 @@ export function buildChatRequest(
     // recommends for structured output.
     stream: Boolean(opts.onText),
     ...(opts.outputFormat ? { format: opts.outputFormat.schema } : {}),
-    ...(resolved.keepAlive !== null ? { keep_alive: resolved.keepAlive } : {}),
+    ...(settings.keepAlive !== null ? { keep_alive: settings.keepAlive } : {}),
     options,
   };
 }
@@ -181,8 +303,8 @@ async function describeHttpFailure(
     case 500:
       return (
         `Ollama failed to run "${model}"${detail ? `: ${detail}` : ""}. ` +
-        `This is often the model runner running out of memory - lower ` +
-        `"ollama.contextTokens" or use a smaller model.`
+        `This is often the model runner running out of memory - set ` +
+        `"ollama.context" to a smaller number or use a smaller model.`
       );
     case 503:
       return `Ollama at ${host} has a full request queue. Try again shortly.`;
@@ -296,26 +418,29 @@ export async function runOllamaPrompt(
   prompt: string,
   opts: RunPromptOptions,
 ): Promise<ModelResult> {
-  const resolved = resolveOllamaConfig(opts.ollama);
   const { name } = parseModelRef(opts.model);
+  const signal = opts.abortController?.signal;
+  // A caller that has already resolved `"auto"` (the pipeline does, once
+  // per model) passes a number through and pays nothing here; a direct
+  // caller with `"auto"` pays the probe on every call.
+  const base = resolveOllamaConfig(opts.ollama);
+  const resolved: OllamaRequestSettings = {
+    host: base.host,
+    keepAlive: base.keepAlive,
+    contextTokens: await resolveOllamaContext(opts.model, opts.ollama, signal),
+  };
   const request = buildChatRequest(prompt, opts, resolved);
-  const url = `${resolved.host}/api/chat`;
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
+  const response = await ollamaFetch(
+    `${resolved.host}/api/chat`,
+    {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
-      ...(opts.abortController ? { signal: opts.abortController.signal } : {}),
-    });
-  } catch (error) {
-    if (opts.abortController?.signal.aborted) {
-      throw new ClaudeCommitError("Generation was cancelled.");
-    }
-    throw new ClaudeCommitError(describeTransportFailure(error, resolved.host));
-  }
-
+    },
+    resolved.host,
+    signal,
+  );
   if (!response.ok) {
     throw new ClaudeCommitError(
       await describeHttpFailure(response, resolved.host, name),
@@ -339,15 +464,14 @@ export async function runOllamaPrompt(
   if (promptTokens > 0 && promptTokens >= resolved.contextTokens) {
     throw new ClaudeCommitError(
       `Ollama truncated the request to "${name}": the prompt is too long for ` +
-        `the ${resolved.contextTokens}-token context window ` +
-        `("ollama.contextTokens").`,
+        `the ${resolved.contextTokens}-token context window ("ollama.context").`,
     );
   }
 
   if (final.done_reason === "length") {
     throw new ClaudeCommitError(
       `Ollama's reply from "${name}" was cut off at the context limit. ` +
-        `Raise "ollama.contextTokens" beyond ${resolved.contextTokens}, or use ` +
+        `Raise "ollama.context" beyond ${resolved.contextTokens}, or use ` +
         `a model with more room.`,
     );
   }

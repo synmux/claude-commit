@@ -29,6 +29,8 @@
  * message(s), applying the configured formatting rules.
  */
 import { runPrompt } from "./agent";
+import { isOllamaModel } from "./models";
+import { resolveOllamaContext } from "./ollama";
 import {
   applyIgnorePatterns,
   partitionDiff,
@@ -49,7 +51,12 @@ import {
   MESSAGES_SCHEMA,
   parseOptions,
 } from "./prompts";
-import type { ChangePriority, Config, DiffSummary } from "./types";
+import type {
+  ChangePriority,
+  Config,
+  DiffSummary,
+  OllamaConfig,
+} from "./types";
 
 export interface GenerateProgress {
   /** Called when a new phase of work begins (for spinner labels). */
@@ -69,6 +76,22 @@ export interface GenerateOptions {
    * Defaults to {@link runPrompt}.
    */
   runner?: typeof runPrompt;
+  /**
+   * Resolves an `ollama:` model's context window, called once per model
+   * per run before any chunk is sized; injectable so tests can exercise an
+   * `"auto"` configuration without a server. Defaults to
+   * {@link resolveOllamaContext}.
+   */
+  resolveOllamaContext?: typeof resolveOllamaContext;
+}
+
+/** The context window one Ollama model ran with during this run. */
+export interface OllamaContextWindow {
+  /** The model string as configured, prefix included. */
+  model: string;
+  tokens: number;
+  /** Whether the number was configured or chosen by the server (`"auto"`). */
+  source: "config" | "auto";
 }
 
 /** How the `ignore` patterns applied to this diff (for `--verbose`). */
@@ -102,6 +125,48 @@ export interface GenerateResult {
   lowPriority: LowPriorityStats;
   /** How the ignore patterns applied to this diff. */
   ignored: IgnoreStats;
+  /** The context window each Ollama model ran with, in order of first use. */
+  ollamaContexts: OllamaContextWindow[];
+}
+
+/**
+ * Resolves each `ollama:` model's context window once and hands back an
+ * {@link OllamaConfig} with the number pinned in place of `"auto"`, so the
+ * runner never repeats the probe. Claude models get `undefined`: they
+ * neither need nor understand the block.
+ */
+class OllamaContextResolver {
+  private readonly windows = new Map<string, Promise<number>>();
+  readonly resolved: OllamaContextWindow[] = [];
+
+  constructor(
+    private readonly config: OllamaConfig,
+    private readonly resolve: typeof resolveOllamaContext,
+    private readonly signal?: AbortSignal,
+  ) {}
+
+  /** The Ollama settings to run `model` with, or `undefined` for a Claude model. */
+  async settingsFor(model: string): Promise<OllamaConfig | undefined> {
+    if (!isOllamaModel(model)) return undefined;
+    const tokens = await this.windowFor(model);
+    return { ...this.config, context: tokens };
+  }
+
+  private windowFor(model: string): Promise<number> {
+    let pending = this.windows.get(model);
+    if (!pending) {
+      pending = this.resolve(model, this.config, this.signal).then((tokens) => {
+        this.resolved.push({
+          model,
+          tokens,
+          source: this.config.context === "auto" ? "auto" : "config",
+        });
+        return tokens;
+      });
+      this.windows.set(model, pending);
+    }
+    return pending;
+  }
 }
 
 /**
@@ -115,6 +180,7 @@ interface PartitionSummaryOptions {
   config: Config;
   runner: typeof runPrompt;
   progress: GenerateProgress;
+  contexts: OllamaContextResolver;
   abortController?: AbortController;
 }
 
@@ -143,18 +209,21 @@ async function summarizePartition(
   priority: ChangePriority,
   options: PartitionSummaryOptions,
 ): Promise<{ summaries: DiffSummary[]; costUsd: number }> {
-  const { config, runner, progress, abortController } = options;
+  const { config, runner, progress, contexts, abortController } = options;
 
   // The configured chunk budget is clamped to the summary model's context
   // window so a single chunk (plus prompt scaffolding and response headroom)
-  // can never overflow it, whatever `maxChunkTokens` says. Chunks are sized
-  // by a content-classified token estimate: opaque content (age/gpg armor,
-  // binary patches) measures near 1 char/token, so a plain chars-based
-  // budget underestimates armor-heavy diffs more than threefold.
+  // can never overflow it, whatever `maxChunkTokens` says. For an Ollama
+  // model that window is resolved here first - possibly by asking the
+  // server - so the chunks and the request agree on the same number.
+  // Chunks are sized by a content-classified token estimate: opaque content
+  // (age/gpg armor, binary patches) measures near 1 char/token, so a plain
+  // chars-based budget underestimates armor-heavy diffs more than threefold.
+  const ollama = await contexts.settingsFor(config.models.summary);
   const chunkTokens = clampChunkTokens(
     config.models.summary,
     config.maxChunkTokens,
-    config.ollama.contextTokens,
+    typeof ollama?.context === "number" ? ollama.context : undefined,
   );
   const chunks = splitDiffToFit(diff, chunkTokens, config.charsPerToken);
 
@@ -175,7 +244,7 @@ async function summarizePartition(
           model: config.models.summary,
           system: summarySystem,
           allowApiKey: config.allowApiKey,
-          ollama: config.ollama,
+          ...(ollama ? { ollama } : {}),
           ...(abortController ? { abortController } : {}),
         },
       );
@@ -219,7 +288,13 @@ export async function generateCommit(
     progress = {},
     abortController,
     runner = runPrompt,
+    resolveOllamaContext: resolveContext = resolveOllamaContext,
   } = options;
+  const contexts = new OllamaContextResolver(
+    config.ollama,
+    resolveContext,
+    abortController?.signal,
+  );
 
   // Ignore first: dropped sections cost nothing downstream. Unlike a
   // low-priority partition, an ignored one has nowhere to be promoted to,
@@ -253,6 +328,7 @@ export async function generateCommit(
     config,
     runner,
     progress,
+    contexts,
     ...(abortController ? { abortController } : {}),
   };
   const primaryStage = await summarizePartition(
@@ -287,10 +363,11 @@ export async function generateCommit(
     count > 1 ? "Writing commit options" : "Writing commit message",
   );
 
+  const finalOllama = await contexts.settingsFor(config.models.final);
   const baseOpts = {
     model: config.models.final,
     allowApiKey: config.allowApiKey,
-    ollama: config.ollama,
+    ...(finalOllama ? { ollama: finalOllama } : {}),
     ...(abortController ? { abortController } : {}),
   };
   const temperature =
@@ -365,6 +442,7 @@ export async function generateCommit(
       promoted: partition.promoted,
     },
     ignored,
+    ollamaContexts: contexts.resolved,
   };
 }
 
