@@ -7,9 +7,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each version also has a [GitHub release](https://github.com/synmux/claude-commit/releases)
 carrying the same notes at greater length.
 
-## [Unreleased]
+## [1.1.0]
 
-### [Unreleased] - Changed
+### [1.1.0] - Changed
 
 - **Runs on Node, not Bun.** `cco` now requires Node.js 22.18 or later
   (24 LTS recommended) and no longer needs Bun at all. The package ships a
@@ -36,7 +36,7 @@ carrying the same notes at greater length.
   it succeeds. It no longer carries its own test step, which had been
   calling a `typecheck` script that no longer exists.
 
-### [Unreleased] - Removed
+### [1.1.0] - Removed
 
 - The `@opentui/core` and `@types/bun` dependencies, `bun.lock`, and the Bun
   pin in `mise.toml` (now Node 24.20.0).
