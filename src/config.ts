@@ -93,8 +93,8 @@ async function findGlobalConfigFile(
  * aliases the base's array.
  */
 export function mergeConfig(base: Config, override: PartialConfig): Config {
-  const models: ModelConfig = { ...base.models, ...(override.models ?? {}) };
-  const ollama: OllamaConfig = { ...base.ollama, ...(override.ollama ?? {}) };
+  const models: ModelConfig = { ...base.models, ...override.models };
+  const ollama: OllamaConfig = { ...base.ollama, ...override.ollama };
   const lowPriorityPaths = [...(override.lowPriorityPaths ?? base.lowPriorityPaths)];
   const ignore = [...(override.ignore ?? base.ignore)];
   const merged: Config = {

@@ -17,11 +17,11 @@ skills:
     generator: skilld
   anthropic-ai-claude-agent-sdk-skilld:
     packageName: "@anthropic-ai/claude-agent-sdk"
-    version: 0.3.241
-    packages: "@anthropic-ai/claude-agent-sdk@0.3.241"
+    version: 0.3.263
+    packages: "@anthropic-ai/claude-agent-sdk@0.3.263"
     repo: anthropics/claude-agent-sdk-typescript
     source: "ungh://anthropics/claude-agent-sdk-typescript"
-    syncedAt: 2026-08-23
+    syncedAt: 2026-09-13
     generator: skilld
   trunkio-launcher-skilld:
     packageName: "@trunkio/launcher"
@@ -31,11 +31,11 @@ skills:
     generator: skilld
   anthropic-ai-claude-code-skilld:
     packageName: "@anthropic-ai/claude-code"
-    version: 2.1.241
-    packages: "@anthropic-ai/claude-code@2.1.241"
+    version: 2.1.263
+    packages: "@anthropic-ai/claude-code@2.1.263"
     repo: Exhen/claude-code-2.1.88
     source: "ungh://Exhen/claude-code-2.1.88"
-    syncedAt: 2026-08-23
+    syncedAt: 2026-09-13
     generator: skilld
   prettier-skilld:
     packageName: prettier
@@ -57,4 +57,53 @@ skills:
     repo: sindresorhus/cli-spinners
     source: "ungh://sindresorhus/cli-spinners"
     syncedAt: 2026-08-23
+    generator: skilld
+  clack-prompts-skilld:
+    packageName: "@clack/prompts"
+    version: 1.7.0
+    repo: bombshell-dev/clack
+    source: "https://github.com/bombshell-dev/clack/tree/v1.7.0/docs"
+    syncedAt: 2026-09-13
+    generator: skilld
+  clack-core-skilld:
+    packageName: "@clack/core"
+    version: 1.4.3
+    repo: bombshell-dev/clack
+    source: "https://github.com/bombshell-dev/clack/tree/v1.4.3/docs"
+    syncedAt: 2026-09-13
+    generator: skilld
+  esbuild-skilld:
+    packageName: esbuild
+    version: 0.27.7
+    repo: evanw/esbuild
+    source: "https://github.com/evanw/esbuild/tree/v0.27.7/docs"
+    syncedAt: 2026-09-13
+    generator: skilld
+  picomatch-skilld:
+    packageName: picomatch
+    version: 4.0.7
+    repo: micromatch/picomatch
+    source: "https://github.com/micromatch/**"
+    syncedAt: 2026-09-13
+    generator: skilld
+  types-node-skilld:
+    packageName: "@types/node"
+    version: 24.13.3
+    repo: DefinitelyTyped/DefinitelyTyped
+    source: readme
+    syncedAt: 2026-09-13
+    generator: skilld
+  types-picomatch-skilld:
+    packageName: "@types/picomatch"
+    version: 4.0.3
+    repo: DefinitelyTyped/DefinitelyTyped
+    source: "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/docs"
+    syncedAt: 2026-09-13
+    generator: skilld
+  vitest-skilld:
+    packageName: vitest
+    version: 4.1.11
+    repo: vitest-dev/vitest
+    source: "https://github.com/vitest-dev/vitest/tree/v4.1.11/docs"
+    syncedAt: 2026-09-13
     generator: skilld

@@ -1,0 +1,8 @@
+skills:
+  types-node-skilld:
+    packageName: "@types/node"
+    version: 26.5.1
+    repo: DefinitelyTyped/DefinitelyTyped
+    source: "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/docs"
+    syncedAt: 2026-09-13
+    generator: skilld

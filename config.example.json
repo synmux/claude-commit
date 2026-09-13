@@ -1,0 +1,26 @@
+{
+  "allowApiKey": false,
+  "charsPerToken": 3.5,
+  "conventionalCommits": true,
+  "customPrompt": null,
+  "filenamesOnly": false,
+  "gitmoji": true,
+  "interactive": false,
+  "interactiveCount": 10,
+  "interactiveTemperature": 1,
+  "lowPriorityPaths": [".agents/**", ".claude/**", "bun.lock", ".serena"],
+  "maxChunkTokens": 750000,
+  "models": {
+    "summary": "opus",
+    "final": "opus"
+  },
+  "multiline": true,
+  "ollama": {
+    "host": "http://localhost:11434",
+    "context": "auto",
+    "keepAlive": "10m"
+  },
+  "skipArmored": true,
+  "spinner": "pong",
+  "template": null
+}

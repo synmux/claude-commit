@@ -1,15 +1,14 @@
 ---
 name: anthropic-ai-claude-code-skilld
-description: 'ALWAYS use when writing code importing "@anthropic-ai/claude-code". Consult for debugging, best practices, or modifying @anthropic-ai/claude-code, anthropic-ai/claude-code, anthropic-ai claude-code, anthropic ai claude code, claude-code-2.1.88, claude code 2.1.88.'
+description: "Use Claude, Anthropic's AI assistant, right from your terminal. Claude can understand your codebase, edit files, run terminal commands, and handle entire workflows for you. ALWAYS use when writing code importing \"@anthropic-ai/claude-code\". Consult for debugging, best practices, or modifying @anthropic-ai/claude-code, anthropic-ai/claude-code, anthropic-ai claude-code, anthropic ai claude code, claude-code-2.1.88, claude code 2.1.88."
 metadata:
-  version: 2.1.241
-  generated_by: "Ollama · gemma4:e2b-it-qat"
-  generated_at: 2026-08-23
+  version: 2.1.263
+  generated_by: cached
+  generated_at: 2026-09-13
 ---
 
-# Exhen/claude-code-2.1.88 `@anthropic-ai/claude-code@2.1.241`
-
-**Tags:** stable: 2.1.231, latest: 2.1.241, next: 2.1.241
+# Exhen/claude-code-2.1.88 `@anthropic-ai/claude-code@2.1.263`
+**Tags:** stable: 2.1.236, latest: 2.1.270, next: 2.1.270
 
 **References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md)
 
@@ -18,71 +17,63 @@ metadata:
 Use `skilld search "query" -p @anthropic-ai/claude-code` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @anthropic-ai/claude-code` for full syntax, filters, and operators.
 
 <!-- skilld:api-changes -->
-
 ## API Changes
 
-This section documents version-specific API changes — prioritize recent major/minor releases.
+This section documents version-specific API changes in @anthropic-ai/claude-code — prioritize recent major/minor releases.
 
-- BREAKING: `createClient(url, key)` — v2 changed to `createClient({ url, key })`, old positional args silently ignored [source](./.skilld/releases/v2.0.0.md:L18)
+- DEPRECATED: `team_name` parameter in Agent configuration — no longer used; the session has a single implicit team [source](./.skilld/pkg/sdk-tools.d.ts:L688)
 
-- BREAKING: `db.query()` — returns `{ rows }` not raw array since v4 [source](./.skilld/docs/migration.md:L42:55)
+- DEPRECATED: `mode` parameter in Agent configuration — no longer accepted; subagents inherit the parent session's permission mode from frontmatter [source](./.skilld/pkg/sdk-tools.d.ts:L692)
 
-- BREAKING: `stream()` — signature changed to accept `config` object for chunk size control [source](./.skilld/releases/v3.0.0.md#breaking-changes)
+- DEPRECATED: `shell_id` parameter in TaskStopInput — replaced by `task_id` for stopping background tasks and agents [source](./.skilld/pkg/sdk-tools.d.ts:L886)
 
-- BREAKING: `defineModel()` — removed in v3.5, replaced by `model.define()` [source](./.skilld/releases/v3.5.0.md#removed-features)
+- DEPRECATED: `allowedPrompts` field in ExitPlanModeInput — no longer used [source](./.skilld/pkg/sdk-tools.d.ts:L748)
 
-- DEPRECATED: `legacy_auth_header()` — marked deprecated in v2.1, use `auth.headers` instead [source](./.skilld/docs/auth.md:L88)
+- NEW: `isolation` modes for agents — added "worktree" (isolates to temporary git worktree) and "remote" (cloud execution) [source](./.skilld/pkg/sdk-tools.d.ts:L696)
 
-- DEPRECATED: `onWatcherCleanup()` — deprecated in v3.0, use `onWatcher.cleanup()` [source](./.skilld/docs/watchers.md:L15)
+- NEW: `EnterWorktreeInput` and `ExitWorktreeInput` tools — full git worktree lifecycle management with optional name or path parameters [source](./.skilld/pkg/sdk-tools.d.ts:L3140:L3156)
 
-- DEPRECATED: `parse_json_v1()` — deprecated in v2.0, use `json.parse()` [source](./.skilld/docs/json.md:L30)
+- NEW: `run_in_background` parameter for agents — explicit control over whether spawned agents execute in background (default true) or block [source](./.skilld/pkg/sdk-tools.d.ts:L682)
 
-- DEPRECATED: `generate_prompt()` — renamed to `prompt.generate()` in v3.0, use the new method [source](./.skilld/docs/prompts.md:L55)
+- NEW: Workflow orchestration with `WorkflowInput` — multi-agent orchestration via `agent()`, `parallel()`, and `pipeline()` with metadata and resumeFromRunId support [source](./.skilld/pkg/sdk-tools.d.ts:L2766)
 
-- RENAMED: `client.connect()` — renamed to `client.initialize()` in v3.0 [source](./.skilld/docs/client.md:L22)
+- NEW: `ScheduleWakeupInput` tool — dynamic loop wake-up scheduling with configurable delays (60–3600 seconds) and reasoning [source](./.skilld/pkg/sdk-tools.d.ts:L2823)
 
-- NEW: `useTemplateRef()` — new in v3.5, replaces `$refs` pattern for component refs [source](./.skilld/releases/v3.5.0.md#new-features)
+- NEW: `MonitorInput` tool — real-time event streaming with task notification support [source](./.skilld/pkg/sdk-tools.d.ts:L2868)
 
-- NEW: `model.generate_structured()` — new in v3.5, supports structured output forcing [source](./.skilld/docs/models.md:L110)
+- NEW: MCP (Model Context Protocol) tool support — `ListMcpResourcesInput`, `ReadMcpResourceInput`, `ReadMcpResourceDirInput`, `RefreshMcpToolsInput` for dynamic MCP server integration [source](./.skilld/pkg/sdk-tools.d.ts:L22:L24)
 
-- NEW: `async_stream()` — new in v3.5, supports streaming results with custom batching [source](./.skilld/docs/streaming.md:L20)
+- NEW: Remote agent execution — agents with `isolation: "remote"` dispatch to cloud infrastructure with async_launched/remote_launched status [source](./.skilld/pkg/sdk-tools.d.ts:L186:L188)
 
-- NEW: `config.retry_policy` — new in v3.5, allows fine-grained retry logic for API calls [source](./.skilld/docs/config.md:L45)
-
-- NEW: `client.get_status()` — new in v3.5, provides real-time connection status [source](./.skilld/docs/client.md:L30)
-
-- Also changed: `client.connect()` · DEPRECATED · `legacy_auth_header()` · RENAMED · `onWatcherCleanup()` · DEPRECATED · `parse_json_v1()` · DEPRECATED · `generate_prompt()` · RENAMED · `client.get_status()`
-
+**Also changed:** `RemoteTriggerInput` cloud triggering · `CronCreateInput`/`CronDeleteInput`/`CronListInput` scheduled task management · `NotebookEditInput` Jupyter notebook cell editing · `ReportFindingsInput` code review findings with verdicts
 <!-- /skilld:api-changes -->
 
 <!-- skilld:best-practices -->
-
 ## Best Practices
 
-- Use the `streamWithContext` method instead of sequential calls for complex multi-turn interactions — this pattern ensures optimal token usage and reduces latency by batching requests where possible [source](./.skilld/docs/api.md#streamwithcontext)
+- Write agent descriptions as 3-5 word noun phrases — a terse label that appears in the user's terminal, not a full requirement statement. Example: "Install dependencies" or "Review pull request" [source](./.skilld/pkg/sdk-tools.d.ts:L665)
 
-- Configure the `maxTokens` parameter dynamically based on the input prompt length rather than setting a hard limit — this prevents unnecessary truncation of long, detailed responses [source](./.skilld/docs/config.md:L45:109)
+- Leave agents to run in the background by default; set `run_in_background: false` only when the very next action depends on the result and nothing else can usefully happen while it runs — background execution lets the user queue other work [source](./.skilld/pkg/sdk-tools.d.ts:L671)
 
-- Implement a custom `retryStrategy` using exponential backoff with jitter for external API calls — the default fixed delay can lead to thundering herd issues under high load [source](./.skilld/docs/advanced.md#retry-strategies)
+- Format Bash descriptions in active voice, starting with a verb for simple commands (5-10 words) or adding context for complex/piped commands to clarify what they do — avoid vague words like "complex" or "risk" [source](./.skilld/pkg/sdk-tools.d.ts:L702)
 
-- Utilize the `defineConfig` function to merge environment variables and local overrides cleanly — this is the preferred method for managing complex project configurations and enabling type inference [source](./.skilld/docs/config.md:L22)
+- Omit the optional `path` field in Glob and Grep to use the current working directory; never pass `undefined` or `null` explicitly — the tool interprets these differently than an omitted field [source](./.skilld/pkg/sdk-tools.d.ts:L817)
 
-- Prefer the `useComposable` hook for managing stateful UI interactions within the Claude code environment — this ensures proper lifecycle binding and prevents memory leaks in reactive contexts [source](./.skilld/docs/composables.md:L85:109)
+- Begin Workflow `meta` blocks with a pure literal `export const meta = { name, description, phases }` containing no computed values, function calls, or conditionals — the runtime validates this before script execution [source](./.skilld/pkg/sdk-tools.d.ts:L2770)
 
-- For high-throughput scenarios, use the `batchProcess` utility instead of iterating over individual `generate` calls — this significantly improves throughput by reducing network overhead [source](./.skilld/docs/performance.md#batching)
+- Pass Workflow `args` as actual JSON values (objects and arrays), not JSON-encoded strings — a stringified list breaks `args.filter` and `args.map` when the script processes input [source](./.skilld/pkg/sdk-tools.d.ts:L2775)
 
-- When handling sensitive data, use the `secureContext` wrapper to ensure prompt data is properly masked before transmission to the model API [source](./.skilld/docs/security.md#securecontext)
+- Use `scriptPath` to iterate on Workflow scripts: save the returned path after each invocation, edit the file with Write/Edit, then re-invoke Workflow with the same `scriptPath` instead of re-sending the full script [source](./.skilld/pkg/sdk-tools.d.ts:L2792)
 
-- Use the `experimental` model parameters (e.g., `temperature` scaling) only when fine-tuning for specific creative tasks — this allows for fine-grained control over stochasticity without affecting stability in production [source](./.skilld/docs/models.md#experimental-params)
+- Publish Artifact files with short, distinctive basenames — this becomes the fallback title when the HTML lacks a `<title>` tag, and it serves as the visual identity in the gallery [source](./.skilld/pkg/sdk-tools.d.ts:L3063)
 
-- Always validate the output schema using the built-in `validateResponse` function before processing results — this prevents downstream errors caused by unexpected model output formats [source](./.skilld/docs/validation.md#schema-validation)
+- Include `favicon` (one or two emoji) only on the first Artifact publish; omit it on redeploys to preserve the artifact's existing icon — pass a new one only when the user explicitly requests it [source](./.skilld/pkg/sdk-tools.d.ts:L3067)
 
-- Leverage the `contextWindowManagement` strategy to implement sliding window logic for long documents — this ensures that the most relevant parts of the context remain accessible without exceeding the model's token limit [source](./.skilld/docs/context-management.md#sliding-window)
+- Always pass the `url` parameter when updating an existing Artifact the user owns — without it, the publish creates a separate artifact instead of updating in place [source](./.skilld/pkg/sdk-tools.d.ts:L3088)
 
-- Avoid direct string concatenation for complex prompt construction — use the structured `promptBuilder` utility to ensure proper system message separation and parameter injection [source](./.skilld/docs/prompt-building.md#prompt-builder)
+- Never force-push past an Artifact conflict using `force: true` — always merge changes onto the newer content and republish instead; the only exception is when the user has explicitly stated they want to discard that specific version [source](./.skilld/pkg/sdk-tools.d.ts:L3099)
 
-- Use the `client.onStream` event listener to handle partial response updates asynchronously — this is crucial for building real-time user interfaces and improving perceived performance [source](./.skilld/docs/events.md#on-stream-events)
+- Structure SendFeedback details with labeled bullets in order: **What happened:** (observed vs. expected, exact error if short); **What the user said:** (quoted); **Repro:** (minimal steps); **Evidence:** (request IDs, timestamps, versions); optionally **Cause:** (only if verified). Keep each to 1-3 lines, no narrative or speculation [source](./.skilld/pkg/sdk-tools.d.ts:L2608)
 
-- For production resilience, set a `timeout` on all network requests — this prevents indefinite hanging and allows for graceful failure handling in critical workflows [source](./.skilld/docs/advanced.md#timeouts)
-
+- Write ProposeGoal conditions as verifiable statements that a separate evaluator can check from the conversation (e.g. "all tests in test/auth pass (bun test exits 0)") — limit to 500 characters so users can read the full condition in the approval dialog [source](./.skilld/pkg/sdk-tools.d.ts:L3025)
 <!-- /skilld:best-practices -->

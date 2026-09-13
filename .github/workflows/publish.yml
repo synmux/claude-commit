@@ -63,10 +63,6 @@ jobs:
         with:
           runtime: node@24
           cache: true
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       # `prepublishOnly` builds dist/ (bundle + declarations) before npm packs.
       - name: Publish to npm
         run: npm publish --access public
