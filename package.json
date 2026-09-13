@@ -81,7 +81,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/synmux/claude-commit"
+    "url": "git+https://github.com/synmux/claude-commit.git"
   },
   "scripts": {
     "start": "node bin/cco.js",
