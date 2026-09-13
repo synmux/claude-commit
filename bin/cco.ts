@@ -1,9 +1,8 @@
-#!/usr/bin/env bun
 /**
  * Executable entry point for `cco` / `claude-commit`.
  */
-import { run } from "../src/cli";
-import { color } from "../src/ui/colors";
+import { run } from "../src/cli.ts";
+import { color } from "../src/ui/colors.ts";
 
 run(process.argv.slice(2))
   .then((code) => {
@@ -11,8 +10,6 @@ run(process.argv.slice(2))
   })
   .catch((err) => {
     // Unexpected (non-ClaudeCommitError) failures: print a stack for debugging.
-    process.stderr.write(
-      `${color("31", "unexpected error:")} ${err?.stack ?? err}\n`,
-    );
+    process.stderr.write(`${color("31", "unexpected error:")} ${err?.stack ?? err}\n`);
     process.exitCode = 1;
   });

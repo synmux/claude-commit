@@ -1,10 +1,11 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { $ } from "bun";
-import { partitionDiff, sectionPaths } from "../src/diff";
-import { getStagedDiff, getStagedFiles, getStagedStat } from "../src/git";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { partitionDiff, sectionPaths } from "../src/diff.ts";
+import { getStagedDiff, getStagedFiles, getStagedStat } from "../src/git.ts";
 
 /**
  * A throwaway repository with `top.txt`, `sub/file.txt` and a freshly added
@@ -16,9 +17,14 @@ import { getStagedDiff, getStagedFiles, getStagedStat } from "../src/git";
  * `diff.external` (an external driver that forges a `diff --git` header).
  * Runs `fn` with the working directory inside `sub/`, then restores it.
  */
-async function withStagedRepo(
-  fn: (dir: string) => Promise<void>,
-): Promise<void> {
+const execFileAsync = promisify(execFile);
+
+/** Run one git command in `dir`, throwing on a non-zero exit. */
+async function gitIn(dir: string, ...args: string[]): Promise<void> {
+  await execFileAsync("git", ["-C", dir, ...args]);
+}
+
+async function withStagedRepo(fn: (dir: string) => Promise<void>): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "cco-git-"));
   const originalCwd = process.cwd();
   try {
@@ -26,37 +32,44 @@ async function withStagedRepo(
     // user's global 1Password signer cannot run headless).
     const engine = join(dir, "engine-src");
     await mkdir(engine);
-    await $`git -C ${engine} init -q`.quiet();
-    await $`git -C ${engine} config user.email cco@example.invalid`.quiet();
-    await $`git -C ${engine} config user.name cco`.quiet();
-    await $`git -C ${engine} config commit.gpgsign false`.quiet();
+    await gitIn(engine, "init", "-q");
+    await gitIn(engine, "config", "user.email", "cco@example.invalid");
+    await gitIn(engine, "config", "user.name", "cco");
+    await gitIn(engine, "config", "commit.gpgsign", "false");
     await writeFile(join(engine, "engine.txt"), "engine\n");
-    await $`git -C ${engine} add -A`.quiet();
-    await $`git -C ${engine} commit -qm engine`.quiet();
+    await gitIn(engine, "add", "-A");
+    await gitIn(engine, "commit", "-qm", "engine");
 
     const externalDiff = join(dir, "external-diff.sh");
-    await writeFile(
-      externalDiff,
-      '#!/bin/sh\necho "diff --git a/hijacked.txt b/hijacked.txt"\n',
-      { mode: 0o755 },
-    );
+    await writeFile(externalDiff, '#!/bin/sh\necho "diff --git a/hijacked.txt b/hijacked.txt"\n', {
+      mode: 0o755,
+    });
 
     const repo = join(dir, "repo");
     await mkdir(repo);
-    await $`git -C ${repo} init -q`.quiet();
-    await $`git -C ${repo} config user.email cco@example.invalid`.quiet();
-    await $`git -C ${repo} config user.name cco`.quiet();
-    await $`git -C ${repo} config diff.relative true`.quiet();
-    await $`git -C ${repo} config diff.noprefix true`.quiet();
-    await $`git -C ${repo} config diff.mnemonicPrefix true`.quiet();
-    await $`git -C ${repo} config diff.submodule log`.quiet();
-    await $`git -C ${repo} config diff.ignoreSubmodules all`.quiet();
-    await $`git -C ${repo} config diff.external ${externalDiff}`.quiet();
+    await gitIn(repo, "init", "-q");
+    await gitIn(repo, "config", "user.email", "cco@example.invalid");
+    await gitIn(repo, "config", "user.name", "cco");
+    await gitIn(repo, "config", "diff.relative", "true");
+    await gitIn(repo, "config", "diff.noprefix", "true");
+    await gitIn(repo, "config", "diff.mnemonicPrefix", "true");
+    await gitIn(repo, "config", "diff.submodule", "log");
+    await gitIn(repo, "config", "diff.ignoreSubmodules", "all");
+    await gitIn(repo, "config", "diff.external", externalDiff);
     await writeFile(join(repo, "top.txt"), "top\n");
     await mkdir(join(repo, "sub"));
     await writeFile(join(repo, "sub", "file.txt"), "nested\n");
-    await $`git -C ${repo} -c protocol.file.allow=always submodule add -q ${engine} engine`.quiet();
-    await $`git -C ${repo} add -A`.quiet();
+    await gitIn(
+      repo,
+      "-c",
+      "protocol.file.allow=always",
+      "submodule",
+      "add",
+      "-q",
+      engine,
+      "engine",
+    );
+    await gitIn(repo, "add", "-A");
     process.chdir(join(repo, "sub"));
     await fn(repo);
   } finally {
@@ -90,11 +103,9 @@ describe("staged-change readers", () => {
         .split("\ndiff --git ")
         .find((section) => section.includes("a/engine b/engine"));
       expect(engineSection).toBeDefined();
-      expect(
-        sectionPaths(
-          `diff --git ${engineSection!.replace(/^diff --git /, "")}`,
-        ),
-      ).toEqual(["engine"]);
+      expect(sectionPaths(`diff --git ${engineSection!.replace(/^diff --git /, "")}`)).toEqual([
+        "engine",
+      ]);
       expect(totalFiles).toBe(4); // .gitmodules, engine, sub/file.txt, top.txt
     });
   });

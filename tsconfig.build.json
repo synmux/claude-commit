@@ -1,0 +1,15 @@
+{
+  // Declaration-only build for the library entry (`index.ts`): esbuild emits
+  // the JavaScript, this emits the matching `.d.ts` tree under `dist/types`.
+  // `rewriteRelativeImportExtensions` turns the sources' `.ts` specifiers
+  // into `.js` so the declarations resolve to their siblings.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "rewriteRelativeImportExtensions": true,
+    "outDir": "dist/types"
+  },
+  "include": ["index.ts"]
+}

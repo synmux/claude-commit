@@ -35,13 +35,9 @@
  * status line said everything was fine, so every parsed line is checked for
  * it rather than trusting the status code.
  */
-import { ClaudeCommitError } from "./errors";
-import {
-  DEFAULT_OLLAMA_CONTEXT,
-  DEFAULT_OLLAMA_HOST,
-  parseModelRef,
-} from "./models";
-import type { ModelResult, OllamaConfig, RunPromptOptions } from "./types";
+import { ClaudeCommitError } from "./errors.ts";
+import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST, parseModelRef } from "./models.ts";
+import type { ModelResult, OllamaConfig, RunPromptOptions } from "./types.ts";
 
 /** Ollama settings with every default filled in; the context may still be `"auto"`. */
 export interface ResolvedOllama {
@@ -65,9 +61,7 @@ export interface OllamaRequestSettings {
 export function normaliseOllamaHost(host: string): string {
   const trimmed = host.trim().replace(/\/+$/, "");
   if (trimmed === "") return DEFAULT_OLLAMA_HOST;
-  return /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
-    ? trimmed
-    : `http://${trimmed}`;
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
 }
 
 /**
@@ -95,9 +89,7 @@ export function resolveOllamaConfig(
   return {
     host: resolveOllamaHost(config?.host, env),
     context:
-      typeof context === "number" && context > 0
-        ? Math.floor(context)
-        : DEFAULT_OLLAMA_CONTEXT,
+      typeof context === "number" && context > 0 ? Math.floor(context) : DEFAULT_OLLAMA_CONTEXT,
     keepAlive: config?.keepAlive ?? null,
   };
 }
@@ -147,24 +139,15 @@ export async function probeOllamaContext(
     signal,
   );
   if (!preload.ok) {
-    throw new ClaudeCommitError(
-      await describeHttpFailure(preload, host, model),
-    );
+    throw new ClaudeCommitError(await describeHttpFailure(preload, host, model));
   }
 
-  const ps = await ollamaFetch(
-    `${host}/api/ps`,
-    { method: "GET" },
-    host,
-    signal,
-  );
+  const ps = await ollamaFetch(`${host}/api/ps`, { method: "GET" }, host, signal);
   if (!ps.ok) {
     throw new ClaudeCommitError(await describeHttpFailure(ps, host, model));
   }
   const body = (await ps.json()) as { models?: OllamaLoadedModel[] };
-  const loaded = (body.models ?? []).find(
-    (entry) => entry.name === model || entry.model === model,
-  );
+  const loaded = (body.models ?? []).find((entry) => entry.name === model || entry.model === model);
   const contextLength = loaded?.context_length;
   if (typeof contextLength !== "number" || contextLength <= 0) {
     throw new ClaudeCommitError(
@@ -320,11 +303,7 @@ async function describeHttpFailure(
 /** Turn a transport-level failure into a message that says what to do about it. */
 function describeTransportFailure(error: unknown, host: string): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (
-    /econnrefused|failed to fetch|unable to connect|connection refused/i.test(
-      message,
-    )
-  ) {
+  if (/econnrefused|failed to fetch|unable to connect|connection refused/i.test(message)) {
     return (
       `Cannot reach the Ollama server at ${host}. Start it with ` +
       `\`ollama serve\`, or set "ollama.host" in your claude-commit config.`
@@ -387,9 +366,7 @@ async function consumeStream(
   handleLine(buffer);
 
   if (!final.done) {
-    throw new ClaudeCommitError(
-      "Ollama's response ended before the model finished.",
-    );
+    throw new ClaudeCommitError("Ollama's response ended before the model finished.");
   }
   return { content, final };
 }
@@ -401,10 +378,7 @@ async function consumeStream(
  * that is the prompt's real size, and neither double-counts.
  */
 function promptTokensOf(final: OllamaChatChunk): number {
-  return Math.max(
-    final.prompt_eval_count ?? 0,
-    final.prompt_eval_cached_count ?? 0,
-  );
+  return Math.max(final.prompt_eval_count ?? 0, final.prompt_eval_cached_count ?? 0);
 }
 
 /**
@@ -442,9 +416,7 @@ export async function runOllamaPrompt(
     signal,
   );
   if (!response.ok) {
-    throw new ClaudeCommitError(
-      await describeHttpFailure(response, resolved.host, name),
-    );
+    throw new ClaudeCommitError(await describeHttpFailure(response, resolved.host, name));
   }
 
   let content: string;

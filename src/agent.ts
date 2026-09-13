@@ -20,30 +20,21 @@
  * settings (see {@link buildQueryOptions}) - so the request contains nothing
  * beyond the prompt we build.
  */
-import {
-  query,
-  type Options,
-  type SDKMessage,
-} from "@anthropic-ai/claude-agent-sdk";
-import { ClaudeCommitError } from "./errors";
-import { parseModelRef } from "./models";
-import { runOllamaPrompt } from "./ollama";
-import type { ModelResult, RunPromptOptions } from "./types";
+import { query, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { ClaudeCommitError } from "./errors.ts";
+import { parseModelRef } from "./models.ts";
+import { runOllamaPrompt } from "./ollama.ts";
+import type { ModelResult, RunPromptOptions } from "./types.ts";
 
-export type { RunPromptOptions } from "./types";
+export type { RunPromptOptions } from "./types.ts";
 
-export const GATED_CREDENTIAL_VARS = [
-  "ANTHROPIC_API_KEY",
-  "ANTHROPIC_AUTH_TOKEN",
-] as const;
+export const GATED_CREDENTIAL_VARS = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"] as const;
 
 /**
  * Names of the gated credential variables present in `env`. An empty string
  * counts as present, since presence alone perturbs credential resolution.
  */
-export function presentCredentialVars(
-  env: Record<string, string | undefined>,
-): string[] {
+export function presentCredentialVars(env: Record<string, string | undefined>): string[] {
   return GATED_CREDENTIAL_VARS.filter((name) => env[name] !== undefined);
 }
 
@@ -199,10 +190,7 @@ export async function runClaudePrompt(
               type?: string;
               delta?: { type?: string; text?: string };
             };
-            if (
-              event.type === "content_block_delta" &&
-              event.delta?.type === "text_delta"
-            ) {
+            if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
               opts.onText(event.delta.text ?? "");
             }
           }
@@ -238,9 +226,7 @@ export async function runClaudePrompt(
     if (opts.abortController?.signal.aborted) {
       throw new ClaudeCommitError("Generation was cancelled.");
     }
-    throw new ClaudeCommitError(
-      `Failed to call the Claude Agent SDK: ${(err as Error).message}`,
-    );
+    throw new ClaudeCommitError(`Failed to call the Claude Agent SDK: ${(err as Error).message}`);
   }
 
   if (assistantError) {
@@ -269,12 +255,7 @@ export async function runClaudePrompt(
  * Throws {@link ClaudeCommitError} on any model, authentication, transport
  * or quota failure.
  */
-export async function runPrompt(
-  prompt: string,
-  opts: RunPromptOptions,
-): Promise<ModelResult> {
+export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise<ModelResult> {
   const { provider } = parseModelRef(opts.model);
-  return provider === "ollama"
-    ? runOllamaPrompt(prompt, opts)
-    : runClaudePrompt(prompt, opts);
+  return provider === "ollama" ? runOllamaPrompt(prompt, opts) : runClaudePrompt(prompt, opts);
 }

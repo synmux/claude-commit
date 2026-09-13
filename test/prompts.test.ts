@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import {
   buildFinalSystem,
   buildFinalUser,
@@ -10,14 +10,13 @@ import {
   MESSAGES_SCHEMA,
   parseOptions,
   OPTION_DELIMITER,
-} from "../src/prompts";
-import { DEFAULT_CONFIG, mergeConfig } from "../src/config";
-import type { DiffSummary } from "../src/types";
+} from "../src/prompts.ts";
+import { DEFAULT_CONFIG, mergeConfig } from "../src/config.ts";
+import type { DiffSummary } from "../src/types.ts";
 
 const primary = (...texts: string[]): DiffSummary[] =>
   texts.map((text) => ({ priority: "primary", text }));
-const low = (...texts: string[]): DiffSummary[] =>
-  texts.map((text) => ({ priority: "low", text }));
+const low = (...texts: string[]): DiffSummary[] => texts.map((text) => ({ priority: "low", text }));
 
 describe("filename prompts", () => {
   test("quotes unusual filenames and requests a structured single message", () => {
@@ -33,18 +32,11 @@ describe("filename prompts", () => {
   });
 
   test("preserves priority and option delimiters in plain-text mode", () => {
-    const prompt = buildFilenamesUser(
-      { primary: ["src/app.ts"], lowPriority: ["bun.lock"] },
-      3,
-    );
-    expect(prompt.indexOf("src/app.ts")).toBeLessThan(
-      prompt.indexOf("bun.lock"),
-    );
+    const prompt = buildFilenamesUser({ primary: ["src/app.ts"], lowPriority: ["bun.lock"] }, 3);
+    expect(prompt.indexOf("src/app.ts")).toBeLessThan(prompt.indexOf("bun.lock"));
     expect(prompt).toContain("Low-priority changes");
     expect(prompt).toContain("exactly 3 distinct");
-    expect(prompt).toContain(
-      "Each option's subject line describes the primary changes",
-    );
+    expect(prompt).toContain("Each option's subject line describes the primary changes");
     expect(prompt).toContain(OPTION_DELIMITER);
   });
 
@@ -84,9 +76,7 @@ describe("buildFinalSystem", () => {
   });
 
   test("conventional commits adds type guidance", () => {
-    const sys = buildFinalSystem(
-      mergeConfig(DEFAULT_CONFIG, { conventionalCommits: true }),
-    );
+    const sys = buildFinalSystem(mergeConfig(DEFAULT_CONFIG, { conventionalCommits: true }));
     expect(sys).toContain("Conventional Commit");
     expect(sys).toContain("feat, fix, docs");
   });
@@ -100,9 +90,7 @@ describe("buildFinalSystem", () => {
   });
 
   test("multiline asks for a body", () => {
-    const sys = buildFinalSystem(
-      mergeConfig(DEFAULT_CONFIG, { multiline: true }),
-    );
+    const sys = buildFinalSystem(mergeConfig(DEFAULT_CONFIG, { multiline: true }));
     expect(sys).toContain("body");
     expect(sys).not.toContain("Output only the single subject line");
   });
@@ -173,9 +161,7 @@ describe("buildSummarySystem", () => {
 
 describe("buildSummaryUser", () => {
   test("notes multi-part diffs", () => {
-    expect(buildSummaryUser("d", 0, 1)).toContain(
-      "Summarize the following diff",
-    );
+    expect(buildSummaryUser("d", 0, 1)).toContain("Summarize the following diff");
     expect(buildSummaryUser("d", 1, 3)).toContain("part 2 of 3");
   });
 
@@ -199,9 +185,7 @@ describe("buildFinalSystem with low-priority changes", () => {
   });
 
   test("without low-priority changes the prompt is unchanged", () => {
-    expect(buildFinalSystem(DEFAULT_CONFIG, false, false)).toBe(
-      buildFinalSystem(DEFAULT_CONFIG),
-    );
+    expect(buildFinalSystem(DEFAULT_CONFIG, false, false)).toBe(buildFinalSystem(DEFAULT_CONFIG));
     expect(buildFinalSystem(fullConfig, true)).not.toMatch(/primary changes/i);
   });
 
@@ -224,9 +208,7 @@ describe("buildFinalSystem with low-priority changes", () => {
     const full = buildFinalSystem(fullConfig, false, true);
     expect(full).toMatch(/type and scope[^.]*primary changes/);
     expect(full).toMatch(/gitmoji[^.]*primary changes/);
-    expect(full).toMatch(
-      /primary changes first[^.]*low-priority changes briefly/,
-    );
+    expect(full).toMatch(/primary changes first[^.]*low-priority changes briefly/);
     expect(full).not.toContain("Output only the single subject line");
   });
 
@@ -274,15 +256,10 @@ describe("buildFinalUser with low-priority summaries", () => {
   });
 
   test("multi-option variety is scoped to the primary changes when both groups exist", () => {
-    for (const user of [
-      buildFinalUser(mixed, 3, false),
-      buildFinalUser(mixed, 3, true),
-    ]) {
+    for (const user of [buildFinalUser(mixed, 3, false), buildFinalUser(mixed, 3, true)]) {
       expect(user).toContain("exactly 3 distinct");
       expect(user).toMatch(/aspect of the primary changes/);
-      expect(user).toMatch(
-        /each option'?s subject line describes the primary changes/i,
-      );
+      expect(user).toMatch(/each option'?s subject line describes the primary changes/i);
       expect(user).not.toContain("structure");
     }
   });
@@ -298,10 +275,7 @@ describe("buildFinalUser with low-priority summaries", () => {
   });
 
   test("numbers parts within each group", () => {
-    const user = buildFinalUser(
-      [...primary("one", "two"), ...low("three", "four")],
-      1,
-    );
+    const user = buildFinalUser([...primary("one", "two"), ...low("three", "four")], 1);
     expect(user).toContain("Part 1:");
     expect(user).toContain("Part 2:");
     expect(user).not.toContain("Part 3:");
@@ -362,17 +336,11 @@ describe("structured output", () => {
   });
 
   test("extractMessages returns the string list from a valid object", () => {
-    expect(extractMessages({ messages: ["feat: a", "fix: b"] })).toEqual([
-      "feat: a",
-      "fix: b",
-    ]);
+    expect(extractMessages({ messages: ["feat: a", "fix: b"] })).toEqual(["feat: a", "fix: b"]);
   });
 
   test("extractMessages filters non-strings and rejects malformed shapes", () => {
-    expect(extractMessages({ messages: ["ok", 5, null, "two"] })).toEqual([
-      "ok",
-      "two",
-    ]);
+    expect(extractMessages({ messages: ["ok", 5, null, "two"] })).toEqual(["ok", "two"]);
     expect(extractMessages({ messages: [] })).toBeNull();
     expect(extractMessages({ messages: "not-array" })).toBeNull();
     expect(extractMessages({})).toBeNull();

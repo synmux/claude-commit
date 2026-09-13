@@ -1,9 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import {
-  buildQueryOptions,
-  buildSubprocessEnv,
-  presentCredentialVars,
-} from "../src/agent";
+import { test, expect, describe } from "vitest";
+import { buildQueryOptions, buildSubprocessEnv, presentCredentialVars } from "../src/agent.ts";
 
 const cleanEnv = { PATH: "/usr/bin", HOME: "/home/user" };
 
@@ -13,9 +9,9 @@ describe("presentCredentialVars", () => {
   });
 
   test("lists every credential var that is present", () => {
-    expect(
-      presentCredentialVars({ ...cleanEnv, ANTHROPIC_API_KEY: "sk-test" }),
-    ).toEqual(["ANTHROPIC_API_KEY"]);
+    expect(presentCredentialVars({ ...cleanEnv, ANTHROPIC_API_KEY: "sk-test" })).toEqual([
+      "ANTHROPIC_API_KEY",
+    ]);
     expect(
       presentCredentialVars({
         ...cleanEnv,
@@ -26,23 +22,19 @@ describe("presentCredentialVars", () => {
   });
 
   test("counts an empty string as present", () => {
-    expect(
-      presentCredentialVars({ ...cleanEnv, ANTHROPIC_AUTH_TOKEN: "" }),
-    ).toEqual(["ANTHROPIC_AUTH_TOKEN"]);
+    expect(presentCredentialVars({ ...cleanEnv, ANTHROPIC_AUTH_TOKEN: "" })).toEqual([
+      "ANTHROPIC_AUTH_TOKEN",
+    ]);
   });
 
   test("treats explicit undefined values as absent", () => {
-    expect(
-      presentCredentialVars({ ...cleanEnv, ANTHROPIC_API_KEY: undefined }),
-    ).toEqual([]);
+    expect(presentCredentialVars({ ...cleanEnv, ANTHROPIC_API_KEY: undefined })).toEqual([]);
   });
 });
 
 describe("buildSubprocessEnv", () => {
   test("inherits the parent env when there is nothing to change", () => {
-    expect(
-      buildSubprocessEnv({ baseEnv: cleanEnv, allowApiKey: false }),
-    ).toBeUndefined();
+    expect(buildSubprocessEnv({ baseEnv: cleanEnv, allowApiKey: false })).toBeUndefined();
     expect(
       buildSubprocessEnv({
         baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: "sk-test" },
@@ -172,10 +164,7 @@ describe("buildQueryOptions", () => {
 
   test("enables partial messages only when a text callback is given", () => {
     expect(buildQueryOptions(baseOpts).includePartialMessages).toBe(false);
-    expect(
-      buildQueryOptions({ ...baseOpts, onText: () => {} })
-        .includePartialMessages,
-    ).toBe(true);
+    expect(buildQueryOptions({ ...baseOpts, onText: () => {} }).includePartialMessages).toBe(true);
   });
 
   test("attaches the subprocess env only when one was built", () => {
@@ -190,8 +179,6 @@ describe("buildQueryOptions", () => {
       schema: { type: "object" },
     };
     expect(buildQueryOptions(baseOpts).outputFormat).toBeUndefined();
-    expect(buildQueryOptions({ ...baseOpts, outputFormat }).outputFormat).toBe(
-      outputFormat,
-    );
+    expect(buildQueryOptions({ ...baseOpts, outputFormat }).outputFormat).toBe(outputFormat);
   });
 });

@@ -78,6 +78,11 @@ model in full. Skipping content outright is `skipArmored`'s job.
 
 ### Path matching (`src/paths.ts`, new)
 
+> **Superseded on 2026-09-13:** the glob engine is now `picomatch` (`dot: true`)
+> and the two ill-formed-pattern behaviours below changed with it - see
+> [`2026-09-13-node-pnpm-clack-migration-design.md`](2026-09-13-node-pnpm-clack-migration-design.md).
+> Everything else in this section still holds.
+
 Patterns follow gitignore conventions, implemented on `Bun.Glob` (no new
 dependency; `*` matches dotfiles, `**` crosses directories, braces expand,
 `\` escapes). `Bun.Glob.match` alone is not enough: `.agents/skills/*-skilld`

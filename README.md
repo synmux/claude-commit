@@ -44,17 +44,24 @@ For less model work at the cost of less useful messages, enable
 
 ## Install
 
-Requires [Bun](https://bun.sh).
+Requires [Node.js](https://nodejs.org) 22.18 or later (24 LTS recommended).
 
 ```sh
-bun install
-bun link            # makes `cco` and `claude-commit` available on your PATH
+npm install -g @synmux/claude-commit   # `cco` and `claude-commit` on your PATH
+```
+
+From a checkout, [pnpm](https://pnpm.io) is the package manager (the
+`packageManager` field pins the version, so `corepack enable` is enough):
+
+```sh
+pnpm install
+pnpm link --global  # makes `cco` and `claude-commit` available on your PATH
 ```
 
 Or run it directly without linking:
 
 ```sh
-bun run bin/cco.ts --help
+node bin/cco.js --help
 ```
 
 ## Authentication
@@ -88,29 +95,29 @@ and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 
 ### Options
 
-| Flag                                     | Description                                                                             |
-| ---------------------------------------- | --------------------------------------------------------------------------------------- |
-| `-i, --interactive` / `--no-interactive` | Choose between several options in an interactive TUI, or skip it when enabled in config |
-| `-n, --count <n>`                        | Number of options to generate in interactive mode (default 3)                           |
-| `-a, --all`                              | Stage all changes (`git add -A`) before committing                                      |
-| `-c, --conventional`                     | Format as a [Conventional Commit](https://www.conventionalcommits.org)                  |
-| `-g, --gitmoji`                          | Prefix the subject with a [gitmoji](https://gitmoji.dev)                                |
-| `-m, --multiline` / `--no-multiline`     | Write a multi-line commit (subject + body), or force a single line                      |
-| `-t, --template <tpl>`                   | Template for the first line, e.g. `"[PROJ-1] {message}"`                                |
-| `-p, --prompt <text>`                    | Extra instructions appended to the prompt                                               |
-| `-f, --filenames-only`                   | Skip summarisation and send only filenames to the final model                           |
-| `--model-summary <model>`                | Model used to summarize the diff (default `sonnet`)                                     |
-| `--model-final <model>`                  | Model used to write the message (default `sonnet`)                                      |
-| `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff       |
-| `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                 |
-| `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                         |
-| `--ollama-host <url>`                    | Base URL of the Ollama server for `ollama:` models                                      |
-| `--ollama-context <tokens>`              | Context window requested from Ollama models                                             |
-| `-d, --dry-run`                          | Print the message to stdout without committing                                          |
-| `-y, --yes`                              | Commit without asking for confirmation                                                  |
-| `--no-spinner`                           | Disable the progress spinner                                                            |
-| `--config <path>`                        | Path to a config file                                                                   |
-| `-v, --verbose`                          | Print summaries, cost and debug output                                                  |
+| Flag                                     | Description                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `-i, --interactive` / `--no-interactive` | Choose between several options in an interactive picker, or skip it when enabled in config |
+| `-n, --count <n>`                        | Number of options to generate in interactive mode (default 3)                              |
+| `-a, --all`                              | Stage all changes (`git add -A`) before committing                                         |
+| `-c, --conventional`                     | Format as a [Conventional Commit](https://www.conventionalcommits.org)                     |
+| `-g, --gitmoji`                          | Prefix the subject with a [gitmoji](https://gitmoji.dev)                                   |
+| `-m, --multiline` / `--no-multiline`     | Write a multi-line commit (subject + body), or force a single line                         |
+| `-t, --template <tpl>`                   | Template for the first line, e.g. `"[PROJ-1] {message}"`                                   |
+| `-p, --prompt <text>`                    | Extra instructions appended to the prompt                                                  |
+| `-f, --filenames-only`                   | Skip summarisation and send only filenames to the final model                              |
+| `--model-summary <model>`                | Model used to summarize the diff (default `sonnet`)                                        |
+| `--model-final <model>`                  | Model used to write the message (default `sonnet`)                                         |
+| `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff          |
+| `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                    |
+| `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                            |
+| `--ollama-host <url>`                    | Base URL of the Ollama server for `ollama:` models                                         |
+| `--ollama-context <tokens>`              | Context window requested from Ollama models                                                |
+| `-d, --dry-run`                          | Print the message to stdout without committing                                             |
+| `-y, --yes`                              | Commit without asking for confirmation                                                     |
+| `--no-spinner`                           | Disable the progress spinner                                                               |
+| `--config <path>`                        | Path to a config file                                                                      |
+| `-v, --verbose`                          | Print summaries, cost and debug output                                                     |
 
 ### Examples
 
@@ -120,7 +127,7 @@ cco -a -c                # stage everything and write a Conventional Commit
 cco -c -g -m             # conventional + gitmoji + a body
 cco -i -n 5              # pick from 5 options interactively
 cco -f --dry-run         # generate from filenames only, without committing
-cco --dry-run | cat      # print a message without committing (TUI-free, pipe-safe)
+cco --dry-run | cat      # print a message without committing (no picker, pipe-safe)
 git commit -F <(cco -d)  # use the message with your own git invocation
 ```
 
@@ -154,11 +161,13 @@ library results have an empty `summaries` array and `chunkCount: 0`.
 
 ## Interactive mode
 
-`cco -i` opens a TUI listing several candidate messages to choose from. The
-options are generated with a higher temperature (`interactiveTemperature`) for
-more variety. Use the arrow keys to move between options, `Enter` to commit the
-highlighted option, `e` to edit it in your `$EDITOR` first, and `q`/`Esc` to
-cancel.
+`cco -i` opens a picker (built on [Clack](https://github.com/bombshell-dev/clack))
+listing several candidate messages, each with its subject and a one-line body
+preview. The options are generated with a higher temperature
+(`interactiveTemperature`) for more variety. Use the arrow keys (or `j`/`k`) to
+move between options, `Enter` to commit the highlighted option, `e` to edit it
+in your `$EDITOR` first, and `q`/`Esc`/`Ctrl-C` to cancel. The picker draws on
+stderr, so stdout stays clean.
 
 To make interactive mode the default without typing `-i` every time, set
 `"interactive": true` in your config (see below); opt out of a single run with
@@ -257,7 +266,12 @@ those paths:
 
 ```json
 {
-  "lowPriorityPaths": [".agents/skills/*-skilld", "bun.lock", "!bun.lock.keep"]
+  "lowPriorityPaths": [
+    ".agents/skills/*-skilld",
+    "pnpm-lock.yaml",
+    "generated/**",
+    "!generated/schema.ts"
+  ]
 }
 ```
 
@@ -275,9 +289,9 @@ usually be copied in:
 - A pattern with a `/` in it is anchored at the repository root and matches a
   path or any directory above it - `.agents/skills/*-skilld` covers every file
   inside each matching directory.
-- A pattern without a `/` matches any path segment at any depth - `bun.lock`
-  matches `packages/app/bun.lock`; `*-skilld` matches everything inside any
-  `*-skilld` directory.
+- A pattern without a `/` matches any path segment at any depth -
+  `pnpm-lock.yaml` matches `packages/app/pnpm-lock.yaml`; `*-skilld` matches
+  everything inside any `*-skilld` directory.
 - `*` matches dotfiles and does not cross `/`; `**` does; `{a,b}` expands. A
   leading `/` or `./` anchors, a trailing `/` is ignored. The anchoring
   decision looks at the whole pattern, so a `/` inside a brace group anchors
@@ -430,9 +444,14 @@ Where the number comes from is `ollama.context`:
 ## Development
 
 ```sh
-bun test          # run the test suite
-bun run typecheck # tsc --noEmit
+pnpm test           # run the test suite (vitest)
+pnpm run typecheck  # tsc --noEmit
+pnpm run build      # bundle bin/ and index.ts into dist/ (only needed to publish)
 ```
+
+The sources run directly on Node's native type stripping, so there is no build
+step during development: `node bin/cco.js` picks up `dist/` when it exists and
+falls back to the TypeScript entry otherwise.
 
 What changed between versions is in [CHANGELOG.md](CHANGELOG.md), and at
 greater length on the

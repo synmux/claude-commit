@@ -1,12 +1,12 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import {
   DEFAULT_OLLAMA_CONTEXT_TOKENS,
   describeModel,
   isOllamaModel,
   OLLAMA_PREFIX,
   parseModelRef,
-} from "../src/models";
-import { ClaudeCommitError } from "../src/errors";
+} from "../src/models.ts";
+import { ClaudeCommitError } from "../src/errors.ts";
 
 describe("isOllamaModel", () => {
   test("recognises the prefix", () => {

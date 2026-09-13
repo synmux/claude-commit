@@ -43,113 +43,47 @@ Two behaviours are load-bearing and easy to break:
   a preload with _no_ `num_ctx` - sending one on the preload would defeat
   the probe.
 
-## Bun
+## Toolchain: Node 24 + pnpm
 
-Default to using Bun instead of Node.js.
+The sources are TypeScript and run on Node's native type stripping - there is
+no transpile step for development. That imposes two rules `tsc` enforces:
+relative imports carry an explicit `.ts` extension, and only erasable syntax
+is allowed (`erasableSyntaxOnly`: no enums, namespaces or parameter
+properties). Use Node built-ins (`node:fs/promises`, `node:child_process`,
+`fetch`); never reach for a runtime-specific global.
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
-
-## APIs
-
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+- `pnpm install` - the lockfile is `pnpm-lock.yaml`; `packageManager` pins
+  pnpm and `pnpm-workspace.yaml` holds the install policy (`allowBuilds`,
+  `minimumReleaseAge`). A fresh dependency may resolve one minor behind
+  npm's latest because of the one-week release age.
+- `node bin/cco.js` - the launcher imports `dist/bin/cco.js` when it exists,
+  else `bin/cco.ts` from source. `pnpm run build` (esbuild + declaration-only
+  `tsc`) is only needed for publishing; `prepublishOnly` runs it.
+- `pnpm test` - vitest, `test/**/*.test.ts`. `pnpm run typecheck` -
+  `tsc --noEmit`. `pnpm run lint` - trunk.
 
 ## Testing
 
-Use `bun test` to run tests.
+Use `vitest` (`pnpm test`). Tests drive real code: the git tests build a
+temporary repository, the picker tests drive `@clack/core` through fake
+streams. Mock only what cannot run headless.
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+```ts
+import { test, expect } from "vitest";
 
 test("hello world", () => {
   expect(1).toBe(1);
 });
 ```
 
-## Frontend
+## Terminal UI
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
-
-Server:
-
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
-
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
-
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
-
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+The interactive picker is a `@clack/core` `SelectPrompt` with a pure render
+function (`renderPicker` in `src/ui/interactive.ts`); the spinner is `ora`.
+Everything draws on stderr so stdout stays pipe-clean. Do not use Clack's
+own `spinner()`: it puts stdin in raw mode and calls `process.exit(0)` on
+Ctrl-C, bypassing the CLI's two-stage abort. See
+`docs/superpowers/specs/2026-09-13-node-pnpm-clack-migration-design.md`.
 
 <!-- skilld -->
 

@@ -3,28 +3,21 @@
  * non-interactive and interactive flows.
  */
 import { Command } from "commander";
-import { getVersion } from "./utils";
-import {
-  commit,
-  getStagedDiff,
-  getStagedStat,
-  isGitRepo,
-  getRepoRoot,
-  stageAll,
-} from "./git";
-import { presentCredentialVars } from "./agent";
-import { loadFileConfig, resolveConfig } from "./config";
+import { getVersion } from "./utils.ts";
+import { commit, getStagedDiff, getStagedStat, isGitRepo, getRepoRoot, stageAll } from "./git.ts";
+import { presentCredentialVars } from "./agent.ts";
+import { loadFileConfig, resolveConfig } from "./config.ts";
 import {
   generateCommit,
   type IgnoreStats,
   type LowPriorityStats,
   type OllamaContextWindow,
-} from "./generate";
-import { Spinner } from "./ui/spinner";
-import { confirmCommit, editInEditor } from "./ui/editor";
-import { color } from "./ui/colors";
-import { ClaudeCommitError } from "./errors";
-import type { ModelConfig, OllamaConfig, PartialConfig } from "./types";
+} from "./generate.ts";
+import { Spinner } from "./ui/spinner.ts";
+import { confirmCommit, editInEditor } from "./ui/editor.ts";
+import { color } from "./ui/colors.ts";
+import { ClaudeCommitError } from "./errors.ts";
+import type { ModelConfig, OllamaConfig, PartialConfig } from "./types.ts";
 
 export const VERSION = getVersion();
 
@@ -61,28 +54,17 @@ export function buildProgram(): Command {
     .name("cco")
     .description("Generate a git commit message with Claude.")
     .version(VERSION, "-V, --version", "output the version number")
-    .option(
-      "-i, --interactive",
-      "choose between several options in an interactive TUI",
-    )
-    .option(
-      "--no-interactive",
-      'skip the interactive TUI even when "interactive" is set in config',
-    )
-    .option(
-      "-n, --count <n>",
-      "number of options to generate in interactive mode",
-      (v) => parseInt(v, 10),
+    .option("-i, --interactive", "choose between several options in an interactive TUI")
+    .option("--no-interactive", 'skip the interactive TUI even when "interactive" is set in config')
+    .option("-n, --count <n>", "number of options to generate in interactive mode", (v) =>
+      parseInt(v, 10),
     )
     .option("-a, --all", "stage all changes (git add -A) before committing")
     .option("-c, --conventional", "format as a Conventional Commit")
     .option("-g, --gitmoji", "prefix the subject with a gitmoji")
     .option("-m, --multiline", "write a multi-line commit (subject + body)")
     .option("--no-multiline", "write only a single-line subject")
-    .option(
-      "-t, --template <tpl>",
-      'template for the first line, e.g. "[PROJ-1] {message}"',
-    )
+    .option("-t, --template <tpl>", 'template for the first line, e.g. "[PROJ-1] {message}"')
     .option("-p, --prompt <text>", "extra instructions appended to the prompt")
     .option(
       "-f, --filenames-only",
@@ -97,18 +79,13 @@ export function buildProgram(): Command {
     )
     .option(
       "--no-low-priority-paths",
-      'ignore the "lowPriorityPaths" config for this run, so every change ' +
-        "weighs the same",
+      'ignore the "lowPriorityPaths" config for this run, so every change ' + "weighs the same",
     )
     .option(
       "--no-ignore",
-      'disregard the "ignore" config for this run, so every staged change is ' +
-        "read",
+      'disregard the "ignore" config for this run, so every staged change is ' + "read",
     )
-    .option(
-      "--ollama-host <url>",
-      "base URL of the Ollama server for ollama: models",
-    )
+    .option("--ollama-host <url>", "base URL of the Ollama server for ollama: models")
     .option(
       "--ollama-context <tokens|auto>",
       "context window for Ollama models: a token count, or auto to use " +
@@ -159,8 +136,7 @@ function parseContextFlag(value: string): number | "auto" {
  */
 export function flagsToConfig(opts: CliOptions): PartialConfig {
   const cfg: PartialConfig = {};
-  if (opts.conventional !== undefined)
-    cfg.conventionalCommits = opts.conventional;
+  if (opts.conventional !== undefined) cfg.conventionalCommits = opts.conventional;
   if (opts.gitmoji !== undefined) cfg.gitmoji = opts.gitmoji;
   if (opts.multiline !== undefined) cfg.multiline = opts.multiline;
   if (opts.interactive !== undefined) cfg.interactive = opts.interactive;
@@ -176,10 +152,7 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
   if (opts.ollamaHost) ollama.host = opts.ollamaHost;
   if (opts.ollamaContext === "auto") {
     ollama.context = "auto";
-  } else if (
-    opts.ollamaContext !== undefined &&
-    Number.isFinite(opts.ollamaContext)
-  ) {
+  } else if (opts.ollamaContext !== undefined && Number.isFinite(opts.ollamaContext)) {
     ollama.context = Math.max(1, opts.ollamaContext);
   }
   if (Object.keys(ollama).length) cfg.ollama = ollama;
@@ -246,16 +219,10 @@ export async function run(argv: string[]): Promise<number> {
 
   try {
     if (!(await isGitRepo())) {
-      throw new ClaudeCommitError(
-        "Not a git repository (or any parent). Run `cco` inside a repo.",
-      );
+      throw new ClaudeCommitError("Not a git repository (or any parent). Run `cco` inside a repo.");
     }
     const repoRoot = await getRepoRoot();
-    const fileConfig = await loadFileConfig(
-      process.cwd(),
-      repoRoot,
-      opts.config,
-    );
+    const fileConfig = await loadFileConfig(process.cwd(), repoRoot, opts.config);
     const config = resolveConfig(fileConfig, flagsToConfig(opts));
 
     // Surface the credential gate: the actual stripping happens in the agent
@@ -291,22 +258,14 @@ export async function run(argv: string[]): Promise<number> {
       hasTty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
     });
     if (interactiveMode === "no-tty-error") {
-      throw new ClaudeCommitError(
-        "Interactive mode (-i) requires an interactive terminal.",
-      );
+      throw new ClaudeCommitError("Interactive mode (-i) requires an interactive terminal.");
     }
     if (interactiveMode === "interactive") {
-      const { runInteractive } = await import("./ui/interactive");
+      const { runInteractive } = await import("./ui/interactive.ts");
       return await runInteractive(diff, config, { verbose, abortController });
     }
 
-    return await runNonInteractive(
-      diff,
-      config,
-      opts,
-      verbose,
-      abortController,
-    );
+    return await runNonInteractive(diff, config, opts, verbose, abortController);
   } catch (err) {
     if (err instanceof ClaudeCommitError) {
       process.stderr.write(`${color("31", "error:")} ${err.message}\n`);
@@ -352,14 +311,10 @@ async function runNonInteractive(
       process.stderr.write(color("90", describeOllamaContext(window)) + "\n");
     }
     if (config.ignore.length > 0) {
-      process.stderr.write(
-        color("90", describeIgnoreStats(result.ignored)) + "\n",
-      );
+      process.stderr.write(color("90", describeIgnoreStats(result.ignored)) + "\n");
     }
     if (config.lowPriorityPaths.length > 0) {
-      process.stderr.write(
-        color("90", describeLowPriorityStats(result.lowPriority)) + "\n",
-      );
+      process.stderr.write(color("90", describeLowPriorityStats(result.lowPriority)) + "\n");
     }
     for (const [index, summary] of result.summaries.entries()) {
       const label =
@@ -426,8 +381,7 @@ export function describeLowPriorityStats(stats: LowPriorityStats): string {
  * summary reads as if it saw half the diff.
  */
 export function describeOllamaContext(window: OllamaContextWindow): string {
-  const source =
-    window.source === "auto" ? "chosen by the server" : "from config";
+  const source = window.source === "auto" ? "chosen by the server" : "from config";
   return `ollama: ${window.model} context ${window.tokens} tokens (${source})`;
 }
 

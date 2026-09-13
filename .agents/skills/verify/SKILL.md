@@ -11,7 +11,7 @@ verification means running the CLI against real staged changes.
 ## Recipe
 
 1. Stage something (the change under verification works): `git add -A`
-2. Happy path: `bun run bin/cco.ts --dry-run --no-spinner --verbose`
+2. Happy path: `node bin/cco.js --dry-run --no-spinner --verbose`
    - Prints chunk count, per-call cost, each summary, and the final message(s).
      Dry-run never commits.
    - A successful run exercises both pipeline stages (summary model and final
@@ -20,9 +20,9 @@ verification means running the CLI against real staged changes.
    clean error naming the model, exit code 1. Put the bogus model on
    `--model-summary` (not `--model-final`) so the run fails before any paid
    summary call.
-4. Interactive mode: `bun run bin/cco.ts --dry-run -i` (OpenTUI; needs a TTY).
+4. Interactive mode: `node bin/cco.js -i` (the Clack picker; needs a TTY - `--dry-run` skips it).
 5. Low-priority weighting: this repo's `package.json` deprioritises
-   `.agents/skills/*-skilld`, `skilld-lock.yaml`, `bun.lock` and `.serena`.
+   `.agents/skills/*-skilld`, `skilld-lock.yaml`, `pnpm-lock.yaml` and `.serena`.
    Stage a small code change together with a large change under one of
    those paths and run step 2: `--verbose` prints
    `low-priority paths: matched N of M files` and labels the low-priority
@@ -30,7 +30,7 @@ verification means running the CLI against real staged changes.
    with `--no-low-priority-paths` for the A/B. A clean reproduction that
    needs no real churn: build a scratch repo (see
    `docs/superpowers/specs/2026-08-24-low-priority-paths-design.md`) with a
-   `.claude-commit.json` listing `generated/**` and `bun.lock`, stage a
+   `.claude-commit.json` listing `generated/**` and `pnpm-lock.yaml`, stage a
    20-line fix plus thousands of regenerated lines, and run `cco` from a
    subdirectory with `git config diff.relative true` set - the readers must
    still see the whole staged set with `a/`/`b/` prefixes.

@@ -1,90 +1,252 @@
-import { test, expect, describe } from "bun:test";
-import { createTestRenderer } from "@opentui/core/testing";
-import * as tui from "@opentui/core";
-import { buildPickerScene, pickerHeight } from "../src/ui/interactive";
+import { test, expect, describe } from "vitest";
+import { PassThrough, Writable } from "node:stream";
+import { setTimeout as sleep } from "node:timers/promises";
+import {
+  S_RADIO_ACTIVE,
+  S_RADIO_INACTIVE,
+  S_STEP_ACTIVE,
+  S_STEP_CANCEL,
+  S_STEP_SUBMIT,
+} from "@clack/prompts";
+import { renderPicker, selectWithPrompt } from "../src/ui/interactive.ts";
 
-describe("pickerHeight", () => {
-  test("sizes to two rows per candidate", () => {
-    expect(pickerHeight(1, 40)).toBe(2);
-    expect(pickerHeight(3, 40)).toBe(6);
-    expect(pickerHeight(5, 40)).toBe(10);
-  });
+const messages = [
+  "feat(alpha): first candidate subject line\n\nBody one preview.",
+  "fix(bravo): second candidate subject line\n\nBody two preview.",
+  "refactor(charlie): third candidate subject line\n\nBody three preview.",
+];
 
-  test("never collapses to zero, even for a zero count", () => {
-    expect(pickerHeight(0, 40)).toBe(2);
-  });
+const subject = (message: string): string => message.split("\n", 1)[0]!;
 
-  test("caps to the terminal (minus chrome) when options overflow, flooring at one item", () => {
-    expect(pickerHeight(8, 14)).toBe(10); // wanted 16, capped to 14 - 4
-    expect(pickerHeight(8, 10)).toBe(6); // wanted 16, capped to 10 - 4
-    expect(pickerHeight(5, 5)).toBe(2); // tiny terminal floors at one item
-  });
-});
+/**
+ * A stand-in for a terminal: a writable that remembers everything written
+ * to it and reports a size, as Clack reads `columns`/`rows` off the output
+ * stream when windowing options.
+ */
+function fakeOutput(columns: number, rows: number) {
+  const chunks: string[] = [];
+  const stream = new Writable({
+    write(chunk, _encoding, callback) {
+      chunks.push(String(chunk));
+      callback();
+    },
+  }) as Writable & { columns: number; rows: number };
+  stream.columns = columns;
+  stream.rows = rows;
+  return { stream, text: () => chunks.join("") };
+}
 
-describe("buildPickerScene", () => {
-  const messages = [
-    "feat(alpha): first candidate subject line\n\nBody one preview.",
-    "fix(bravo): second candidate subject line\n\nBody two preview.",
-    "refactor(charlie): third candidate subject line\n\nBody three preview.",
-  ];
+describe("renderPicker", () => {
+  const output = fakeOutput(120, 40).stream;
 
-  async function renderScene(width: number, height: number, msgs: string[]) {
-    const { renderer, renderOnce, captureCharFrame } = await createTestRenderer(
-      {
-        width,
-        height,
-      },
-    );
-    const scene = buildPickerScene(renderer, tui, msgs, height);
-    renderer.root.add(scene.root);
-    await renderOnce();
-    const frame = captureCharFrame();
-    try {
-      renderer.destroy();
-    } catch {
-      /* headless teardown is best-effort */
-    }
-    return { scene, frame };
-  }
-
-  const subject = (message: string): string => message.split("\n", 1)[0]!;
-
-  test("lists every candidate message", async () => {
-    const { scene, frame } = await renderScene(120, 40, messages);
-    expect(scene.select.height).toBeGreaterThanOrEqual(messages.length * 2);
+  test("lists every candidate's subject and body preview", () => {
+    const frame = renderPicker({
+      messages,
+      cursor: 0,
+      state: "active",
+      output,
+    });
     for (const message of messages) {
       expect(frame).toContain(subject(message));
     }
+    expect(frame).toContain("Body one preview.");
+    expect(frame).toContain("Body three preview.");
   });
 
-  test("shows only the options - no diff pane", async () => {
-    const { frame } = await renderScene(120, 40, messages);
-    expect(frame).not.toContain("Staged diff");
-    expect(frame).not.toContain("scroll diff");
+  test("marks the cursor row active and every other row inactive", () => {
+    const frame = renderPicker({
+      messages,
+      cursor: 1,
+      state: "active",
+      output,
+    });
+    const lines = frame.split("\n");
+    const subjectLine = (message: string) => lines.find((line) => line.includes(subject(message)))!;
+    expect(subjectLine(messages[1]!)).toContain(S_RADIO_ACTIVE);
+    for (const other of [messages[0]!, messages[2]!]) {
+      expect(subjectLine(other)).toContain(S_RADIO_INACTIVE);
+      expect(subjectLine(other)).not.toContain(S_RADIO_ACTIVE);
+    }
   });
 
-  test("keeps the picker visible on a small terminal", async () => {
-    const { scene, frame } = await renderScene(80, 12, messages);
-    expect(scene.select.height).toBeGreaterThanOrEqual(2);
-    expect(frame).toContain(subject(messages[0]!));
+  test("shows the title and key hints while active", () => {
+    const frame = renderPicker({
+      messages,
+      cursor: 0,
+      state: "active",
+      output,
+    });
+    expect(frame).toContain(`${S_STEP_ACTIVE}  Pick a commit message`);
+    expect(frame).toContain("↑/↓ select");
+    expect(frame).toContain("⏎ commit");
+    expect(frame).toContain("e edit");
+    expect(frame).toContain("q cancel");
   });
 
-  test("renders a single candidate at two rows", async () => {
-    const { scene, frame } = await renderScene(80, 24, [
-      "feat: the only option here\n\nJust one body.",
-    ]);
-    expect(scene.select.height).toBe(2);
-    expect(frame).toContain("feat: the only option here");
+  test("on submit collapses to the chosen subject", () => {
+    const frame = renderPicker({
+      messages,
+      cursor: 2,
+      state: "submit",
+      output,
+    });
+    expect(frame).toContain(S_STEP_SUBMIT);
+    expect(frame).toContain(subject(messages[2]!));
+    expect(frame).not.toContain(subject(messages[0]!));
+    expect(frame).not.toContain("↑/↓ select");
   });
 
-  test("caps height and scrolls when there are more options than fit", async () => {
+  test("on cancel shows the cancel glyph and no candidates", () => {
+    const frame = renderPicker({
+      messages,
+      cursor: 0,
+      state: "cancel",
+      output,
+    });
+    expect(frame).toContain(S_STEP_CANCEL);
+    expect(frame).not.toContain(subject(messages[1]!));
+  });
+
+  test("truncates a long body preview to a single line with an ellipsis", () => {
+    const longBody = "word ".repeat(80).trim();
+    const frame = renderPicker({
+      messages: [`feat: long body\n\n${longBody}`],
+      cursor: 0,
+      state: "active",
+      output: fakeOutput(500, 40).stream,
+    });
+    const previewLine = frame.split("\n").find((line) => line.includes("word"));
+    expect(previewLine).toContain("…");
+    expect(previewLine).not.toContain(longBody);
+  });
+
+  test("windows the list around the cursor when candidates overflow the terminal", () => {
     const many = Array.from(
       { length: 12 },
-      (_, i) => `feat: candidate option number ${i + 1}\n\nBody ${i + 1}.`,
+      (_, index) => `feat: candidate option number ${index + 1}\n\nBody ${index + 1}.`,
     );
-    const { scene } = await renderScene(80, 16, many);
-    // 12 options want 24 rows, but a 16-row terminal caps to 16 - 4 = 12.
-    expect(scene.select.height).toBe(12);
-    expect(scene.select.height).toBeLessThan(many.length * 2);
+    const small = fakeOutput(80, 14).stream;
+    const frame = renderPicker({
+      messages: many,
+      cursor: 11,
+      state: "active",
+      output: small,
+    });
+    expect(frame).toContain("candidate option number 12");
+    expect(frame).not.toContain("candidate option number 1\n");
+    expect(frame).toContain("...");
+    // Never taller than the terminal it was measured for.
+    expect(frame.split("\n").length).toBeLessThanOrEqual(14);
+  });
+});
+
+describe("selectWithPrompt", () => {
+  function terminal() {
+    const input = new PassThrough();
+    const output = fakeOutput(100, 30);
+    return { input, output };
+  }
+
+  /** Feed key sequences one at a time, yielding between them so readline settles. */
+  async function press(input: PassThrough, ...keys: string[]): Promise<void> {
+    for (const key of keys) {
+      input.write(key);
+      await sleep(5);
+    }
+  }
+
+  test("Enter commits the first candidate", async () => {
+    const { input, output } = terminal();
+    const pending = selectWithPrompt(messages, {
+      input,
+      output: output.stream,
+    });
+    await press(input, "\r");
+    await expect(pending).resolves.toEqual({ action: "commit", index: 0 });
+    expect(output.text()).toContain("Pick a commit message");
+  });
+
+  test("arrow and vim keys move the cursor before Enter", async () => {
+    const { input, output } = terminal();
+    const pending = selectWithPrompt(messages, {
+      input,
+      output: output.stream,
+    });
+    await press(input, "\x1b[B", "j", "\r");
+    await expect(pending).resolves.toEqual({ action: "commit", index: 2 });
+  });
+
+  test("moving up from the first candidate wraps to the last", async () => {
+    const { input, output } = terminal();
+    const pending = selectWithPrompt(messages, {
+      input,
+      output: output.stream,
+    });
+    await press(input, "\x1b[A", "\r");
+    await expect(pending).resolves.toEqual({ action: "commit", index: 2 });
+  });
+
+  test("e edits the highlighted candidate", async () => {
+    const { input, output } = terminal();
+    const pending = selectWithPrompt(messages, {
+      input,
+      output: output.stream,
+    });
+    await press(input, "\x1b[B", "e");
+    await expect(pending).resolves.toEqual({ action: "edit", index: 1 });
+  });
+
+  test("q cancels", async () => {
+    const { input, output } = terminal();
+    const pending = selectWithPrompt(messages, {
+      input,
+      output: output.stream,
+    });
+    await press(input, "q");
+    await expect(pending).resolves.toEqual({ action: "cancel" });
+  });
+
+  test("Ctrl-C cancels without touching the exit code", async () => {
+    const { input, output } = terminal();
+    const pending = selectWithPrompt(messages, {
+      input,
+      output: output.stream,
+    });
+    await press(input, "\x03");
+    await expect(pending).resolves.toEqual({ action: "cancel" });
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  test("Escape cancels", async () => {
+    const { input, output } = terminal();
+    const pending = selectWithPrompt(messages, {
+      input,
+      output: output.stream,
+    });
+    input.write("\x1b");
+    // readline holds a lone ESC for its 50ms escape-sequence timeout.
+    await sleep(80);
+    await expect(pending).resolves.toEqual({ action: "cancel" });
+  });
+
+  test("writes nothing to stdout", async () => {
+    const { input, output } = terminal();
+    const written: string[] = [];
+    const original = process.stdout.write;
+    process.stdout.write = ((chunk: unknown) => {
+      written.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const pending = selectWithPrompt(messages, {
+        input,
+        output: output.stream,
+      });
+      await press(input, "\r");
+      await pending;
+    } finally {
+      process.stdout.write = original;
+    }
+    expect(written).toEqual([]);
   });
 });

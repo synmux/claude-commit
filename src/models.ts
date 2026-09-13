@@ -17,7 +17,7 @@
  * anything needing to know *which* provider a name refers to (chunk sizing
  * in `src/tokens.ts`, for one) can ask without pulling in a backend.
  */
-import { ClaudeCommitError } from "./errors";
+import { ClaudeCommitError } from "./errors.ts";
 
 /** Marks a model name as belonging to an Ollama server. Case-insensitive. */
 export const OLLAMA_PREFIX = "ollama:";

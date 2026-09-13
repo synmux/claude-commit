@@ -7,7 +7,7 @@
  * latency for no real benefit. We slightly over-estimate tokens so that chunks
  * stay safely under the model's context window.
  */
-import { DEFAULT_OLLAMA_CONTEXT_TOKENS, isOllamaModel } from "./models";
+import { DEFAULT_OLLAMA_CONTEXT_TOKENS, isOllamaModel } from "./models.ts";
 
 /** Estimate the number of tokens in `text` given a chars-per-token ratio. */
 export function estimateTokens(text: string, charsPerToken: number): number {
@@ -75,10 +75,7 @@ const MAX_RESERVE_FRACTION = 4;
  * Ollama - scale down.
  */
 export function contextReserveTokens(contextWindow: number): number {
-  return Math.min(
-    CONTEXT_RESERVE_TOKENS,
-    Math.floor(contextWindow / MAX_RESERVE_FRACTION),
-  );
+  return Math.min(CONTEXT_RESERVE_TOKENS, Math.floor(contextWindow / MAX_RESERVE_FRACTION));
 }
 
 /**
@@ -93,10 +90,7 @@ export function clampChunkTokens(
   ollamaContextTokens?: number,
 ): number {
   const window = contextWindowTokens(model, ollamaContextTokens);
-  return Math.max(
-    1,
-    Math.min(maxChunkTokens, window - contextReserveTokens(window)),
-  );
+  return Math.max(1, Math.min(maxChunkTokens, window - contextReserveTokens(window)));
 }
 
 /**
@@ -132,16 +126,12 @@ export function isOpaqueLine(line: string): boolean {
  * armor-heavy diffs more than threefold, which is exactly how a chunk that
  * looks within budget can overflow the model's real context window.
  */
-export function estimateDiffTokens(
-  text: string,
-  charsPerToken: number,
-): number {
+export function estimateDiffTokens(text: string, charsPerToken: number): number {
   if (charsPerToken <= 0) throw new Error("charsPerToken must be positive");
   let tokens = 0;
   for (const line of text.split("\n")) {
     const lineChars = line.length + 1; // account for the newline
-    tokens +=
-      lineChars / (isOpaqueLine(line) ? OPAQUE_CHARS_PER_TOKEN : charsPerToken);
+    tokens += lineChars / (isOpaqueLine(line) ? OPAQUE_CHARS_PER_TOKEN : charsPerToken);
   }
   return Math.ceil(tokens);
 }

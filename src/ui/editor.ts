@@ -8,13 +8,11 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
-import { ClaudeCommitError } from "../errors";
+import { ClaudeCommitError } from "../errors.ts";
 
 /** Resolve the editor command, mirroring git's lookup order. */
 function resolveEditor(): string {
-  return (
-    process.env.GIT_EDITOR || process.env.VISUAL || process.env.EDITOR || "vi"
-  );
+  return process.env.GIT_EDITOR || process.env.VISUAL || process.env.EDITOR || "vi";
 }
 
 /** Open `initial` in the user's editor and return the saved contents. */
@@ -72,9 +70,7 @@ export async function confirmCommit(): Promise<ConfirmChoice> {
   try {
     for (;;) {
       const answer = (
-        await new Promise<string>((res) =>
-          rl.question("Commit this message? [Y/n/e] ", res),
-        )
+        await new Promise<string>((res) => rl.question("Commit this message? [Y/n/e] ", res))
       )
         .trim()
         .toLowerCase();

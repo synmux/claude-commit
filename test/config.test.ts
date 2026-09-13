@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,7 @@ import {
   mergePartial,
   resolveConfig,
   sanitizePartial,
-} from "../src/config";
+} from "../src/config.ts";
 
 describe("sanitizePartial", () => {
   test("keeps known keys with correct types", () => {
@@ -38,18 +38,10 @@ describe("sanitizePartial", () => {
   });
 
   test("interactiveTemperature: accepts null, clamps to 0..2, ignores bad types", () => {
-    expect(
-      sanitizePartial({ interactiveTemperature: null }).interactiveTemperature,
-    ).toBe(null);
-    expect(
-      sanitizePartial({ interactiveTemperature: 0.8 }).interactiveTemperature,
-    ).toBe(0.8);
-    expect(
-      sanitizePartial({ interactiveTemperature: 5 }).interactiveTemperature,
-    ).toBe(2);
-    expect(
-      sanitizePartial({ interactiveTemperature: -1 }).interactiveTemperature,
-    ).toBe(0);
+    expect(sanitizePartial({ interactiveTemperature: null }).interactiveTemperature).toBe(null);
+    expect(sanitizePartial({ interactiveTemperature: 0.8 }).interactiveTemperature).toBe(0.8);
+    expect(sanitizePartial({ interactiveTemperature: 5 }).interactiveTemperature).toBe(2);
+    expect(sanitizePartial({ interactiveTemperature: -1 }).interactiveTemperature).toBe(0);
     expect(
       sanitizePartial({ interactiveTemperature: "hot" }).interactiveTemperature,
     ).toBeUndefined();
@@ -72,26 +64,21 @@ describe("filenamesOnly", () => {
     expect(sanitizePartial({ filenamesOnly: true }).filenamesOnly).toBe(true);
     expect(sanitizePartial({ filenamesOnly: false }).filenamesOnly).toBe(false);
     for (const invalid of ["true", "false", 1, 0, null, [], {}]) {
-      expect(
-        sanitizePartial({ filenamesOnly: invalid }).filenamesOnly,
-      ).toBeUndefined();
+      expect(sanitizePartial({ filenamesOnly: invalid }).filenamesOnly).toBeUndefined();
     }
   });
 
   test("higher layers can enable or disable an inherited mode", () => {
     expect(resolveConfig({ filenamesOnly: true }, {}).filenamesOnly).toBe(true);
-    expect(
-      resolveConfig({ filenamesOnly: false }, { filenamesOnly: true })
-        .filenamesOnly,
-    ).toBe(true);
-    expect(
-      resolveConfig({ filenamesOnly: true }, { filenamesOnly: false })
-        .filenamesOnly,
-    ).toBe(false);
-    expect(
-      mergePartial({ filenamesOnly: true }, { filenamesOnly: false })
-        .filenamesOnly,
-    ).toBe(false);
+    expect(resolveConfig({ filenamesOnly: false }, { filenamesOnly: true }).filenamesOnly).toBe(
+      true,
+    );
+    expect(resolveConfig({ filenamesOnly: true }, { filenamesOnly: false }).filenamesOnly).toBe(
+      false,
+    );
+    expect(mergePartial({ filenamesOnly: true }, { filenamesOnly: false }).filenamesOnly).toBe(
+      false,
+    );
   });
 });
 
@@ -121,34 +108,24 @@ describe("allowApiKey", () => {
 describe("lowPriorityPaths", () => {
   test("sanitizePartial keeps an array of non-blank strings", () => {
     expect(
-      sanitizePartial({ lowPriorityPaths: ["bun.lock", " dist/** "] })
-        .lowPriorityPaths,
+      sanitizePartial({ lowPriorityPaths: ["bun.lock", " dist/** "] }).lowPriorityPaths,
     ).toEqual(["bun.lock", "dist/**"]);
   });
 
   test("sanitizePartial drops non-string entries and blank strings", () => {
     expect(
-      sanitizePartial({ lowPriorityPaths: ["a", 1, null, "", "  ", "b"] })
-        .lowPriorityPaths,
+      sanitizePartial({ lowPriorityPaths: ["a", 1, null, "", "  ", "b"] }).lowPriorityPaths,
     ).toEqual(["a", "b"]);
   });
 
   test("sanitizePartial keeps an explicit empty list (it disables inherited patterns)", () => {
-    expect(sanitizePartial({ lowPriorityPaths: [] }).lowPriorityPaths).toEqual(
-      [],
-    );
+    expect(sanitizePartial({ lowPriorityPaths: [] }).lowPriorityPaths).toEqual([]);
   });
 
   test("sanitizePartial ignores non-array values", () => {
-    expect(
-      sanitizePartial({ lowPriorityPaths: "bun.lock" }).lowPriorityPaths,
-    ).toBeUndefined();
-    expect(
-      sanitizePartial({ lowPriorityPaths: { a: 1 } }).lowPriorityPaths,
-    ).toBeUndefined();
-    expect(
-      sanitizePartial({ lowPriorityPaths: null }).lowPriorityPaths,
-    ).toBeUndefined();
+    expect(sanitizePartial({ lowPriorityPaths: "bun.lock" }).lowPriorityPaths).toBeUndefined();
+    expect(sanitizePartial({ lowPriorityPaths: { a: 1 } }).lowPriorityPaths).toBeUndefined();
+    expect(sanitizePartial({ lowPriorityPaths: null }).lowPriorityPaths).toBeUndefined();
   });
 
   test("defaults to an empty list", () => {
@@ -162,15 +139,13 @@ describe("lowPriorityPaths", () => {
     );
     expect(cfg.lowPriorityPaths).toEqual(["dist/**"]);
     expect(
-      mergePartial({ lowPriorityPaths: ["bun.lock"] }, { lowPriorityPaths: [] })
-        .lowPriorityPaths,
+      mergePartial({ lowPriorityPaths: ["bun.lock"] }, { lowPriorityPaths: [] }).lowPriorityPaths,
     ).toEqual([]);
   });
 
   test("a layer that omits the key inherits the list below it", () => {
     expect(
-      resolveConfig({ lowPriorityPaths: ["bun.lock"] }, { gitmoji: true })
-        .lowPriorityPaths,
+      resolveConfig({ lowPriorityPaths: ["bun.lock"] }, { gitmoji: true }).lowPriorityPaths,
     ).toEqual(["bun.lock"]);
   });
 
@@ -197,18 +172,14 @@ describe("interactive", () => {
     expect(resolveConfig({}, {}).interactive).toBe(false); // default
     expect(resolveConfig({ interactive: true }, {}).interactive).toBe(true); // file
     // A `--no-interactive` flag (false) overrides a file that enables it.
-    expect(
-      resolveConfig({ interactive: true }, { interactive: false }).interactive,
-    ).toBe(false);
+    expect(resolveConfig({ interactive: true }, { interactive: false }).interactive).toBe(false);
   });
 });
 
 describe("spinner", () => {
   test("sanitizePartial accepts known spinner names only", () => {
     expect(sanitizePartial({ spinner: "dots" }).spinner).toBe("dots");
-    expect(
-      sanitizePartial({ spinner: "not-a-spinner" }).spinner,
-    ).toBeUndefined();
+    expect(sanitizePartial({ spinner: "not-a-spinner" }).spinner).toBeUndefined();
     expect(sanitizePartial({ spinner: 7 }).spinner).toBeUndefined();
   });
 
@@ -234,20 +205,14 @@ describe("mergeConfig / mergePartial", () => {
   });
 
   test("mergePartial combines nested models", () => {
-    const out = mergePartial(
-      { models: { summary: "a" } },
-      { models: { final: "b" } },
-    );
+    const out = mergePartial({ models: { summary: "a" } }, { models: { final: "b" } });
     expect(out.models).toEqual({ summary: "a", final: "b" });
   });
 });
 
 describe("resolveConfig precedence", () => {
   test("flags beat file config beat defaults", () => {
-    const cfg = resolveConfig(
-      { gitmoji: true, multiline: true },
-      { multiline: false },
-    );
+    const cfg = resolveConfig({ gitmoji: true, multiline: true }, { multiline: false });
     expect(cfg.gitmoji).toBe(true); // from file
     expect(cfg.multiline).toBe(false); // flag overrides file
     expect(cfg.conventionalCommits).toBe(false); // default
@@ -280,23 +245,14 @@ describe("loadFileConfig", () => {
       }),
     );
     expect((await loadFileConfig(dir, dir)).filenamesOnly).toBe(true);
-    await writeFile(
-      join(dir, ".claude-commit.json"),
-      JSON.stringify({ filenamesOnly: false }),
-    );
+    await writeFile(join(dir, ".claude-commit.json"), JSON.stringify({ filenamesOnly: false }));
     expect((await loadFileConfig(dir, dir)).filenamesOnly).toBe(false);
-    await writeFile(
-      join(dir, ".claude-commit.json"),
-      JSON.stringify({ filenamesOnly: true }),
-    );
+    await writeFile(join(dir, ".claude-commit.json"), JSON.stringify({ filenamesOnly: true }));
     expect((await loadFileConfig(dir, dir)).filenamesOnly).toBe(true);
   });
 
   test("reads allowApiKey from a config file", async () => {
-    await writeFile(
-      join(dir, ".claude-commit.json"),
-      JSON.stringify({ allowApiKey: true }),
-    );
+    await writeFile(join(dir, ".claude-commit.json"), JSON.stringify({ allowApiKey: true }));
     const cfg = await loadFileConfig(dir, dir);
     expect(cfg.allowApiKey).toBe(true);
   });
@@ -315,10 +271,7 @@ describe("loadFileConfig", () => {
       join(dir, "package.json"),
       JSON.stringify({ "claude-commit": { gitmoji: true, multiline: true } }),
     );
-    await writeFile(
-      join(dir, ".claude-commit.json"),
-      JSON.stringify({ multiline: false }),
-    );
+    await writeFile(join(dir, ".claude-commit.json"), JSON.stringify({ multiline: false }));
     const cfg = await loadFileConfig(dir, dir);
     expect(cfg.gitmoji).toBe(true); // from package.json
     expect(cfg.multiline).toBe(false); // overridden by file
@@ -343,10 +296,7 @@ describe("loadFileConfig", () => {
     // package.json has many purposes; a syntax error in it (the user may even
     // be committing the fix) must not stop cco from loading its own config.
     await writeFile(join(dir, "package.json"), "{ not: valid json ");
-    await writeFile(
-      join(dir, ".claude-commit.json"),
-      JSON.stringify({ gitmoji: true }),
-    );
+    await writeFile(join(dir, ".claude-commit.json"), JSON.stringify({ gitmoji: true }));
     const cfg = await loadFileConfig(dir, dir);
     expect(cfg.gitmoji).toBe(true);
   });
@@ -379,9 +329,7 @@ describe("global config (XDG)", () => {
   });
 
   test("globalConfigDir honours an absolute XDG_CONFIG_HOME", () => {
-    expect(globalConfigDir({ XDG_CONFIG_HOME: "/tmp/xdg" })).toBe(
-      "/tmp/xdg/claude-commit",
-    );
+    expect(globalConfigDir({ XDG_CONFIG_HOME: "/tmp/xdg" })).toBe("/tmp/xdg/claude-commit");
   });
 
   test("globalConfigDir falls back to ~/.config when XDG is unset or relative", () => {
@@ -392,19 +340,13 @@ describe("global config (XDG)", () => {
   });
 
   test("reads config.json from the global directory", async () => {
-    await writeFile(
-      join(globalDir(), "config.json"),
-      JSON.stringify({ gitmoji: true }),
-    );
+    await writeFile(join(globalDir(), "config.json"), JSON.stringify({ gitmoji: true }));
     const cfg = await loadFileConfig(projectDir, projectDir, undefined, env());
     expect(cfg.gitmoji).toBe(true);
   });
 
   test("also accepts the project-style filenames in the global directory", async () => {
-    await writeFile(
-      join(globalDir(), ".claude-commit.json"),
-      JSON.stringify({ multiline: true }),
-    );
+    await writeFile(join(globalDir(), ".claude-commit.json"), JSON.stringify({ multiline: true }));
     const cfg = await loadFileConfig(projectDir, projectDir, undefined, env());
     expect(cfg.multiline).toBe(true);
   });
@@ -414,10 +356,7 @@ describe("global config (XDG)", () => {
       join(globalDir(), "config.json"),
       JSON.stringify({ gitmoji: true, multiline: true }),
     );
-    await writeFile(
-      join(projectDir, ".claude-commit.json"),
-      JSON.stringify({ multiline: false }),
-    );
+    await writeFile(join(projectDir, ".claude-commit.json"), JSON.stringify({ multiline: false }));
     const cfg = await loadFileConfig(projectDir, projectDir, undefined, env());
     expect(cfg.gitmoji).toBe(true); // inherited from global
     expect(cfg.multiline).toBe(false); // project overrides global
@@ -439,19 +378,14 @@ describe("global config (XDG)", () => {
   test("config.json is a global-only name - not discovered in the project tree", async () => {
     // A stray config.json inside the project must be ignored; only the dotted
     // names apply further down the tree.
-    await writeFile(
-      join(projectDir, "config.json"),
-      JSON.stringify({ gitmoji: true }),
-    );
+    await writeFile(join(projectDir, "config.json"), JSON.stringify({ gitmoji: true }));
     const cfg = await loadFileConfig(projectDir, projectDir, undefined, env());
     expect(cfg.gitmoji).toBeUndefined();
   });
 
   test("a malformed global config throws", async () => {
     await writeFile(join(globalDir(), "config.json"), "{ broken ");
-    await expect(
-      loadFileConfig(projectDir, projectDir, undefined, env()),
-    ).rejects.toThrow();
+    await expect(loadFileConfig(projectDir, projectDir, undefined, env())).rejects.toThrow();
   });
 });
 
@@ -476,17 +410,12 @@ describe("ignore", () => {
   });
 
   test("a higher layer replaces the list outright, never merging", () => {
-    const merged = mergePartial(
-      { ignore: ["global/**"] },
-      { ignore: ["project/**"] },
-    );
+    const merged = mergePartial({ ignore: ["global/**"] }, { ignore: ["project/**"] });
     expect(merged.ignore).toEqual(["project/**"]);
   });
 
   test("an empty list at a higher layer opts out of an inherited one", () => {
-    expect(
-      mergePartial({ ignore: ["global/**"] }, { ignore: [] }).ignore,
-    ).toEqual([]);
+    expect(mergePartial({ ignore: ["global/**"] }, { ignore: [] }).ignore).toEqual([]);
   });
 
   test("mergeConfig copies the array so a resolved config never aliases the default", () => {
@@ -529,18 +458,14 @@ describe("ollama settings", () => {
   });
 
   test("floors a fractional context length", () => {
-    expect(
-      sanitizePartial({ ollama: { context: 8192.7 } }).ollama?.context,
-    ).toBe(8192);
+    expect(sanitizePartial({ ollama: { context: 8192.7 } }).ollama?.context).toBe(8192);
   });
 
   test("accepts the literal auto and nothing else that is a string", () => {
     expect(sanitizePartial({ ollama: { context: "auto" } }).ollama).toEqual({
       context: "auto",
     });
-    expect(
-      sanitizePartial({ ollama: { context: "256k" } }).ollama,
-    ).toBeUndefined();
+    expect(sanitizePartial({ ollama: { context: "256k" } }).ollama).toBeUndefined();
   });
 
   test("merges key by key, like models", () => {
@@ -585,16 +510,11 @@ describe("model names", () => {
 
   test("a blank model name is a mistake, not an override", () => {
     // Keeping "" would resolve to a model no provider can serve.
-    expect(
-      sanitizePartial({ models: { summary: "  " } }).models,
-    ).toBeUndefined();
+    expect(sanitizePartial({ models: { summary: "  " } }).models).toBeUndefined();
   });
 
   test("a mixed-provider config resolves both stages independently", () => {
-    const config = resolveConfig(
-      { models: { summary: "ollama:ornith-1.5:35b" } },
-      {},
-    );
+    const config = resolveConfig({ models: { summary: "ollama:ornith-1.5:35b" } }, {});
     expect(config.models).toEqual({
       summary: "ollama:ornith-1.5:35b",
       final: "sonnet",

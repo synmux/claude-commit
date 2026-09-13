@@ -30,19 +30,19 @@
  * With filenamesOnly, the summary stage is skipped entirely and the final
  * model receives only paths from the filtered, priority-grouped diff.
  */
-import { runPrompt } from "./agent";
-import { isOllamaModel } from "./models";
-import { resolveOllamaContext } from "./ollama";
+import { runPrompt } from "./agent.ts";
+import { isOllamaModel } from "./models.ts";
+import { resolveOllamaContext } from "./ollama.ts";
 import {
   applyIgnorePatterns,
   diffPaths,
   partitionDiff,
   redactOpaqueRuns,
   splitDiffToFit,
-} from "./diff";
-import { createPathMatcher } from "./paths";
-import { clampChunkTokens } from "./tokens";
-import { ClaudeCommitError, isPromptTooLongError } from "./errors";
+} from "./diff.ts";
+import { createPathMatcher } from "./paths.ts";
+import { clampChunkTokens } from "./tokens.ts";
+import { ClaudeCommitError, isPromptTooLongError } from "./errors.ts";
 import {
   buildFinalSystem,
   buildFinalUser,
@@ -54,13 +54,8 @@ import {
   hasLowPrioritySummaries,
   MESSAGES_SCHEMA,
   parseOptions,
-} from "./prompts";
-import type {
-  ChangePriority,
-  Config,
-  DiffSummary,
-  OllamaConfig,
-} from "./types";
+} from "./prompts.ts";
+import type { ChangePriority, Config, DiffSummary, OllamaConfig } from "./types.ts";
 
 export interface GenerateProgress {
   /** Called when a new phase of work begins (for spinner labels). */
@@ -143,11 +138,15 @@ class OllamaContextResolver {
   private readonly windows = new Map<string, Promise<number>>();
   readonly resolved: OllamaContextWindow[] = [];
 
-  constructor(
-    private readonly config: OllamaConfig,
-    private readonly resolve: typeof resolveOllamaContext,
-    private readonly signal?: AbortSignal,
-  ) {}
+  private readonly config: OllamaConfig;
+  private readonly resolve: typeof resolveOllamaContext;
+  private readonly signal: AbortSignal | undefined;
+
+  constructor(config: OllamaConfig, resolve: typeof resolveOllamaContext, signal?: AbortSignal) {
+    this.config = config;
+    this.resolve = resolve;
+    this.signal = signal;
+  }
 
   /** The Ollama settings to run `model` with, or `undefined` for a Claude model. */
   async settingsFor(model: string): Promise<OllamaConfig | undefined> {
@@ -189,15 +188,9 @@ interface PartitionSummaryOptions {
 }
 
 /** Spinner label for one chunk of a partition. */
-function readingLabel(
-  priority: ChangePriority,
-  position: number,
-  total: number,
-): string {
+function readingLabel(priority: ChangePriority, position: number, total: number): string {
   const subject = priority === "low" ? "low-priority diff" : "diff";
-  return total > 1
-    ? `Reading ${subject} (part ${position + 1}/${total})`
-    : `Reading ${subject}`;
+  return total > 1 ? `Reading ${subject} (part ${position + 1}/${total})` : `Reading ${subject}`;
 }
 
 /**
@@ -242,39 +235,27 @@ async function summarizePartition(
     const total = summaries.length + queue.length + 1;
     progress.onPhase?.(readingLabel(priority, position, total));
     try {
-      const result = await runner(
-        buildSummaryUser(task.chunk, position, total, priority),
-        {
-          model: config.models.summary,
-          system: summarySystem,
-          allowApiKey: config.allowApiKey,
-          ...(ollama ? { ollama } : {}),
-          ...(abortController ? { abortController } : {}),
-        },
-      );
+      const result = await runner(buildSummaryUser(task.chunk, position, total, priority), {
+        model: config.models.summary,
+        system: summarySystem,
+        allowApiKey: config.allowApiKey,
+        ...(ollama ? { ollama } : {}),
+        ...(abortController ? { abortController } : {}),
+      });
       summaries.push({ priority, text: result.text });
       costUsd += result.costUsd;
     } catch (error) {
       const halvedBudget = Math.floor(task.tokenBudget / 2);
-      if (
-        !isPromptTooLongError(error) ||
-        halvedBudget < MIN_RETRY_CHUNK_TOKENS
-      ) {
+      if (!isPromptTooLongError(error) || halvedBudget < MIN_RETRY_CHUNK_TOKENS) {
         throw error;
       }
-      const pieces = splitDiffToFit(
-        task.chunk,
-        halvedBudget,
-        config.charsPerToken,
-      );
+      const pieces = splitDiffToFit(task.chunk, halvedBudget, config.charsPerToken);
       if (pieces.length === 1 && pieces[0] === task.chunk) {
         // Nothing left to split on (a single oversized hunk): retrying the
         // identical request would loop forever, so surface the error.
         throw error;
       }
-      queue.unshift(
-        ...pieces.map((chunk) => ({ chunk, tokenBudget: halvedBudget })),
-      );
+      queue.unshift(...pieces.map((chunk) => ({ chunk, tokenBudget: halvedBudget })));
     }
   }
 
@@ -303,10 +284,7 @@ export async function generateCommit(
   // Ignore first: dropped sections cost nothing downstream. Unlike a
   // low-priority partition, an ignored one has nowhere to be promoted to,
   // so matching every file is a dead end rather than a special case.
-  const ignoreResult = applyIgnorePatterns(
-    diff,
-    createPathMatcher(config.ignore),
-  );
+  const ignoreResult = applyIgnorePatterns(diff, createPathMatcher(config.ignore));
   const ignored: IgnoreStats = {
     ignoredFiles: ignoreResult.ignoredFiles,
     totalFiles: ignoreResult.totalFiles,
@@ -319,10 +297,7 @@ export async function generateCommit(
     config.skipArmored && !config.filenamesOnly
       ? redactOpaqueRuns(ignoreResult.diff)
       : ignoreResult.diff;
-  const partition = partitionDiff(
-    effectiveDiff,
-    createPathMatcher(config.lowPriorityPaths),
-  );
+  const partition = partitionDiff(effectiveDiff, createPathMatcher(config.lowPriorityPaths));
   if (partition.primary.trim() === "") {
     throw new ClaudeCommitError("There are no staged changes to summarize.");
   }
@@ -349,19 +324,11 @@ export async function generateCommit(
       contexts,
       ...(abortController ? { abortController } : {}),
     };
-    const primaryStage = await summarizePartition(
-      partition.primary,
-      "primary",
-      partitionOptions,
-    );
+    const primaryStage = await summarizePartition(partition.primary, "primary", partitionOptions);
     const lowPriorityStage =
       partition.lowPriority.trim() === ""
         ? { summaries: [], costUsd: 0 }
-        : await summarizePartition(
-            partition.lowPriority,
-            "low",
-            partitionOptions,
-          );
+        : await summarizePartition(partition.lowPriority, "low", partitionOptions);
     summaries.push(...primaryStage.summaries, ...lowPriorityStage.summaries);
     if (summaries.length === 0) {
       throw new ClaudeCommitError("There are no staged changes to summarize.");
@@ -380,9 +347,7 @@ export async function generateCommit(
   // without it (for models that reject a temperature override), then plain text
   // with delimiter parsing (for models that don't support structured output at
   // all). Whichever succeeds first wins.
-  progress.onPhase?.(
-    count > 1 ? "Writing commit options" : "Writing commit message",
-  );
+  progress.onPhase?.(count > 1 ? "Writing commit options" : "Writing commit message");
 
   const finalOllama = await contexts.settingsFor(config.models.final);
   const baseOpts = {
@@ -392,9 +357,7 @@ export async function generateCommit(
     ...(abortController ? { abortController } : {}),
   };
   const temperature =
-    count > 1 && config.interactiveTemperature != null
-      ? config.interactiveTemperature
-      : undefined;
+    count > 1 && config.interactiveTemperature != null ? config.interactiveTemperature : undefined;
 
   const attempts: Array<{ structured: boolean; temperature?: number }> = [];
   if (temperature != null) attempts.push({ structured: true, temperature });
@@ -420,12 +383,8 @@ export async function generateCommit(
                 },
               }
             : {}),
-          ...(attempt.temperature != null
-            ? { temperature: attempt.temperature }
-            : {}),
-          ...(!attempt.structured && progress.onText
-            ? { onText: progress.onText }
-            : {}),
+          ...(attempt.temperature != null ? { temperature: attempt.temperature } : {}),
+          ...(!attempt.structured && progress.onText ? { onText: progress.onText } : {}),
         },
       );
       costUsd += result.costUsd;
@@ -443,9 +402,7 @@ export async function generateCommit(
     }
   }
 
-  const cleaned = (messages ?? [])
-    .map(cleanMessage)
-    .filter((message) => message.length > 0);
+  const cleaned = (messages ?? []).map(cleanMessage).filter((message) => message.length > 0);
   const deduped = dedupe(cleaned);
   if (deduped.length === 0) {
     if (lastError instanceof ClaudeCommitError) throw lastError;

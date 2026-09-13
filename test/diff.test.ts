@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import {
   applyIgnorePatterns,
   diffPaths,
@@ -7,12 +7,11 @@ import {
   sectionPaths,
   splitDiff,
   splitDiffToFit,
-} from "../src/diff";
-import { createPathMatcher } from "../src/paths";
-import { estimateDiffTokens } from "../src/tokens";
+} from "../src/diff.ts";
+import { createPathMatcher } from "../src/paths.ts";
+import { estimateDiffTokens } from "../src/tokens.ts";
 
-const armorLine = (index: number) =>
-  `+${"Ab9Xy".repeat(13)}${String(index % 10).repeat(4)}`;
+const armorLine = (index: number) => `+${"Ab9Xy".repeat(13)}${String(index % 10).repeat(4)}`;
 
 const armorFile = (lines: number) =>
   [
@@ -43,10 +42,7 @@ index 333..444 100644
 
 describe("diffPaths", () => {
   test("returns unique names in encounter order without hunk contents", () => {
-    expect(diffPaths(`${fileB}\n${fileA}\n${fileB}`)).toEqual([
-      "b.txt",
-      "a.txt",
-    ]);
+    expect(diffPaths(`${fileB}\n${fileA}\n${fileB}`)).toEqual(["b.txt", "a.txt"]);
     expect(diffPaths(" \n")).toEqual([]);
   });
 
@@ -152,10 +148,7 @@ index aaa..bbb 100644
 +++ b/huge.txt`;
     const bigHunk =
       `@@ -1,100 +1,100 @@\n` +
-      Array.from(
-        { length: 100 },
-        (_, i) => `+a very long added line number ${i}`,
-      ).join("\n");
+      Array.from({ length: 100 }, (_, i) => `+a very long added line number ${i}`).join("\n");
     const diff = `${header}\n${bigHunk}`;
     const budget = header.length + 120;
     const chunks = splitDiff(diff, budget);
@@ -178,8 +171,7 @@ Binary files a/img.png and b/img.png differ`;
 --- a/x.txt
 +++ b/x.txt`;
     const hunk =
-      "@@ -1,50 +1,50 @@\n" +
-      Array.from({ length: 50 }, (_, i) => `+line ${i}`).join("\n");
+      "@@ -1,50 +1,50 @@\n" + Array.from({ length: 50 }, (_, i) => `+line ${i}`).join("\n");
     const diff = `${header}\n${hunk}`;
     // Budget smaller than the header itself - splitting per-line would otherwise
     // shatter the hunk into ~one fragment per character.
@@ -227,10 +219,7 @@ describe("splitDiffToFit", () => {
       "diff --git a/blob.bin b/blob.bin",
       "GIT binary patch",
       "literal 4000",
-      ...Array.from(
-        { length: 60 },
-        (_, i) => `z${"Xy4Qk".repeat(12)}${i % 10}`,
-      ),
+      ...Array.from({ length: 60 }, (_, i) => `z${"Xy4Qk".repeat(12)}${i % 10}`),
     ].join("\n");
     expect(splitDiffToFit(binary, 100, 3.5)).toEqual([binary]);
   });
@@ -315,11 +304,9 @@ describe("sectionPaths", () => {
       "index a6a3e7f..1d518ed 100644",
       "Binary files a/img.png and b/img.png differ",
     ].join("\n");
-    const mode = [
-      "diff --git a/mode.sh b/mode.sh",
-      "old mode 100644",
-      "new mode 100755",
-    ].join("\n");
+    const mode = ["diff --git a/mode.sh b/mode.sh", "old mode 100644", "new mode 100755"].join(
+      "\n",
+    );
     expect(sectionPaths(binary)).toEqual(["img.png"]);
     expect(sectionPaths(mode)).toEqual(["mode.sh"]);
   });
@@ -442,10 +429,7 @@ describe("partitionDiff", () => {
   test("keeps the original order within each partition", () => {
     const fileC = fileB.replace(/b\.txt/g, "c.txt");
     const diff = `${fileB}\n${fileA}\n${fileC}`;
-    const { primary, lowPriority } = partitionDiff(
-      diff,
-      lowFor("b.txt", "c.txt"),
-    );
+    const { primary, lowPriority } = partitionDiff(diff, lowFor("b.txt", "c.txt"));
     expect(primary).toBe(fileA);
     expect(lowPriority).toBe(`${fileB}\n${fileC}`);
   });
@@ -481,9 +465,7 @@ describe("partitionDiff", () => {
     ].join("\n");
     const diff = `${fileA}\n${rename}`;
     expect(partitionDiff(diff, lowFor("dist/old.js")).lowPriority).toBe("");
-    expect(
-      partitionDiff(diff, lowFor("dist/old.js", "src/new.js")).lowPriority,
-    ).toBe(rename);
+    expect(partitionDiff(diff, lowFor("dist/old.js", "src/new.js")).lowPriority).toBe(rename);
   });
 
   test("a section with no recognisable path stays primary and is not counted as a file", () => {
@@ -584,20 +566,14 @@ describe("applyIgnorePatterns", () => {
       "rename from vendor/lib.js",
       "rename to src/lib.js",
     ].join("\n");
-    const result = applyIgnorePatterns(
-      renamed,
-      createPathMatcher(["vendor/**"]),
-    );
+    const result = applyIgnorePatterns(renamed, createPathMatcher(["vendor/**"]));
     expect(result.diff).toBe(renamed);
     expect(result.ignoredFiles).toBe(0);
   });
 
   test("keeps a section whose path cannot be recognised", () => {
     const odd = "some preamble that is not a diff section at all";
-    const result = applyIgnorePatterns(
-      `${odd}\n${vendorFile}`,
-      createPathMatcher(["vendor/**"]),
-    );
+    const result = applyIgnorePatterns(`${odd}\n${vendorFile}`, createPathMatcher(["vendor/**"]));
     expect(result.diff).toBe(odd);
     expect(result.totalFiles).toBe(1);
     expect(result.ignoredFiles).toBe(1);

@@ -6,16 +6,17 @@
  * Patterns follow gitignore conventions rather than raw glob semantics,
  * because that is what users reach for when they write
  * `.agents/skills/*-skilld` and expect it to cover every file beneath each
- * matching directory. `Bun.Glob` does the wildcard work (no dependency, `*`
- * matches dotfiles, `**` crosses directories, braces expand, `\` escapes);
- * this module adds the gitignore-style rules on top:
+ * matching directory. `picomatch` does the wildcard work (`*` matches
+ * dotfiles via `dot: true`, `**` crosses directories, braces expand, `\`
+ * escapes and is never a separator); this module adds the gitignore-style
+ * rules on top:
  *
  * - A pattern containing a `/` (anywhere but the end) is anchored at the
  *   repository root and matches a path when the glob matches the path
  *   itself **or any ancestor directory** of it.
  * - A pattern without a `/` matches when the glob matches **any path
  *   segment** - the file's basename or any ancestor directory's name - so
- *   `bun.lock` or `*-skilld` apply at any depth.
+ *   `pnpm-lock.yaml` or `*-skilld` apply at any depth.
  * - A leading `/` or `./` anchors a pattern that would otherwise be bare; a
  *   trailing `/` is accepted (gitignore's "directory only" marker) and
  *   ignored, since the ancestor rule already covers a directory's contents.
@@ -29,22 +30,42 @@
  * anchored/bare decision is made on the whole pattern text, so a `/` inside
  * a brace group anchors every alternative - prefer one pattern per intent.
  *
- * An ill-formed pattern never throws, but `Bun.Glob` parses it rather than
- * rejecting it, so it does not reliably match nothing: an unbalanced `{` is
- * treated as its first alternative (`{docs,build` matches `docs` at any
- * depth and never `build`), while an unterminated `[` matches nothing at
- * all, not even its own text (write `\[abc` for that). No construction-time
- * check can catch this - gitignore does not validate either - so the
- * failure mode is a silently mis-classified diff, made visible by the
- * `--verbose` match counts rather than prevented.
+ * An ill-formed pattern never throws, but `picomatch` parses it rather than
+ * rejecting it, so what it matches is not always obvious: an unbalanced `{`
+ * matches nothing at all (`{docs,build` matches neither `docs` nor `build`),
+ * while an unterminated `[` falls back to its literal text (`[abc` matches a
+ * file called `[abc`). Should the compiler ever throw, the pattern is kept as
+ * one that matches nothing. No construction-time check can catch this -
+ * gitignore does not validate either - so the failure mode is a silently
+ * mis-classified diff, made visible by the `--verbose` match counts rather
+ * than prevented.
  */
-import { Glob } from "bun";
+import picomatch from "picomatch";
 
 /** A predicate over repository-relative paths. */
 export type PathMatcher = (path: string) => boolean;
 
+/** The picomatch options every pattern compiles with: dotfiles are ordinary files. */
+const GLOB_OPTIONS: picomatch.PicomatchOptions = { dot: true };
+
+/** A compiled glob: does `candidate` (a path or a single segment) match? */
+type GlobMatcher = (candidate: string) => boolean;
+
+/** A pattern the glob compiler rejected outright: it marks nothing. */
+const NEVER_MATCHES: GlobMatcher = () => false;
+
+/** Compile a glob, falling back to {@link NEVER_MATCHES} if picomatch throws. */
+function compileGlob(pattern: string): GlobMatcher {
+  try {
+    const matcher = picomatch(pattern, GLOB_OPTIONS);
+    return (candidate) => matcher(candidate);
+  } catch {
+    return NEVER_MATCHES;
+  }
+}
+
 interface CompiledPattern {
-  glob: Glob;
+  glob: GlobMatcher;
   /** Match against the path and its ancestors (true) or against each segment (false). */
   anchored: boolean;
   /** A `!` pattern: a match un-marks the path instead of marking it. */
@@ -90,23 +111,20 @@ function compilePattern(raw: string): CompiledPattern | null {
   if (pattern === "") return null;
   if (pattern.includes("/")) anchored = true;
 
-  return { glob: new Glob(pattern), anchored, negated };
+  return { glob: compileGlob(pattern), anchored, negated };
 }
 
-function matchesCompiled(
-  segments: string[],
-  compiled: CompiledPattern,
-): boolean {
+function matchesCompiled(segments: string[], compiled: CompiledPattern): boolean {
   if (compiled.anchored) {
     // The path itself first, then each ancestor directory, longest first.
     for (let length = segments.length; length >= 1; length--) {
-      if (compiled.glob.match(segments.slice(0, length).join("/"))) {
+      if (compiled.glob(segments.slice(0, length).join("/"))) {
         return true;
       }
     }
     return false;
   }
-  return segments.some((segment) => compiled.glob.match(segment));
+  return segments.some((segment) => compiled.glob(segment));
 }
 
 /**

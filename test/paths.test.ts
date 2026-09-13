@@ -1,43 +1,27 @@
-import { test, expect, describe } from "bun:test";
-import { createPathMatcher, matchesPathPatterns } from "../src/paths";
+import { test, expect, describe } from "vitest";
+import { createPathMatcher, matchesPathPatterns } from "../src/paths.ts";
 
 describe("matchesPathPatterns - anchored patterns (containing a slash)", () => {
   const patterns = [".agents/skills/*-skilld"];
 
   test("matches the directory itself", () => {
-    expect(matchesPathPatterns(".agents/skills/ora-skilld", patterns)).toBe(
+    expect(matchesPathPatterns(".agents/skills/ora-skilld", patterns)).toBe(true);
+  });
+
+  test("matches every file beneath a matching directory", () => {
+    expect(matchesPathPatterns(".agents/skills/ora-skilld/SKILL.md", patterns)).toBe(true);
+    expect(matchesPathPatterns(".agents/skills/ora-skilld/references/deep/file.md", patterns)).toBe(
       true,
     );
   });
 
-  test("matches every file beneath a matching directory", () => {
-    expect(
-      matchesPathPatterns(".agents/skills/ora-skilld/SKILL.md", patterns),
-    ).toBe(true);
-    expect(
-      matchesPathPatterns(
-        ".agents/skills/ora-skilld/references/deep/file.md",
-        patterns,
-      ),
-    ).toBe(true);
-  });
-
   test("does not match siblings that fail the glob", () => {
-    expect(
-      matchesPathPatterns(".agents/skills/verify/SKILL.md", patterns),
-    ).toBe(false);
-    expect(
-      matchesPathPatterns(".agents/skills/skilld-lock.yaml", patterns),
-    ).toBe(false);
+    expect(matchesPathPatterns(".agents/skills/verify/SKILL.md", patterns)).toBe(false);
+    expect(matchesPathPatterns(".agents/skills/skilld-lock.yaml", patterns)).toBe(false);
   });
 
   test("is anchored at the repository root", () => {
-    expect(
-      matchesPathPatterns(
-        "vendor/.agents/skills/ora-skilld/SKILL.md",
-        patterns,
-      ),
-    ).toBe(false);
+    expect(matchesPathPatterns("vendor/.agents/skills/ora-skilld/SKILL.md", patterns)).toBe(false);
   });
 
   test("a single star does not cross directory boundaries", () => {
@@ -65,19 +49,13 @@ describe("matchesPathPatterns - anchored patterns (containing a slash)", () => {
 describe("matchesPathPatterns - bare patterns (no slash)", () => {
   test("match a file's basename at any depth", () => {
     expect(matchesPathPatterns("bun.lock", ["bun.lock"])).toBe(true);
-    expect(matchesPathPatterns("packages/app/bun.lock", ["bun.lock"])).toBe(
-      true,
-    );
+    expect(matchesPathPatterns("packages/app/bun.lock", ["bun.lock"])).toBe(true);
     expect(matchesPathPatterns("sub/dir/yarn.lock", ["*.lock"])).toBe(true);
   });
 
   test("match a directory name at any depth, covering its contents", () => {
-    expect(
-      matchesPathPatterns(".agents/skills/ora-skilld/SKILL.md", ["*-skilld"]),
-    ).toBe(true);
-    expect(matchesPathPatterns("a/node_modules/x/y.js", ["node_modules"])).toBe(
-      true,
-    );
+    expect(matchesPathPatterns(".agents/skills/ora-skilld/SKILL.md", ["*-skilld"])).toBe(true);
+    expect(matchesPathPatterns("a/node_modules/x/y.js", ["node_modules"])).toBe(true);
   });
 
   test("do not match partial segments", () => {
@@ -147,9 +125,7 @@ describe("matchesPathPatterns - negation", () => {
   });
 
   test("the last matching pattern wins, so order matters", () => {
-    expect(
-      matchesPathPatterns("docs/adr/x.md", ["!docs/adr/**", "docs/**"]),
-    ).toBe(true);
+    expect(matchesPathPatterns("docs/adr/x.md", ["!docs/adr/**", "docs/**"])).toBe(true);
   });
 
   test("negation works against bare patterns", () => {
@@ -186,23 +162,22 @@ describe("createPathMatcher", () => {
 });
 
 describe("matchesPathPatterns - ill-formed patterns are parsed, not rejected", () => {
-  // Bun.Glob never throws, but it does not reliably match nothing either:
-  // these pin the real behaviour so a Bun upgrade cannot silently change
-  // how a typo in the config classifies a diff.
-  test("an unbalanced brace group becomes its first alternative", () => {
-    expect(matchesPathPatterns("docs/guide.md", ["{docs,build"])).toBe(true);
-    expect(matchesPathPatterns("src/docs/util.ts", ["{docs,build"])).toBe(true);
+  // picomatch never throws, but what an ill-formed pattern matches is not
+  // obvious: these pin the real behaviour so a picomatch upgrade cannot
+  // silently change how a typo in the config classifies a diff.
+  test("an unbalanced brace group matches nothing", () => {
+    expect(matchesPathPatterns("docs/guide.md", ["{docs,build"])).toBe(false);
+    expect(matchesPathPatterns("src/docs/util.ts", ["{docs,build"])).toBe(false);
     expect(matchesPathPatterns("build/out.js", ["{docs,build"])).toBe(false);
   });
 
-  test("an unterminated character class matches nothing, not even its literal text", () => {
-    expect(matchesPathPatterns("[abc", ["[abc"])).toBe(false);
+  test("an unterminated character class matches its literal text", () => {
+    expect(matchesPathPatterns("[abc", ["[abc"])).toBe(true);
     expect(matchesPathPatterns("[abc", ["\\[abc"])).toBe(true);
+    expect(matchesPathPatterns("abc", ["[abc"])).toBe(false);
   });
 
   test("an ill-formed pattern never throws", () => {
-    expect(() =>
-      matchesPathPatterns("x", ["[z-a]", "{{{", "\\", "**/[!]"]),
-    ).not.toThrow();
+    expect(() => matchesPathPatterns("x", ["[z-a]", "{{{", "\\", "**/[!]"])).not.toThrow();
   });
 });

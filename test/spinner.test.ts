@@ -1,11 +1,6 @@
-import { test, expect, describe, spyOn } from "bun:test";
+import { test, expect, describe, vi } from "vitest";
 import spinners from "cli-spinners";
-import {
-  DEFAULT_SPINNER,
-  isSpinnerName,
-  resolveSpinner,
-  Spinner,
-} from "../src/ui/spinner";
+import { DEFAULT_SPINNER, isSpinnerName, resolveSpinner, Spinner } from "../src/ui/spinner.ts";
 
 describe("isSpinnerName", () => {
   test("recognises cli-spinners names", () => {
@@ -37,9 +32,7 @@ describe("resolveSpinner", () => {
 describe("Spinner when disabled (no TTY / --no-spinner)", () => {
   test("start/update/stop write nothing, but final lines still print", () => {
     const writes: string[] = [];
-    const spy = spyOn(process.stderr, "write").mockImplementation(((
-      chunk: unknown,
-    ) => {
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: unknown) => {
       writes.push(String(chunk));
       return true;
     }) as typeof process.stderr.write);

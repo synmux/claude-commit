@@ -1,0 +1,25 @@
+name: ci
+permissions: read-all
+on:
+  push: null
+  pull_request: null
+  workflow_call: null # publish.yml runs this before releasing to npm
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
+        # nb: runs `pnpm install` itself, no need for a separate install step
+        with:
+          runtime: node@24
+          cache: true
+      - name: trunk
+        uses: trunk-io/trunk-action@e1234e67a86010d61ddac8d8ebf4b783e2ffd2fa # v2.0.0
+      - name: typecheck
+        run: pnpm run lint:types
+      - name: build
+        run: pnpm run build
+      - name: test
+        run: pnpm run test

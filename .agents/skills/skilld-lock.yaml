@@ -7,14 +7,6 @@ skills:
     source: "https://skilld.dev/llms.txt"
     syncedAt: 2026-08-23
     generator: skilld
-  types-bun-skilld:
-    packageName: "@types/bun"
-    version: 1.4.0
-    packages: "@types/bun@1.4.0"
-    repo: DefinitelyTyped/DefinitelyTyped
-    source: "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/docs"
-    syncedAt: 2026-08-23
-    generator: skilld
   commander-skilld:
     packageName: commander
     version: 15.0.0
@@ -22,14 +14,6 @@ skills:
     repo: tj/commander.js
     source: "https://github.com/tj/commander.js/tree/v15.0.0/docs"
     syncedAt: 2026-06-30
-    generator: skilld
-  opentui-core-skilld:
-    packageName: "@opentui/core"
-    version: 0.5.7
-    packages: "@opentui/core@0.5.7"
-    repo: anomalyco/opentui
-    source: "https://github.com/anomalyco/opentui/tree/v0.5.7/docs"
-    syncedAt: 2026-08-24
     generator: skilld
   anthropic-ai-claude-agent-sdk-skilld:
     packageName: "@anthropic-ai/claude-agent-sdk"

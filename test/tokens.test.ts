@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import {
   clampChunkTokens,
   CONTEXT_RESERVE_TOKENS,
@@ -9,7 +9,7 @@ import {
   isOpaqueLine,
   OPAQUE_CHARS_PER_TOKEN,
   tokensToChars,
-} from "../src/tokens";
+} from "../src/tokens.ts";
 
 describe("token estimation", () => {
   test("estimateTokens divides by the ratio and rounds up", () => {
@@ -91,9 +91,7 @@ describe("estimateDiffTokens", () => {
 
   test("estimates plain text at the configured ratio", () => {
     const text = Array.from({ length: 10 }, () => textLine).join("\n");
-    expect(estimateDiffTokens(text, 3.5)).toBe(
-      Math.ceil(((textLine.length + 1) * 10) / 3.5),
-    );
+    expect(estimateDiffTokens(text, 3.5)).toBe(Math.ceil(((textLine.length + 1) * 10) / 3.5));
   });
 
   test("estimates opaque lines at the opaque ratio", () => {
@@ -106,10 +104,7 @@ describe("estimateDiffTokens", () => {
   test("mixed content sums both classes", () => {
     const mixed = `${textLine}\n${armorLine}`;
     expect(estimateDiffTokens(mixed, 3.5)).toBe(
-      Math.ceil(
-        (textLine.length + 1) / 3.5 +
-          (armorLine.length + 1) / OPAQUE_CHARS_PER_TOKEN,
-      ),
+      Math.ceil((textLine.length + 1) / 3.5 + (armorLine.length + 1) / OPAQUE_CHARS_PER_TOKEN),
     );
   });
 
@@ -131,12 +126,8 @@ describe("clampChunkTokens", () => {
   });
 
   test("clamps an oversized budget to the window minus the reserve", () => {
-    expect(clampChunkTokens("sonnet", 2_000_000)).toBe(
-      1_000_000 - CONTEXT_RESERVE_TOKENS,
-    );
-    expect(clampChunkTokens("haiku", 600_000)).toBe(
-      200_000 - CONTEXT_RESERVE_TOKENS,
-    );
+    expect(clampChunkTokens("sonnet", 2_000_000)).toBe(1_000_000 - CONTEXT_RESERVE_TOKENS);
+    expect(clampChunkTokens("haiku", 600_000)).toBe(200_000 - CONTEXT_RESERVE_TOKENS);
   });
 
   test("never raises a budget below the clamp", () => {

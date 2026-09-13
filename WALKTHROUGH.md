@@ -1,6 +1,6 @@
 # claude-commit Codebase Walkthrough
 
-`claude-commit` is a Bun/TypeScript CLI that generates git commit messages from
+`claude-commit` is a Node/TypeScript CLI that generates git commit messages from
 the staged diff. It uses the Claude Agent SDK as a prompt-in/text-out model
 runner, authenticating with your Claude Code subscription; API credentials in
 the environment are used only when the `allowApiKey` config option is enabled.
@@ -24,7 +24,8 @@ diff. The final model writes a broader message without seeing file changes.
 
 ```text
 .
-├── bin/cco.ts                 # executable entrypoint for `cco` / `claude-commit`
+├── bin/cco.js                # launcher: imports dist/bin/cco.js if built, else bin/cco.ts
+├── bin/cco.ts                # TypeScript entrypoint for `cco` / `claude-commit`
 ├── index.ts                  # library exports for programmatic use
 ├── src/
 │   ├── cli.ts                # Commander CLI and top-level orchestration
@@ -40,9 +41,9 @@ diff. The final model writes a broader message without seeing file changes.
 │   ├── errors.ts             # user-facing error type
 │   └── ui/
 │       ├── editor.ts         # confirmation prompt and $EDITOR integration
-│       ├── interactive.ts    # OpenTUI picker for multiple candidate messages
+│       ├── interactive.ts    # Clack picker for multiple candidate messages
 │       └── spinner.ts        # stderr progress spinner
-└── test/                     # Bun tests for config, diff, paths, prompts, generate, git, cli, tokens
+└── test/                     # vitest suites for every module above
 ```
 
 ## Top-Level Architecture
@@ -66,11 +67,15 @@ flowchart LR
 
   agent --> sdk[Claude Agent SDK]
   git --> gitcli[git CLI]
-  interactive --> opentui[OpenTUI]
+  interactive --> clack[Clack prompts]
 ```
 
-`bin/cco.ts` is deliberately thin: it imports `run()` from `src/cli.ts`, passes
-`process.argv.slice(2)`, and converts the returned code into `process.exitCode`.
+`bin/cco.js` is the executable: a few lines of plain JavaScript that import the
+bundled `dist/bin/cco.js` when it exists (the published package) and the
+TypeScript `bin/cco.ts` otherwise (a checkout, via Node's native type
+stripping). `bin/cco.ts` is deliberately thin: it imports `run()` from
+`src/cli.ts`, passes `process.argv.slice(2)`, and converts the returned code
+into `process.exitCode`.
 Unexpected failures get a stack trace. Expected, user-facing failures are handled
 inside `src/cli.ts` as `ClaudeCommitError`.
 
@@ -213,7 +218,7 @@ flowchart LR
 
 Before either model stage, `partitionDiff()` (`src/diff.ts`) sorts the diff's
 file sections by the `lowPriorityPaths` matcher (`createPathMatcher()`
-in `src/paths.ts`, gitignore semantics on top of `Bun.Glob`). A section is
+in `src/paths.ts`, gitignore semantics on top of `picomatch`). A section is
 low priority only when every path it names matches - `sectionPaths()` reads
 them from the `---`/`+++`/`rename`/`copy` header lines, unquoting git's
 C-style quoting, and falls back to the `diff --git a/X b/Y` header for binary
@@ -361,8 +366,9 @@ and max-output failures.
 
 ## Git Adapter
 
-`src/git.ts` isolates shell access to git. Most operations use Bun's shell helper
-and throw `GitError` with stderr on failure.
+`src/git.ts` isolates process access to git. Every operation spawns `git`
+directly through `node:child_process` (no shell), collects its output without
+a size cap, and throws `GitError` with stderr on failure.
 
 Main operations:
 
@@ -429,13 +435,13 @@ After committing, verbose mode also shows the staged stat summary.
 
 Interactive mode first calls `generateCommit()` with `count =
 config.interactiveCount`, which asks the final model to produce multiple distinct
-messages. Then it opens an OpenTUI selection screen.
+messages. Then it opens a Clack picker.
 
 ```mermaid
 flowchart TD
   start[runInteractive] --> gen[Generate N candidate messages]
-  gen --> tui[Try OpenTUI picker]
-  tui --> ok{TUI initialized?}
+  gen --> picker[Try Clack picker]
+  picker --> ok{Prompt started?}
   ok -- no --> readline[Fallback readline picker]
   ok -- yes --> choose[User chooses option]
   readline --> choose
@@ -448,23 +454,28 @@ flowchart TD
   action -- commit --> commit[git commit -F -]
 ```
 
-The TUI shows:
+The picker shows:
 
-- A compact, content-sized list of the candidate messages.
-- Keyboard actions for selection, commit, edit, and cancel.
+- A title and a hint line (`↑/↓ select · ⏎ commit · e edit · q cancel`).
+- Every candidate as two rows: its subject line behind a radio glyph, and a
+  one-line body preview beneath it.
 
 The diff is used for generation but is **not displayed** - the picker shows only
 the candidate messages, keeping the screen focused on the choice.
 
-`buildPickerScene()` assembles the renderable tree (a header line above the
-candidate list) and `pickerHeight()` sizes the list; both are exported so the
-layout is covered by `test/interactive.test.ts` under OpenTUI's headless test
-renderer. The picker is given an **explicit, content-sized height** (two rows per
-candidate) with `flexShrink: 0` so it stays compact - only as tall as the options
-need - and scrolls internally, with a scroll indicator, when there are more
-options than fit the terminal.
+`selectWithPrompt()` builds a `@clack/core` `SelectPrompt` whose `render`
+function is the pure, exported `renderPicker()`: given the messages, the cursor,
+the prompt state and the output stream it returns the frame as a string. Clack
+supplies arrow/`j`/`k` navigation (wrapping at both ends), Enter, Escape and
+Ctrl-C; the `e` and `q` keys are added through the prompt's `key` event, which
+sets the prompt state to `submit` or `cancel` and lets Clack finish the prompt.
+`limitOptions()` from `@clack/prompts` windows the list to the terminal height,
+counting both rows of each candidate and marking the hidden remainder with
+`...`. All output goes to stderr. `test/interactive.test.ts` covers the render
+function directly and drives the whole prompt through a `PassThrough` input
+and a collecting writable, so the key handling is tested without a terminal.
 
-If OpenTUI cannot initialize, the module falls back to a plain readline prompt
+If the prompt cannot start, the module falls back to a plain readline prompt
 that supports choosing by number, editing with `e N`, or quitting with `q`.
 
 ## Editor, Prompting, and Spinner Utilities
@@ -532,7 +543,7 @@ as unexpected errors.
 
 ## Test Coverage
 
-The test suite uses `bun test`.
+The test suite uses [vitest](https://vitest.dev) (`pnpm test`).
 
 ```text
 test/config.test.ts   # config sanitization, precedence, discovery, merge rules
@@ -542,9 +553,10 @@ test/prompts.test.ts  # final prompt variants, option parsing, message cleanup
 test/tokens.test.ts   # token estimation and budget conversion
 ```
 
-There are no tests for the live Claude Agent SDK path, git commit execution, or
-OpenTUI interaction. Those parts are mostly isolated behind small adapter modules,
-which keeps the existing unit tests focused on deterministic logic.
+There are no tests for the live Claude Agent SDK path or git commit execution.
+Those parts are isolated behind small adapter modules, which keeps the unit
+tests focused on deterministic logic; the git readers and the Clack picker are
+covered against a temporary repository and fake streams respectively.
 
 ## Where To Start When Changing Things
 
@@ -556,16 +568,17 @@ which keeps the existing unit tests focused on deterministic logic.
 - **Model calling behavior:** start in `src/agent.ts`; keep the no-tools,
   single-turn isolation in mind.
 - **Interactive UX:** start in `src/ui/interactive.ts`; remember it has both the
-  OpenTUI path and the readline fallback.
+  Clack picker and the readline fallback, and keep `renderPicker()` pure.
 - **Configuration:** start in `src/config.ts` and update `test/config.test.ts`.
 
 ## Development Commands
 
 ```sh
-bun test
-bun run typecheck
-bun run bin/cco.ts --help
+pnpm test
+pnpm run typecheck
+node bin/cco.js --help
 ```
 
-Use Bun-native commands in this repository. `CLAUDE.md` explicitly asks agents to
-prefer Bun over Node, npm, yarn, pnpm, or npx equivalents.
+The sources run on Node's native type stripping, so nothing is compiled during
+development; `pnpm run build` produces `dist/` for publishing only. Use pnpm for
+dependencies (`pnpm-workspace.yaml` holds the install policy) - see `AGENTS.md`.

@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe } from "vitest";
 import {
   buildProgram,
   describeIgnoreStats,
@@ -6,8 +6,8 @@ import {
   describeOllamaContext,
   flagsToConfig,
   resolveInteractiveMode,
-} from "../src/cli";
-import { resolveConfig } from "../src/config";
+} from "../src/cli.ts";
+import { resolveConfig } from "../src/config.ts";
 
 describe("filenames-only flags", () => {
   test.each(["-f", "--filenames-only"])("%s enables the mode", (flag) => {
@@ -15,9 +15,7 @@ describe("filenames-only flags", () => {
     program.parse([flag], { from: "user" });
     const flags = flagsToConfig(program.opts());
     expect(flags.filenamesOnly).toBe(true);
-    expect(resolveConfig({ filenamesOnly: false }, flags).filenamesOnly).toBe(
-      true,
-    );
+    expect(resolveConfig({ filenamesOnly: false }, flags).filenamesOnly).toBe(true);
   });
 
   test("omitting the flag preserves the configured mode", () => {
@@ -25,9 +23,7 @@ describe("filenames-only flags", () => {
     program.parse([], { from: "user" });
     const flags = flagsToConfig(program.opts());
     expect(flags.filenamesOnly).toBeUndefined();
-    expect(resolveConfig({ filenamesOnly: true }, flags).filenamesOnly).toBe(
-      true,
-    );
+    expect(resolveConfig({ filenamesOnly: true }, flags).filenamesOnly).toBe(true);
     expect(resolveConfig({}, flags).filenamesOnly).toBe(false);
   });
 });
@@ -45,9 +41,7 @@ describe("resolveInteractiveMode", () => {
   });
 
   test("config-enabled on a TTY runs the picker", () => {
-    expect(resolveInteractiveMode({ ...base, configInteractive: true })).toBe(
-      "interactive",
-    );
+    expect(resolveInteractiveMode({ ...base, configInteractive: true })).toBe("interactive");
   });
 
   test("an explicit -i flag on a TTY runs the picker", () => {
@@ -145,9 +139,7 @@ describe("describeLowPriorityStats", () => {
         totalFiles: 1,
         promoted: true,
       }),
-    ).toBe(
-      "low-priority paths: matched all 1 file - nothing else changed, so treated as primary",
-    );
+    ).toBe("low-priority paths: matched all 1 file - nothing else changed, so treated as primary");
   });
 });
 
@@ -199,10 +191,9 @@ describe("ollama flags", () => {
 
   test("the program parses both flags", () => {
     const program = buildProgram();
-    program.parse(
-      ["--ollama-host", "http://box:11434", "--ollama-context", "16384"],
-      { from: "user" },
-    );
+    program.parse(["--ollama-host", "http://box:11434", "--ollama-context", "16384"], {
+      from: "user",
+    });
     expect(program.opts().ollamaHost).toBe("http://box:11434");
     expect(program.opts().ollamaContext).toBe(16384);
   });
@@ -226,9 +217,7 @@ describe("describeOllamaContext", () => {
         tokens: 131072,
         source: "auto",
       }),
-    ).toBe(
-      "ollama: ollama:gemma4:e2b-it-qat context 131072 tokens (chosen by the server)",
-    );
+    ).toBe("ollama: ollama:gemma4:e2b-it-qat context 131072 tokens (chosen by the server)");
     expect(
       describeOllamaContext({
         model: "ollama:x",

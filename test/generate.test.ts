@@ -1,17 +1,16 @@
-import { test, expect, describe } from "bun:test";
-import { generateCommit } from "../src/generate";
-import { DEFAULT_CONFIG } from "../src/config";
-import { ClaudeCommitError } from "../src/errors";
-import type { runPrompt } from "../src/agent";
-import type { Config } from "../src/types";
-import type { ModelResult } from "../src/types";
+import { test, expect, describe } from "vitest";
+import { generateCommit } from "../src/generate.ts";
+import { DEFAULT_CONFIG } from "../src/config.ts";
+import { ClaudeCommitError } from "../src/errors.ts";
+import type { runPrompt } from "../src/agent.ts";
+import type { Config } from "../src/types.ts";
+import type { ModelResult } from "../src/types.ts";
 
 type Runner = typeof runPrompt;
 
 const baseConfig: Config = { ...DEFAULT_CONFIG };
 
-const armorLine = (index: number) =>
-  `+${"Ab9Xy".repeat(13)}${String(index % 10).repeat(4)}`;
+const armorLine = (index: number) => `+${"Ab9Xy".repeat(13)}${String(index % 10).repeat(4)}`;
 
 const armorDiff = (lines: number) =>
   [
@@ -45,9 +44,7 @@ interface SummaryCall {
  * summary request is recorded (prompt and system prompt) along with the
  * final-stage prompt, so tests can assert on what reached each stage.
  */
-function stubRunner(
-  beforeCall?: (prompt: string, summaryCallIndex: number) => void,
-): {
+function stubRunner(beforeCall?: (prompt: string, summaryCallIndex: number) => void): {
   runner: Runner;
   summaryPrompts: string[];
   summaryCalls: SummaryCall[];
@@ -142,9 +139,7 @@ describe("generateCommit", () => {
     const { runner } = stubRunner(() => {
       throw boom;
     });
-    await expect(generateCommit(textDiff, baseConfig, { runner })).rejects.toBe(
-      boom,
-    );
+    await expect(generateCommit(textDiff, baseConfig, { runner })).rejects.toBe(boom);
   });
 
   test("gives up re-splitting below the retry floor", async () => {
@@ -153,21 +148,15 @@ describe("generateCommit", () => {
     });
     // Halving 15k lands below the 8k floor, so the rejection surfaces.
     const config: Config = { ...baseConfig, maxChunkTokens: 15_000 };
-    await expect(
-      generateCommit(armorDiff(100), config, { runner }),
-    ).rejects.toThrow(/prompt is too long/i);
+    await expect(generateCommit(armorDiff(100), config, { runner })).rejects.toThrow(
+      /prompt is too long/i,
+    );
   });
 
   test("summaries are tagged primary when no low-priority paths are configured", async () => {
     const { runner, summaryCalls } = stubRunner();
-    const result = await generateCommit(
-      `${textDiff}\n${skillDiff}`,
-      baseConfig,
-      { runner },
-    );
-    expect(result.summaries.map((summary) => summary.priority)).toEqual([
-      "primary",
-    ]);
+    const result = await generateCommit(`${textDiff}\n${skillDiff}`, baseConfig, { runner });
+    expect(result.summaries.map((summary) => summary.priority)).toEqual(["primary"]);
     expect(summaryCalls[0]!.prompt).toContain("old line");
     expect(summaryCalls[0]!.prompt).toContain("generated 2026-08-24");
     expect(summaryCalls[0]!.system).not.toMatch(LOW_PRIORITY_SYSTEM);
@@ -175,11 +164,7 @@ describe("generateCommit", () => {
 
   test("low-priority sections are summarised separately, after the primary ones, with their own prompt", async () => {
     const { runner, summaryCalls, finalPrompts } = stubRunner();
-    const result = await generateCommit(
-      `${skillDiff}\n${textDiff}`,
-      lowPriorityConfig,
-      { runner },
-    );
+    const result = await generateCommit(`${skillDiff}\n${textDiff}`, lowPriorityConfig, { runner });
 
     expect(summaryCalls.length).toBe(2);
     const [primaryCall, lowCall] = summaryCalls as [SummaryCall, SummaryCall];
@@ -192,10 +177,7 @@ describe("generateCommit", () => {
     expect(lowCall.prompt).toMatch(LOW_PRIORITY_SYSTEM);
     expect(lowCall.system).toMatch(LOW_PRIORITY_SYSTEM);
 
-    expect(result.summaries.map((summary) => summary.priority)).toEqual([
-      "primary",
-      "low",
-    ]);
+    expect(result.summaries.map((summary) => summary.priority)).toEqual(["primary", "low"]);
     expect(result.chunkCount).toBe(2);
     expect(finalPrompts[0]).toContain("Primary changes");
     expect(finalPrompts[0]).toContain("Low-priority changes");
@@ -208,9 +190,7 @@ describe("generateCommit", () => {
     });
     expect(summaryCalls.length).toBe(1);
     expect(summaryCalls[0]!.system).not.toMatch(LOW_PRIORITY_SYSTEM);
-    expect(result.summaries.map((summary) => summary.priority)).toEqual([
-      "primary",
-    ]);
+    expect(result.summaries.map((summary) => summary.priority)).toEqual(["primary"]);
     expect(finalPrompts[0]).not.toContain("Low-priority changes");
   });
 
@@ -235,37 +215,25 @@ describe("generateCommit", () => {
       }
     });
     const config: Config = { ...lowPriorityConfig, maxChunkTokens: 100_000 };
-    const result = await generateCommit(
-      `${textDiff}\n${armorDiff(1_000)}`,
-      config,
-      { runner },
-    );
+    const result = await generateCommit(`${textDiff}\n${armorDiff(1_000)}`, config, { runner });
     expect(rejected).toBe(true);
     // One primary chunk, then several low-priority pieces after the retry.
     expect(result.summaries[0]!.priority).toBe("primary");
     const lowSummaries = result.summaries.slice(1);
     expect(lowSummaries.length).toBeGreaterThan(1);
-    expect(lowSummaries.every((summary) => summary.priority === "low")).toBe(
-      true,
-    );
+    expect(lowSummaries.every((summary) => summary.priority === "low")).toBe(true);
     expect(result.chunkCount).toBe(result.summaries.length);
     // Multi-part low-priority chunks are labelled as such.
     expect(
       summaryCalls
         .slice(1)
-        .every((call) =>
-          /part \d+ of \d+ of a larger low-priority diff/.test(call.prompt),
-        ),
+        .every((call) => /part \d+ of \d+ of a larger low-priority diff/.test(call.prompt)),
     ).toBe(true);
   });
 
   test("reports how many file sections matched the low-priority patterns", async () => {
     const { runner } = stubRunner();
-    const mixed = await generateCommit(
-      `${textDiff}\n${skillDiff}`,
-      lowPriorityConfig,
-      { runner },
-    );
+    const mixed = await generateCommit(`${textDiff}\n${skillDiff}`, lowPriorityConfig, { runner });
     expect(mixed.lowPriority).toEqual({
       matchedFiles: 1,
       totalFiles: 2,
@@ -297,9 +265,7 @@ describe("generateCommit", () => {
     });
     expect(summaryCalls.length).toBe(2);
     expect(summaryCalls[1]!.system).toMatch(LOW_PRIORITY_SYSTEM);
-    expect(summaryCalls[1]!.prompt).toContain(
-      "[cco: 400 armored/encoded lines omitted]",
-    );
+    expect(summaryCalls[1]!.prompt).toContain("[cco: 400 armored/encoded lines omitted]");
     expect(summaryCalls[1]!.prompt).not.toContain("Ab9Xy");
   });
 
@@ -308,9 +274,7 @@ describe("generateCommit", () => {
     const config: Config = { ...baseConfig, skipArmored: true };
     const result = await generateCommit(armorDiff(400), config, { runner });
     expect(result.chunkCount).toBe(1);
-    expect(summaryPrompts[0]).toContain(
-      "[cco: 400 armored/encoded lines omitted]",
-    );
+    expect(summaryPrompts[0]).toContain("[cco: 400 armored/encoded lines omitted]");
     expect(summaryPrompts[0]).not.toContain("Ab9Xy");
     expect(summaryPrompts[0]).toContain("a/secret.age");
   });
@@ -369,17 +333,13 @@ describe("filenamesOnly", () => {
   test("ignore removes filenames and fully ignored changes fail before a call", async () => {
     const { runner, finalPrompts, summaryPrompts } = stubRunner();
     const ignoredConfig = { ...config, ignore: [".agents/**"] };
-    const result = await generateCommit(
-      `${textDiff}\n${skillDiff}`,
-      ignoredConfig,
-      { runner },
-    );
+    const result = await generateCommit(`${textDiff}\n${skillDiff}`, ignoredConfig, { runner });
     expect(finalPrompts[0]).toContain('"a.txt"');
     expect(finalPrompts[0]).not.toContain("SKILL.md");
     expect(result.ignored).toEqual({ ignoredFiles: 1, totalFiles: 2 });
-    await expect(
-      generateCommit(skillDiff, ignoredConfig, { runner }),
-    ).rejects.toThrow(/"ignore" pattern/);
+    await expect(generateCommit(skillDiff, ignoredConfig, { runner })).rejects.toThrow(
+      /"ignore" pattern/,
+    );
     expect(finalPrompts).toHaveLength(1);
     expect(summaryPrompts).toEqual([]);
   });
@@ -395,11 +355,7 @@ describe("filenamesOnly", () => {
   test("armoured content is never sent, regardless of skipArmored", async () => {
     for (const skipArmored of [false, true]) {
       const { runner, finalPrompts, summaryPrompts } = stubRunner();
-      await generateCommit(
-        armorDiff(400),
-        { ...config, skipArmored },
-        { runner },
-      );
+      await generateCommit(armorDiff(400), { ...config, skipArmored }, { runner });
       expect(summaryPrompts).toEqual([]);
       expect(finalPrompts[0]).toContain('"secret.age"');
       expect(finalPrompts[0]).not.toMatch(/Ab9Xy|omitted|@@/);
@@ -433,8 +389,7 @@ describe("filenamesOnly", () => {
           expect(options.ollama?.context).toBe(8192);
           expect(options.abortController).toBe(abortController);
           expect(options.allowApiKey).toBe(false);
-          if (options.outputFormat)
-            return { text: "invalid JSON", costUsd: 0.001 };
+          if (options.outputFormat) return { text: "invalid JSON", costUsd: 0.001 };
           options.onText?.("Update files");
           return {
             text: "===OPTION===\nUpdate files\n===OPTION===\nRefresh files",
@@ -468,9 +423,7 @@ describe("filenamesOnly", () => {
     "rejects input without filenames: %p",
     async (diff) => {
       const { runner, finalPrompts, summaryPrompts } = stubRunner();
-      await expect(generateCommit(diff, config, { runner })).rejects.toThrow(
-        /no staged/i,
-      );
+      await expect(generateCommit(diff, config, { runner })).rejects.toThrow(/no staged/i);
       expect(finalPrompts).toEqual([]);
       expect(summaryPrompts).toEqual([]);
     },
@@ -628,10 +581,7 @@ describe("Ollama auto context", () => {
 
   test("hands the runner a pinned number, never auto", async () => {
     const seen: unknown[] = [];
-    const runner = (async (
-      _prompt: string,
-      opts: { ollama?: { context: unknown } },
-    ) => {
+    const runner = (async (_prompt: string, opts: { ollama?: { context: unknown } }) => {
       seen.push(opts.ollama?.context);
       return { text: "A summary", costUsd: 0 };
     }) as unknown as Runner;

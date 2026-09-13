@@ -1,9 +1,12 @@
 /**
- * Git operations, implemented with Bun's shell (`Bun.$`).
+ * Git operations, implemented on `node:child_process`. Every call spawns
+ * `git` directly (no shell), streams its output into memory without a size
+ * cap - a staged diff can run to megabytes - and reports failure through
+ * {@link GitError}.
  */
-import { $ } from "bun";
-import { ClaudeCommitError } from "./errors";
-import type { FileChange } from "./types";
+import { spawn } from "node:child_process";
+import { ClaudeCommitError } from "./errors.ts";
+import type { FileChange } from "./types.ts";
 
 /**
  * A git command failed. Subclasses {@link ClaudeCommitError} so the CLI prints
@@ -13,29 +16,74 @@ export class GitError extends ClaudeCommitError {
   override name = "GitError";
 }
 
+/** What a finished `git` process left behind. */
+interface GitProcessResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Spawn `git` with `args`, optionally feeding `input` to its stdin, and
+ * collect both output streams in full. Rejects only when the process could
+ * not be started at all (typically `git` missing from `PATH`); a non-zero
+ * exit is reported through the result, not thrown.
+ */
+function runGit(args: string[], input?: string): Promise<GitProcessResult> {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn("git", args, { stdio: ["pipe", "pipe", "pipe"] });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    let settled = false;
+
+    child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
+    // `close` (not `exit`) waits for both pipes to drain, so nothing git
+    // wrote in its final moments is lost.
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      resolvePromise({
+        // A signal-terminated process has no exit code; treat it as failure.
+        exitCode: code ?? (signal ? 128 : 1),
+        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+        stderr: Buffer.concat(stderrChunks).toString("utf8"),
+      });
+    });
+
+    // If git exits before reading everything, the write fails with EPIPE;
+    // the exit code and stderr already tell the story, so swallow it. With
+    // no input, stdin is closed at once so git never waits on it.
+    child.stdin.on("error", () => {});
+    child.stdin.end(input ?? "");
+  });
+}
+
 /** Run a git command, returning stdout. Throws {@link GitError} on failure. */
-async function git(args: string[]): Promise<string> {
-  let res;
+async function git(args: string[], input?: string): Promise<string> {
+  let result: GitProcessResult;
   try {
-    res = await $`git ${args}`.quiet().nothrow();
+    result = await runGit(args, input);
   } catch (err) {
-    // Should not happen with `.nothrow()`, but never let a raw shell error leak.
     throw new GitError(`Could not run git: ${(err as Error).message}`);
   }
-  if (res.exitCode !== 0) {
-    const stderr = res.stderr.toString().trim();
-    throw new GitError(
-      stderr || `git ${args.join(" ")} exited with code ${res.exitCode}`,
-    );
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.trim();
+    throw new GitError(stderr || `git ${args.join(" ")} exited with code ${result.exitCode}`);
   }
-  return res.stdout.toString();
+  return result.stdout;
 }
 
 /** True if the current working directory is inside a git work tree. */
 export async function isGitRepo(): Promise<boolean> {
   try {
-    const res = await $`git rev-parse --is-inside-work-tree`.quiet().nothrow();
-    return res.exitCode === 0 && res.stdout.toString().trim() === "true";
+    const result = await runGit(["rev-parse", "--is-inside-work-tree"]);
+    return result.exitCode === 0 && result.stdout.trim() === "true";
   } catch {
     // git missing or unrunnable - treat as "not a usable repo".
     return false;
@@ -116,27 +164,11 @@ export async function getStagedStat(): Promise<string> {
  * Create a commit with the given message. The message is piped to
  * `git commit -F -` over stdin, so arbitrary content (leading dashes, multiple
  * lines, special characters) is handled safely - and nothing touches disk, so
- * there is no temp file to be raced or read by another user.
+ * there is no temp file to be raced or read by another user. Git's own
+ * stdout summary is discarded: the CLI prints its own confirmation.
  */
 export async function commit(message: string): Promise<void> {
-  let proc;
-  try {
-    // `Bun.spawn` throws synchronously if `git` isn't on PATH.
-    proc = Bun.spawn(["git", "commit", "-F", "-"], {
-      stdin: new TextEncoder().encode(message),
-      // We surface our own confirmation, so discard git's stdout summary rather
-      // than leaving an unread pipe that could (in theory) fill and block.
-      stdout: "ignore",
-      stderr: "pipe",
-    });
-  } catch (err) {
-    throw new GitError(`Could not run git: ${(err as Error).message}`);
-  }
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    const stderr = (await new Response(proc.stderr).text()).trim();
-    throw new GitError(stderr || `git commit exited with code ${exitCode}`);
-  }
+  await git(["commit", "-F", "-"], message);
 }
 
 /** The current branch name (or `HEAD` when detached). */

@@ -7,12 +7,13 @@
  * `.claude-commit.json` / `.claude-commitrc(.json)` file (searched cwd → repo
  * root) < CLI flags.
  */
+import { readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
-import { ClaudeCommitError } from "./errors";
-import { DEFAULT_SPINNER, isSpinnerName } from "./ui/spinner";
-import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST } from "./models";
-import type { Config, ModelConfig, OllamaConfig, PartialConfig } from "./types";
+import { ClaudeCommitError } from "./errors.ts";
+import { DEFAULT_SPINNER, isSpinnerName } from "./ui/spinner.ts";
+import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST } from "./models.ts";
+import type { Config, ModelConfig, OllamaConfig, PartialConfig } from "./types.ts";
 
 export const DEFAULT_CONFIG: Config = {
   conventionalCommits: false,
@@ -42,11 +43,7 @@ export const DEFAULT_CONFIG: Config = {
   allowApiKey: false,
 };
 
-const CONFIG_FILENAMES = [
-  ".claude-commit.json",
-  ".claude-commitrc.json",
-  ".claude-commitrc",
-];
+const CONFIG_FILENAMES = [".claude-commit.json", ".claude-commitrc.json", ".claude-commitrc"];
 
 /**
  * Filenames accepted inside the global config directory, most-preferred first.
@@ -56,14 +53,21 @@ const CONFIG_FILENAMES = [
  */
 const GLOBAL_CONFIG_FILENAMES = ["config.json", ...CONFIG_FILENAMES];
 
+/** Whether `path` names an existing regular file (a directory does not count). */
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The user-level config directory, `$XDG_CONFIG_HOME/claude-commit` (falling back
  * to `~/.config/claude-commit`). Per the XDG Base Directory spec, `XDG_CONFIG_HOME`
  * is honoured only when it is set to an absolute path.
  */
-export function globalConfigDir(
-  env: Record<string, string | undefined> = process.env,
-): string {
+export function globalConfigDir(env: Record<string, string | undefined> = process.env): string {
   const xdg = env.XDG_CONFIG_HOME;
   const base = xdg && isAbsolute(xdg) ? xdg : join(homedir(), ".config");
   return join(base, "claude-commit");
@@ -76,7 +80,7 @@ async function findGlobalConfigFile(
   const dir = globalConfigDir(env);
   for (const name of GLOBAL_CONFIG_FILENAMES) {
     const candidate = join(dir, name);
-    if (await Bun.file(candidate).exists()) return candidate;
+    if (await fileExists(candidate)) return candidate;
   }
   return undefined;
 }
@@ -91,9 +95,7 @@ async function findGlobalConfigFile(
 export function mergeConfig(base: Config, override: PartialConfig): Config {
   const models: ModelConfig = { ...base.models, ...(override.models ?? {}) };
   const ollama: OllamaConfig = { ...base.ollama, ...(override.ollama ?? {}) };
-  const lowPriorityPaths = [
-    ...(override.lowPriorityPaths ?? base.lowPriorityPaths),
-  ];
+  const lowPriorityPaths = [...(override.lowPriorityPaths ?? base.lowPriorityPaths)];
   const ignore = [...(override.ignore ?? base.ignore)];
   const merged: Config = {
     ...base,
@@ -113,8 +115,7 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   const out: PartialConfig = {};
 
   const bool = (k: keyof Config) => {
-    if (typeof obj[k] === "boolean")
-      (out as Record<string, unknown>)[k] = obj[k];
+    if (typeof obj[k] === "boolean") (out as Record<string, unknown>)[k] = obj[k];
   };
   bool("conventionalCommits");
   bool("gitmoji");
@@ -129,10 +130,7 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   if (typeof obj.customPrompt === "string") out.customPrompt = obj.customPrompt;
   else if (obj.customPrompt === null) out.customPrompt = null;
 
-  if (
-    typeof obj.interactiveCount === "number" &&
-    Number.isFinite(obj.interactiveCount)
-  ) {
+  if (typeof obj.interactiveCount === "number" && Number.isFinite(obj.interactiveCount)) {
     out.interactiveCount = Math.max(1, Math.floor(obj.interactiveCount));
   }
   if (obj.interactiveTemperature === null) {
@@ -141,10 +139,7 @@ export function sanitizePartial(raw: unknown): PartialConfig {
     typeof obj.interactiveTemperature === "number" &&
     Number.isFinite(obj.interactiveTemperature)
   ) {
-    out.interactiveTemperature = Math.min(
-      2,
-      Math.max(0, obj.interactiveTemperature),
-    );
+    out.interactiveTemperature = Math.min(2, Math.max(0, obj.interactiveTemperature));
   }
   if (typeof obj.spinner === "string" && isSpinnerName(obj.spinner)) {
     out.spinner = obj.spinner;
@@ -214,22 +209,16 @@ function cleanPatternList(raw: unknown[]): string[] {
 }
 
 async function readJsonIfExists(path: string): Promise<unknown | undefined> {
-  const file = Bun.file(path);
-  if (!(await file.exists())) return undefined;
+  if (!(await fileExists(path))) return undefined;
   try {
-    return await file.json();
+    return JSON.parse(await readFile(path, "utf8")) as unknown;
   } catch (err) {
-    throw new ClaudeCommitError(
-      `Failed to parse config file ${path}: ${(err as Error).message}`,
-    );
+    throw new ClaudeCommitError(`Failed to parse config file ${path}: ${(err as Error).message}`);
   }
 }
 
 /** Walk from `startDir` up to and including `rootDir`, returning the first config file found. */
-async function findConfigFile(
-  startDir: string,
-  rootDir: string,
-): Promise<string | undefined> {
+async function findConfigFile(startDir: string, rootDir: string): Promise<string | undefined> {
   let dir = resolve(startDir);
   const stop = resolve(rootDir);
   // Always terminates: we stop at `rootDir`, and `dirname` of the filesystem
@@ -238,7 +227,7 @@ async function findConfigFile(
   for (;;) {
     for (const name of CONFIG_FILENAMES) {
       const candidate = join(dir, name);
-      if (await Bun.file(candidate).exists()) return candidate;
+      if (await fileExists(candidate)) return candidate;
     }
     if (dir === stop) break;
     const parent = dirname(dir);
@@ -270,10 +259,7 @@ export async function loadFileConfig(
   // deliberately), which readJsonIfExists handles.
   const globalPath = await findGlobalConfigFile(env);
   if (globalPath) {
-    result = mergePartial(
-      result,
-      sanitizePartial(await readJsonIfExists(globalPath)),
-    );
+    result = mergePartial(result, sanitizePartial(await readJsonIfExists(globalPath)));
   }
 
   // package.json#claude-commit at the repo root (above the global config, below
@@ -293,9 +279,7 @@ export async function loadFileConfig(
     );
   }
 
-  const filePath = configPath
-    ? resolve(cwd, configPath)
-    : await findConfigFile(cwd, repoRoot);
+  const filePath = configPath ? resolve(cwd, configPath) : await findConfigFile(cwd, repoRoot);
   if (filePath) {
     const raw = await readJsonIfExists(filePath);
     if (raw === undefined && configPath) {
@@ -312,10 +296,7 @@ export async function loadFileConfig(
  * every other key, including both path lists, is taken whole from the
  * override when present.
  */
-export function mergePartial(
-  base: PartialConfig,
-  override: PartialConfig,
-): PartialConfig {
+export function mergePartial(base: PartialConfig, override: PartialConfig): PartialConfig {
   const out: PartialConfig = { ...base, ...override };
   if (base.models || override.models) {
     out.models = { ...base.models, ...override.models };
@@ -331,9 +312,6 @@ export function mergePartial(
 }
 
 /** Produce a fully-resolved config from file config and CLI-flag overrides. */
-export function resolveConfig(
-  fileConfig: PartialConfig,
-  flagConfig: PartialConfig,
-): Config {
+export function resolveConfig(fileConfig: PartialConfig, flagConfig: PartialConfig): Config {
   return mergeConfig(DEFAULT_CONFIG, mergePartial(fileConfig, flagConfig));
 }

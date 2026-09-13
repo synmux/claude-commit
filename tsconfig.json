@@ -5,13 +5,17 @@
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
-    "jsx": "react-jsx",
     "allowJs": true,
-    "types": ["bun"],
+    "types": ["node"],
 
-    // Bundler mode
+    // Bundler mode. Sources run on Node's native type stripping (`node
+    // bin/cco.js` -> `bin/cco.ts`) and are bundled by esbuild for publishing,
+    // so imports carry explicit `.ts` extensions and only erasable syntax is
+    // allowed (no enums, namespaces or parameter properties).
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
 
@@ -26,5 +30,6 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "include": ["bin", "src", "test", "index.ts", "vitest.config.ts"]
 }

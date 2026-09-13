@@ -14,8 +14,8 @@
  * `sectionPaths` recovers from each section's header lines.
  */
 
-import type { PathMatcher } from "./paths";
-import { estimateDiffTokens, isOpaqueLine } from "./tokens";
+import type { PathMatcher } from "./paths.ts";
+import { estimateDiffTokens, isOpaqueLine } from "./tokens.ts";
 
 const FILE_HEADER = "diff --git ";
 const HUNK_HEADER = "@@";
@@ -166,13 +166,8 @@ export function splitDiff(diff: string, maxChars: number): string[] {
 }
 
 /** Character budget for `text` such that its classified token estimate fits `maxTokens`. */
-function charBudgetFor(
-  text: string,
-  maxTokens: number,
-  charsPerToken: number,
-): number {
-  const density =
-    text.length / Math.max(1, estimateDiffTokens(text, charsPerToken));
+function charBudgetFor(text: string, maxTokens: number, charsPerToken: number): number {
+  const density = text.length / Math.max(1, estimateDiffTokens(text, charsPerToken));
   return Math.max(1, Math.floor(maxTokens * density));
 }
 
@@ -301,9 +296,7 @@ function stripDiffPrefix(path: string, prefix: string): string {
  * removed before unquoting.
  */
 function pathFromMarkerLine(rest: string, prefix: string): string | null {
-  const unquoted = unquoteGitPath(
-    rest.endsWith("\t") ? rest.slice(0, -1) : rest,
-  );
+  const unquoted = unquoteGitPath(rest.endsWith("\t") ? rest.slice(0, -1) : rest);
   if (unquoted === DEV_NULL) return null;
   return stripDiffPrefix(unquoted, prefix);
 }
@@ -313,10 +306,7 @@ function pathFromMarkerLine(rest: string, prefix: string): string | null {
  * the token including its quotes and the index just past it, or `null` if
  * the closing quote is missing.
  */
-function readQuotedToken(
-  text: string,
-  start: number,
-): { token: string; end: number } | null {
+function readQuotedToken(text: string, start: number): { token: string; end: number } | null {
   let index = start + 1;
   while (index < text.length) {
     if (text[index] === "\\") {
@@ -365,8 +355,7 @@ function pathsFromHeader(headerLine: string): string[] {
     const right = rest.slice(half + 1);
     if (
       rest[half] === " " &&
-      stripDiffPrefix(left, SOURCE_PREFIX) ===
-        stripDiffPrefix(right, DESTINATION_PREFIX)
+      stripDiffPrefix(left, SOURCE_PREFIX) === stripDiffPrefix(right, DESTINATION_PREFIX)
     ) {
       source = left;
       destination = right;
@@ -425,9 +414,7 @@ export function sectionPaths(section: string): string[] {
   if (paths.length > 0) return paths;
 
   const header = lines[0];
-  return header !== undefined && header.startsWith(FILE_HEADER)
-    ? pathsFromHeader(header)
-    : [];
+  return header !== undefined && header.startsWith(FILE_HEADER) ? pathsFromHeader(header) : [];
 }
 
 /**
@@ -452,10 +439,7 @@ export function diffPaths(diff: string): string[] {
  * other change to yield to, they *are* the change and should be described
  * in full, exactly as if no patterns were configured.
  */
-export function partitionDiff(
-  diff: string,
-  isLowPriority: PathMatcher,
-): DiffPartition {
+export function partitionDiff(diff: string, isLowPriority: PathMatcher): DiffPartition {
   const empty: DiffPartition = {
     primary: "",
     lowPriority: "",
@@ -516,10 +500,7 @@ export interface IgnoreResult {
  * This runs before everything else in the pipeline, so ignored content is
  * never chunked, never sent, and never paid for.
  */
-export function applyIgnorePatterns(
-  diff: string,
-  isIgnored: PathMatcher,
-): IgnoreResult {
+export function applyIgnorePatterns(diff: string, isIgnored: PathMatcher): IgnoreResult {
   if (diff === "") return { diff: "", ignoredFiles: 0, totalFiles: 0 };
 
   const kept: string[] = [];
@@ -550,11 +531,7 @@ export function applyIgnorePatterns(
  * possible. An unsplittable oversized chunk is kept - the overflow retry in
  * the generation pipeline is the backstop for that case.
  */
-export function splitDiffToFit(
-  diff: string,
-  maxTokens: number,
-  charsPerToken: number,
-): string[] {
+export function splitDiffToFit(diff: string, maxTokens: number, charsPerToken: number): string[] {
   const queue = splitDiff(diff, charBudgetFor(diff, maxTokens, charsPerToken));
   const fitted: string[] = [];
   while (queue.length > 0) {
@@ -566,10 +543,7 @@ export function splitDiffToFit(
     // Over budget: the chunk's own density is at least as dense as the
     // blend it was sized with, so this budget is strictly smaller than the
     // chunk - splitDiff will attempt a real split.
-    const pieces = splitDiff(
-      chunk,
-      charBudgetFor(chunk, maxTokens, charsPerToken),
-    );
+    const pieces = splitDiff(chunk, charBudgetFor(chunk, maxTokens, charsPerToken));
     if (pieces.length <= 1) {
       fitted.push(chunk);
       continue;

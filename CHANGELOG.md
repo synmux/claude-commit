@@ -7,6 +7,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each version also has a [GitHub release](https://github.com/synmux/claude-commit/releases)
 carrying the same notes at greater length.
 
+## [Unreleased]
+
+### [Unreleased] - Changed
+
+- **Runs on Node, not Bun.** `cco` now requires Node.js 22.18 or later
+  (24 LTS recommended) and no longer needs Bun at all. The package ships a
+  bundled `dist/` built with esbuild plus type declarations for the library
+  entry; the executable is `bin/cco.js`, which runs the TypeScript sources
+  directly from a checkout via Node's native type stripping.
+- **The interactive picker is built on Clack** (`@clack/core` +
+  `@clack/prompts`) instead of OpenTUI. It looks a little different - a
+  title, a hint line, and every candidate shown as its subject plus a
+  one-line body preview - and gains `j`/`k` navigation with wrapping and
+  `Ctrl-C` to cancel alongside the existing arrow keys, `Enter`, `e` and
+  `q`/`Esc`. The list windows itself to the terminal height. It still draws
+  on stderr only.
+- Path patterns (`lowPriorityPaths`, `ignore`) are matched by `picomatch`
+  instead of `Bun.Glob`. Every well-formed pattern behaves exactly as
+  before. Two ill-formed cases differ: an unbalanced `{` now matches
+  nothing (it used to match its first alternative), and an unterminated `[`
+  now matches its literal text (it used to match nothing).
+- Development moved to pnpm (`pnpm-lock.yaml`, `pnpm-workspace.yaml`),
+  vitest (`pnpm test`) and esbuild (`pnpm run build`). The repository's own
+  `lowPriorityPaths` deprioritise `pnpm-lock.yaml` instead of `bun.lock`.
+- The npm publish workflow now runs `ci.yml` (lint, typecheck, build, test)
+  as a reusable workflow against the tagged commit and only publishes once
+  it succeeds. It no longer carries its own test step, which had been
+  calling a `typecheck` script that no longer exists.
+
+### [Unreleased] - Removed
+
+- The `@opentui/core` and `@types/bun` dependencies, `bun.lock`, and the Bun
+  pin in `mise.toml` (now Node 24.20.0).
+
 ## [1.0.4] - 2026-09-11
 
 ### [1.0.4] - Added

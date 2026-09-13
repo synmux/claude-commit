@@ -5,7 +5,7 @@
  * Stage 2 (final model): turn the summaries into a commit message that obeys the
  * configured formatting rules (conventional commits, gitmoji, template, body).
  */
-import type { ChangePriority, Config, DiffSummary } from "./types";
+import type { ChangePriority, Config, DiffSummary } from "./types.ts";
 
 /** Sentinel separating candidate messages in interactive mode. */
 export const OPTION_DELIMITER = "===OPTION===";
@@ -28,8 +28,7 @@ const GITMOJI_GUIDE = [
   "🔒️ security",
 ].join(", ");
 
-const CONVENTIONAL_TYPES =
-  "feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert";
+const CONVENTIONAL_TYPES = "feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert";
 
 /**
  * What "low priority" means, phrased once for both stages so the summary
@@ -46,9 +45,7 @@ const LOW_PRIORITY_DESCRIPTION =
  * which areas changed and how, so the churn cannot crowd out the primary
  * changes when the summaries are combined.
  */
-export function buildSummarySystem(
-  priority: ChangePriority = "primary",
-): string {
+export function buildSummarySystem(priority: ChangePriority = "primary"): string {
   const role =
     "You are an expert software engineer analyzing a git diff in preparation for writing a commit message.";
   const guidance =
@@ -94,8 +91,7 @@ export const MESSAGES_SCHEMA: Record<string, unknown> = {
   properties: {
     messages: {
       type: "array",
-      description:
-        "The commit message(s), each a complete raw commit message string.",
+      description: "The commit message(s), each a complete raw commit message string.",
       items: { type: "string" },
     },
   },
@@ -138,9 +134,7 @@ function lowPriorityWeightingRules(config: Config): string[] {
       "Mention the low-priority changes in the subject only if they fit naturally without displacing anything about the primary changes.",
   ];
   if (config.conventionalCommits) {
-    rules.push(
-      "Choose the commit type and scope from the primary changes alone.",
-    );
+    rules.push("Choose the commit type and scope from the primary changes alone.");
   }
   if (config.gitmoji) {
     rules.push("Choose the gitmoji from the primary changes alone.");
@@ -314,11 +308,7 @@ function describeSummaries(summaries: DiffSummary[]): string {
  * `messages` array. Otherwise, when `count` > 1, they are separated by
  * {@link OPTION_DELIMITER} for text parsing.
  */
-export function buildFinalUser(
-  summaries: DiffSummary[],
-  count = 1,
-  structured = false,
-): string {
+export function buildFinalUser(summaries: DiffSummary[], count = 1, structured = false): string {
   return buildFinalRequest(
     describeSummaries(summaries),
     count,
@@ -336,8 +326,7 @@ export function buildFilenamesUser(
   count = 1,
   structured = false,
 ): string {
-  const hasLowPriority =
-    filenames.primary.length > 0 && filenames.lowPriority.length > 0;
+  const hasLowPriority = filenames.primary.length > 0 && filenames.lowPriority.length > 0;
   const describePaths = (paths: string[]) =>
     paths.map((path) => `- ${JSON.stringify(path)}`).join("\n");
   const described = hasLowPriority

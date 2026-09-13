@@ -13,7 +13,7 @@
  */
 import ora, { type Ora } from "ora";
 import spinners, { type Spinner as SpinnerAnimation } from "cli-spinners";
-import { color } from "./colors";
+import { color } from "./colors.ts";
 
 /** The spinner used when none (or an unknown one) is configured. */
 export const DEFAULT_SPINNER = "material";
@@ -29,9 +29,7 @@ export function isSpinnerName(name: string): boolean {
  * never be able to break a commit).
  */
 export function resolveSpinner(name: string): SpinnerAnimation {
-  const known = (spinners as Record<string, SpinnerAnimation | undefined>)[
-    name
-  ];
+  const known = (spinners as Record<string, SpinnerAnimation | undefined>)[name];
   return known ?? spinners[DEFAULT_SPINNER];
 }
 
