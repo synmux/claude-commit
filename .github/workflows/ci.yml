@@ -1,3 +1,4 @@
+# syn-version: 1789415892
 name: ci
 permissions:
   contents: read
