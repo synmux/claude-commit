@@ -1,5 +1,8 @@
+# syn-version: 1789415892
 name: ci
-permissions: read-all
+permissions:
+  contents: read
+  pull-requests: read
 on:
   push: null
   pull_request: null
