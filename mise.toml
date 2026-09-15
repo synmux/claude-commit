@@ -5,6 +5,6 @@ CLAUDE_COMMIT_MISE_ACTIVE = 'true'
 env_file = '.env'
 
 [tools]
-node = { version = '24.20.0' }
+node = { version = '24.21.0' }
 
 # [tasks]
