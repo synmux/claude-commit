@@ -1,0 +1,277 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Diff to Commit Message Pipeline",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 580],
+    "views": [
+      {
+        "id": "prompt-path",
+        "label": "Prompt assembly",
+        "focus": ["cli", "sysprompt", "taskprompt", "query", "lead"],
+        "note": "The static system prompt and the per-run task prompt meet in one query() call that spawns the Claude Code CLI."
+      },
+      {
+        "id": "repo-evidence",
+        "label": "Repository evidence",
+        "focus": ["repo", "style", "analyzer", "lead"],
+        "note": "Two subagents read git history and the diff in parallel, then report summaries back to the lead."
+      },
+      {
+        "id": "extraction",
+        "label": "Extraction contract",
+        "focus": ["lead", "extractor", "deliver"],
+        "note": "Everything after the COMMIT_MESSAGE: marker becomes the message, minus any fenced blocks."
+      }
+    ]
+  },
+  "stages": [
+    {
+      "label": "Inputs"
+    },
+    {
+      "label": "Prompt assembly"
+    },
+    {
+      "label": "Agent runtime"
+    },
+    {
+      "label": "Synthesis"
+    },
+    {
+      "label": "Extract + deliver"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "cli",
+      "type": "frontend",
+      "label": "CLI flags",
+      "sublabel": "argparse + aliases",
+      "stage": 0,
+      "row": 0,
+      "tag": "scope + limit",
+      "yOffset": 0
+    },
+    {
+      "id": "repo",
+      "type": "database",
+      "label": "Git repository",
+      "sublabel": "index + working tree",
+      "stage": 0,
+      "row": 3,
+      "tag": "cwd",
+      "yOffset": -60
+    },
+    {
+      "id": "sysprompt",
+      "type": "backend",
+      "label": "SYSTEM_PROMPT",
+      "sublabel": "rules + examples",
+      "stage": 1,
+      "row": 0,
+      "tag": "constant",
+      "yOffset": 0
+    },
+    {
+      "id": "taskprompt",
+      "type": "backend",
+      "label": "Task prompt",
+      "sublabel": "f-string per run",
+      "stage": 1,
+      "row": 1,
+      "tag": "per run",
+      "yOffset": -20
+    },
+    {
+      "id": "query",
+      "type": "messagebus",
+      "label": "query()",
+      "sublabel": "claude-agent-sdk",
+      "stage": 2,
+      "row": 1,
+      "tag": "tools + 2 agents",
+      "yOffset": -20
+    },
+    {
+      "id": "style",
+      "type": "external",
+      "label": "style-detector",
+      "sublabel": "haiku, Bash only",
+      "stage": 2,
+      "row": 2,
+      "tag": "AgentDefinition",
+      "yOffset": -40
+    },
+    {
+      "id": "analyzer",
+      "type": "external",
+      "label": "diff-analyzer",
+      "sublabel": "sonnet, Read + Grep",
+      "stage": 2,
+      "row": 3,
+      "tag": "AgentDefinition",
+      "yOffset": -60
+    },
+    {
+      "id": "lead",
+      "type": "external",
+      "label": "Lead agent",
+      "sublabel": "Claude Code CLI",
+      "stage": 3,
+      "row": 2,
+      "tag": "Task tool, 30 turns",
+      "yOffset": -40
+    },
+    {
+      "id": "extractor",
+      "type": "backend",
+      "label": "Extractor",
+      "sublabel": "marker split",
+      "stage": 4,
+      "row": 2,
+      "tag": "fence strip",
+      "yOffset": -40
+    },
+    {
+      "id": "deliver",
+      "type": "frontend",
+      "label": "Output modes",
+      "sublabel": "panel, copy, commit",
+      "stage": 4,
+      "row": 3,
+      "tag": "git commit -m",
+      "yOffset": -60
+    }
+  ],
+  "flows": [
+    {
+      "id": "flags-to-task",
+      "from": "cli",
+      "to": "taskprompt",
+      "label": "scope + max diff lines",
+      "classification": "run config",
+      "variant": "emphasis",
+      "labelDy": 8
+    },
+    {
+      "id": "system-to-query",
+      "from": "sysprompt",
+      "to": "query",
+      "label": "options.system_prompt",
+      "classification": "static",
+      "variant": "default",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [[530, 157]],
+      "labelSegment": 0
+    },
+    {
+      "id": "task-to-query",
+      "from": "taskprompt",
+      "to": "query",
+      "label": "prompt",
+      "classification": "per run",
+      "variant": "emphasis"
+    },
+    {
+      "id": "query-to-lead",
+      "from": "query",
+      "to": "lead",
+      "label": "spawn Claude Code CLI",
+      "classification": "subprocess",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [[745, 251]],
+      "labelSegment": 0
+    },
+    {
+      "id": "repo-to-style",
+      "from": "repo",
+      "to": "style",
+      "label": "git log -10 --oneline",
+      "classification": "history",
+      "variant": "default",
+      "fromSide": "top",
+      "toSide": "left",
+      "via": [[100, 345]],
+      "labelSegment": 1
+    },
+    {
+      "id": "repo-to-analyzer",
+      "from": "repo",
+      "to": "analyzer",
+      "label": "git diff + Read/Grep",
+      "classification": "changes",
+      "variant": "default"
+    },
+    {
+      "id": "style-summary",
+      "from": "style",
+      "to": "lead",
+      "label": "style summary",
+      "classification": "conventions",
+      "variant": "default"
+    },
+    {
+      "id": "change-summary",
+      "from": "analyzer",
+      "to": "lead",
+      "label": "change summary",
+      "classification": "intent",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [[745, 439]],
+      "labelSegment": 0
+    },
+    {
+      "id": "text-stream",
+      "from": "lead",
+      "to": "extractor",
+      "label": "streamed text",
+      "classification": "streamed",
+      "variant": "emphasis"
+    },
+    {
+      "id": "final-message",
+      "from": "extractor",
+      "to": "deliver",
+      "label": "commit_message",
+      "classification": "cleaned",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight",
+      "labelDy": 26
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Two prompts, one query",
+      "items": [
+        "SYSTEM_PROMPT is a constant: role, tool tips, format and examples",
+        "The task prompt adds cwd, staged or all scope, and the diff line budget"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Parallel analysis",
+      "items": [
+        "The lead launches both subagents via Task; haiku reads git log, sonnet reads the diff",
+        "The lead may also run git itself, so the split is advisory"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Extraction contract",
+      "items": [
+        "Text after COMMIT_MESSAGE: wins; otherwise the last non-narration block",
+        "Fenced blocks are dropped entirely, so a fully fenced message becomes empty"
+      ]
+    }
+  ]
+}

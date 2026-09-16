@@ -1,0 +1,287 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Claude Commit CLI Run",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Happy path",
+        "focus": [
+          "invoke",
+          "parse",
+          "prompt",
+          "run",
+          "extract",
+          "deliver",
+          "gitcommit"
+        ],
+        "note": "From shell alias to git commit when everything works."
+      },
+      {
+        "id": "alias-branch",
+        "label": "Alias subcommand",
+        "focus": ["invoke", "aliascmd"],
+        "note": "The alias subcommand short-circuits before any generation."
+      },
+      {
+        "id": "exits",
+        "label": "Failure exits",
+        "focus": [
+          "run",
+          "extract",
+          "deliver",
+          "notfound",
+          "failed",
+          "cancelled"
+        ],
+        "note": "Missing CLI, no extracted message, or a declined confirm all stop the run."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "main()"
+    },
+    {
+      "id": "gen",
+      "label": "generate_commit_message()"
+    },
+    {
+      "id": "out",
+      "label": "Git"
+    },
+    {
+      "id": "exc",
+      "label": "Exits",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "entry",
+      "label": "Entry",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "generate",
+      "label": "Generate",
+      "fromCol": 2,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "act",
+      "label": "Act",
+      "fromCol": 5,
+      "toCol": 5
+    }
+  ],
+  "mainPath": [
+    "invoke",
+    "parse",
+    "prompt",
+    "run",
+    "extract",
+    "deliver",
+    "gitcommit"
+  ],
+  "nodes": [
+    {
+      "id": "invoke",
+      "lane": "main",
+      "col": 0,
+      "type": "external",
+      "label": "claude-commit",
+      "sublabel": "or alias: ccc, ccp, cca",
+      "width": 136
+    },
+    {
+      "id": "parse",
+      "lane": "main",
+      "col": 1,
+      "type": "backend",
+      "label": "Parse flags",
+      "sublabel": "resolve_alias then argparse",
+      "width": 136
+    },
+    {
+      "id": "deliver",
+      "lane": "main",
+      "col": 5,
+      "type": "frontend",
+      "label": "Show message",
+      "sublabel": "panel, preview, copy",
+      "width": 136
+    },
+    {
+      "id": "prompt",
+      "lane": "gen",
+      "col": 2,
+      "type": "backend",
+      "label": "Build prompts",
+      "sublabel": "SYSTEM_PROMPT + task f-string",
+      "tag": "options + 2 agents",
+      "width": 136
+    },
+    {
+      "id": "run",
+      "lane": "gen",
+      "col": 3,
+      "type": "external",
+      "label": "Agent loop",
+      "sublabel": "query() via Claude Code CLI",
+      "tag": "max 30 turns",
+      "width": 136
+    },
+    {
+      "id": "extract",
+      "lane": "gen",
+      "col": 4,
+      "type": "backend",
+      "label": "Extract message",
+      "sublabel": "COMMIT_MESSAGE: + fence strip",
+      "width": 136
+    },
+    {
+      "id": "aliascmd",
+      "lane": "exc",
+      "col": 1,
+      "type": "backend",
+      "label": "Alias subcommand",
+      "sublabel": "install, set, list, unset",
+      "width": 136
+    },
+    {
+      "id": "notfound",
+      "lane": "exc",
+      "col": 3,
+      "type": "security",
+      "label": "CLI not found",
+      "sublabel": "install hint, exit 1",
+      "width": 136
+    },
+    {
+      "id": "failed",
+      "lane": "exc",
+      "col": 4,
+      "type": "security",
+      "label": "No message",
+      "sublabel": "exit 1",
+      "width": 136
+    },
+    {
+      "id": "cancelled",
+      "lane": "exc",
+      "col": 5,
+      "type": "security",
+      "label": "Cancelled",
+      "sublabel": "answered n",
+      "width": 136
+    },
+    {
+      "id": "gitcommit",
+      "lane": "out",
+      "col": 5,
+      "type": "database",
+      "label": "git commit -m",
+      "sublabel": "--commit after Y/n",
+      "width": 136
+    }
+  ],
+  "edges": [
+    {
+      "id": "invoke-parse",
+      "from": "invoke",
+      "to": "parse",
+      "variant": "default"
+    },
+    {
+      "id": "invoke-alias",
+      "from": "invoke",
+      "to": "aliascmd",
+      "label": "first arg is alias",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "parse-prompt",
+      "from": "parse",
+      "to": "prompt",
+      "label": "asyncio.run",
+      "variant": "emphasis"
+    },
+    {
+      "id": "prompt-run",
+      "from": "prompt",
+      "to": "run",
+      "variant": "emphasis"
+    },
+    {
+      "id": "run-extract",
+      "from": "run",
+      "to": "extract",
+      "label": "ResultMessage",
+      "variant": "emphasis"
+    },
+    {
+      "id": "run-notfound",
+      "from": "run",
+      "to": "notfound",
+      "label": "CLINotFoundError",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "extract-failed",
+      "from": "extract",
+      "to": "failed",
+      "label": "None",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "extract-deliver",
+      "from": "extract",
+      "to": "deliver",
+      "label": "commit_message",
+      "variant": "emphasis"
+    },
+    {
+      "id": "deliver-commit",
+      "from": "deliver",
+      "to": "gitcommit",
+      "label": "--commit, y",
+      "variant": "emphasis"
+    },
+    {
+      "id": "deliver-cancel",
+      "from": "deliver",
+      "to": "cancelled",
+      "label": "n",
+      "variant": "security",
+      "role": "error"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Entry",
+      "items": [
+        "First run prints a shell-alias install tip",
+        "Aliases from config.json expand before argparse"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Outcomes",
+      "items": [
+        "No flags: prints a git commit command to paste",
+        "--preview stops at the panel, --copy to clipboard"
+      ]
+    }
+  ]
+}

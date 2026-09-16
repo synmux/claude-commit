@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Commit Generation Sequence",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 634],
+    "column_fit": "spread",
+    "views": [
+      {
+        "id": "prompt-build",
+        "label": "Prompt build",
+        "focus": ["user", "cli", "gen", "sdk", "lead"],
+        "note": "Flags become a task prompt and agent options, then one query() call spawns the Claude Code CLI."
+      },
+      {
+        "id": "parallel-analysis",
+        "label": "Parallel analysis",
+        "focus": ["lead", "style", "analyzer", "git"],
+        "note": "The lead dispatches both subagents in one turn; each reads git independently."
+      },
+      {
+        "id": "extract-commit",
+        "label": "Extract and commit",
+        "focus": ["lead", "sdk", "gen", "cli", "git"],
+        "note": "The COMMIT_MESSAGE: marker is split out of the streamed text, shown, confirmed and committed."
+      }
+    ]
+  },
+  "participants": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "Developer",
+      "sublabel": "shell"
+    },
+    {
+      "id": "cli",
+      "type": "frontend",
+      "label": "main()",
+      "sublabel": "argparse + aliases"
+    },
+    {
+      "id": "gen",
+      "type": "backend",
+      "label": "Generator",
+      "sublabel": "async generate()"
+    },
+    {
+      "id": "sdk",
+      "type": "messagebus",
+      "label": "Agent SDK",
+      "sublabel": "claude-agent-sdk"
+    },
+    {
+      "id": "lead",
+      "type": "external",
+      "label": "Lead agent",
+      "sublabel": "Claude Code CLI"
+    },
+    {
+      "id": "style",
+      "type": "external",
+      "label": "style-detector",
+      "sublabel": "haiku"
+    },
+    {
+      "id": "analyzer",
+      "type": "external",
+      "label": "diff-analyzer",
+      "sublabel": "sonnet"
+    },
+    {
+      "id": "git",
+      "type": "database",
+      "label": "git",
+      "sublabel": "repository"
+    }
+  ],
+  "segments": [
+    {
+      "from": 164,
+      "to": 273,
+      "label": "Prompt build"
+    },
+    {
+      "from": 278,
+      "to": 447,
+      "label": "Parallel analysis"
+    },
+    {
+      "from": 452,
+      "to": 534,
+      "label": "Extract"
+    },
+    {
+      "from": 539,
+      "to": 566,
+      "label": "Commit"
+    }
+  ],
+  "messages": [
+    {
+      "id": "invoke",
+      "from": "user",
+      "to": "cli",
+      "y": 174,
+      "label": "claude-commit --commit",
+      "variant": "default"
+    },
+    {
+      "id": "parse",
+      "from": "cli",
+      "to": "gen",
+      "y": 203,
+      "label": "scope, path, max diff lines",
+      "variant": "default"
+    },
+    {
+      "id": "query-call",
+      "from": "gen",
+      "to": "sdk",
+      "y": 232,
+      "label": "query(task prompt, options)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "spawn-cli",
+      "from": "sdk",
+      "to": "lead",
+      "y": 261,
+      "label": "system prompt + 2 agent defs",
+      "variant": "emphasis"
+    },
+    {
+      "id": "task-style",
+      "from": "lead",
+      "to": "style",
+      "y": 290,
+      "label": "Task: detect style",
+      "variant": "default",
+      "note": "both in one turn"
+    },
+    {
+      "id": "task-diff",
+      "from": "lead",
+      "to": "analyzer",
+      "y": 319,
+      "label": "Task: analyse changes",
+      "variant": "default"
+    },
+    {
+      "id": "style-log",
+      "from": "style",
+      "to": "git",
+      "y": 348,
+      "label": "git log -10 --oneline",
+      "variant": "default"
+    },
+    {
+      "id": "diff-read",
+      "from": "analyzer",
+      "to": "git",
+      "y": 377,
+      "label": "git diff --cached, Read, Grep",
+      "variant": "default"
+    },
+    {
+      "id": "style-summary",
+      "from": "style",
+      "to": "lead",
+      "y": 406,
+      "label": "style summary",
+      "variant": "return"
+    },
+    {
+      "id": "change-summary",
+      "from": "analyzer",
+      "to": "lead",
+      "y": 435,
+      "label": "change summary",
+      "variant": "return"
+    },
+    {
+      "id": "marker",
+      "from": "lead",
+      "to": "sdk",
+      "y": 464,
+      "label": "COMMIT_MESSAGE: text",
+      "variant": "emphasis"
+    },
+    {
+      "id": "result",
+      "from": "sdk",
+      "to": "gen",
+      "y": 493,
+      "label": "ResultMessage",
+      "variant": "return"
+    },
+    {
+      "id": "extracted",
+      "from": "gen",
+      "to": "cli",
+      "y": 522,
+      "label": "split marker, strip fences",
+      "variant": "return"
+    },
+    {
+      "id": "commit",
+      "from": "cli",
+      "to": "git",
+      "y": 551,
+      "label": "git commit -m, after Y/n",
+      "variant": "emphasis"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "cli",
+      "from": 198,
+      "to": 559,
+      "type": "frontend"
+    },
+    {
+      "participant": "gen",
+      "from": 227,
+      "to": 528,
+      "type": "backend"
+    },
+    {
+      "participant": "sdk",
+      "from": 256,
+      "to": 499,
+      "type": "messagebus"
+    },
+    {
+      "participant": "lead",
+      "from": 263,
+      "to": 470,
+      "type": "external"
+    },
+    {
+      "participant": "style",
+      "from": 285,
+      "to": 412,
+      "type": "external"
+    },
+    {
+      "participant": "analyzer",
+      "from": 314,
+      "to": 441,
+      "type": "external"
+    },
+    {
+      "participant": "git",
+      "from": 343,
+      "to": 383,
+      "type": "database"
+    },
+    {
+      "participant": "git",
+      "from": 546,
+      "to": 560,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One call, one subprocess",
+      "items": [
+        "query() spawns the Claude Code CLI in the repo with acceptEdits and max_turns 30",
+        "Subagents are AgentDefinitions in options; the lead calls them with the Task tool"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Resilient finish",
+      "items": [
+        "Extraction runs on ResultMessage; a late SDK error still returns the message",
+        "Preview and copy skip the confirm; git output and subagent returns are omitted here"
+      ]
+    }
+  ]
+}
