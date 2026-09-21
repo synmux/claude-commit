@@ -171,10 +171,10 @@ importers:
         version: 0.3.263(@anthropic-ai/sdk@0.124.0(zod@4.5.4))(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(zod@4.5.4)
       '@clack/core':
         specifier: ^1.4.3
-        version: 1.4.3
+        version: 1.5.1
       '@clack/prompts':
         specifier: ^1.7.0
-        version: 1.7.0
+        version: 1.8.1
       cli-spinners:
         specifier: ^3.4.0
         version: 3.4.0
@@ -438,12 +438,12 @@ packages:
     resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
     engines: {node: '>=6.9.0'}
 
-  '@clack/core@1.4.3':
-    resolution: {integrity: sha512-/kr3UWNtdJfxZtPgDqUOmG2pvwlmcLGheex5yiZKdwbzZJxhV+HMNR9QNmyY5cGwTNV6LrR7Jtp+KjhUAP1qBQ==}
+  '@clack/core@1.5.1':
+    resolution: {integrity: sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ==}
     engines: {node: '>= 20.12.0'}
 
-  '@clack/prompts@1.7.0':
-    resolution: {integrity: sha512-y7/yvZ2TPAnR9+jnc00klvNNLkJiXFFrQA/hlLCcxA9a2A4zQIOimyFQ9XfwYKiGD1fb5GY8vbKIIgO8d5Tb2A==}
+  '@clack/prompts@1.8.1':
+    resolution: {integrity: sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ==}
     engines: {node: '>= 20.12.0'}
 
   '@earendil-works/pi-ai@0.84.4':
@@ -2949,14 +2949,14 @@ snapshots:
 
   '@babel/runtime@7.29.7': {}
 
-  '@clack/core@1.4.3':
+  '@clack/core@1.5.1':
     dependencies:
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5
 
-  '@clack/prompts@1.7.0':
+  '@clack/prompts@1.8.1':
     dependencies:
-      '@clack/core': 1.4.3
+      '@clack/core': 1.5.1
       fast-string-width: 3.0.2
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5
@@ -3195,7 +3195,7 @@ snapshots:
 
   '@mdream/crawl@1.7.1':
     dependencies:
-      '@clack/prompts': 1.7.0
+      '@clack/prompts': 1.8.1
       '@mdream/js': 1.7.1
       c12: 3.3.4
       hookable: 6.1.1
@@ -4563,7 +4563,7 @@ snapshots:
 
   skilld@2.3.0(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4):
     dependencies:
-      '@clack/prompts': 1.7.0
+      '@clack/prompts': 1.8.1
       '@earendil-works/pi-ai': 0.84.4(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
       '@huggingface/transformers': 4.2.0
       '@mdream/crawl': 1.7.1
