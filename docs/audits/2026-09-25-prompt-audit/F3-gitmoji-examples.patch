@@ -1,0 +1,42 @@
+diff --git a/WALKTHROUGH.md b/WALKTHROUGH.md
+index e22ff1a..8376561 100644
+--- a/WALKTHROUGH.md
++++ b/WALKTHROUGH.md
+@@ -513,7 +513,8 @@ The final system prompt changes based on config:
+ - Default mode asks for a concise, imperative, single-line subject.
+ - Conventional Commit mode asks for `type(scope): description` and provides a
+   curated type list.
+-- Gitmoji mode asks for one leading gitmoji and gives a compact guide.
++- Gitmoji mode asks for the one leading gitmoji that fits best, listing common
++  choices as examples rather than a closed list.
+ - Template mode requires the subject to match the template and substitute
+   `{message}`.
+ - Multiline mode asks for a subject, blank line, and concise body.
+diff --git a/src/prompts.ts b/src/prompts.ts
+index 10ce91a..b2b8faa 100644
+--- a/src/prompts.ts
++++ b/src/prompts.ts
+@@ -10,7 +10,11 @@ import type { ChangePriority, Config, DiffSummary } from "./types.ts";
+ /** Sentinel separating candidate messages in interactive mode. */
+ export const OPTION_DELIMITER = "===OPTION===";
+ 
+-/** A compact gitmoji cheat-sheet to steer the model toward sensible choices. */
++/**
++ * Common gitmoji, offered as examples rather than a closed list: the model may
++ * use any gitmoji that fits the change better (a revert, a new dependency, a
++ * release).
++ */
+ const GITMOJI_GUIDE = [
+   "✨ new feature",
+   "🐛 bug fix",
+@@ -182,8 +186,8 @@ export function buildFinalSystem(
+ 
+   if (config.gitmoji) {
+     rules.push(
+-      `Begin the subject line with a single appropriate gitmoji, followed by a space. ` +
+-        `Pick from: ${GITMOJI_GUIDE}.` +
++      `Begin the subject line with the single gitmoji (gitmoji.dev) that best fits the change, followed by a space. ` +
++        `Common choices include: ${GITMOJI_GUIDE}.` +
+         (config.conventionalCommits
+           ? ' Place the gitmoji before the conventional-commit type, e.g. "✨ feat: ...".'
+           : ""),

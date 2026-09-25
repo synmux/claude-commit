@@ -7,17 +7,17 @@
  * latency for no real benefit. We slightly over-estimate tokens so that chunks
  * stay safely under the model's context window.
  */
-import { DEFAULT_OLLAMA_CONTEXT_TOKENS, isOllamaModel } from "./models.ts";
+import { DEFAULT_OLLAMA_CONTEXT_TOKENS, isOllamaModel } from './models.ts'
 
 /** Estimate the number of tokens in `text` given a chars-per-token ratio. */
 export function estimateTokens(text: string, charsPerToken: number): number {
-  if (charsPerToken <= 0) throw new Error("charsPerToken must be positive");
-  return Math.ceil(text.length / charsPerToken);
+  if (charsPerToken <= 0) throw new Error('charsPerToken must be positive')
+  return Math.ceil(text.length / charsPerToken)
 }
 
 /** Convert a token budget into an approximate character budget. */
 export function tokensToChars(tokens: number, charsPerToken: number): number {
-  return Math.floor(tokens * charsPerToken);
+  return Math.floor(tokens * charsPerToken)
 }
 
 /**
@@ -31,8 +31,7 @@ export function tokensToChars(tokens: number, charsPerToken: number): number {
  * chunks than strictly necessary, which is always safe; assuming 1M for a
  * 200k model would instead fail the whole run with "Prompt is too long".
  */
-const MILLION_TOKEN_CONTEXT_MODELS =
-  /\[1m\]|^(claude-)?(sonnet|opus)$|sonnet-5|sonnet-4-6|opus-4-[678]|fable|mythos/i;
+const MILLION_TOKEN_CONTEXT_MODELS = /\[1m\]|^(claude-)?(sonnet|opus)$|sonnet-5|sonnet-4-6|opus-4-[678]|fable|mythos/i
 
 /**
  * The context window (input token capacity) for a model name or alias.
@@ -45,10 +44,10 @@ const MILLION_TOKEN_CONTEXT_MODELS =
  */
 export function contextWindowTokens(
   model: string,
-  ollamaContextTokens: number = DEFAULT_OLLAMA_CONTEXT_TOKENS,
+  ollamaContextTokens: number = DEFAULT_OLLAMA_CONTEXT_TOKENS
 ): number {
-  if (isOllamaModel(model)) return Math.max(1, Math.floor(ollamaContextTokens));
-  return MILLION_TOKEN_CONTEXT_MODELS.test(model) ? 1_000_000 : 200_000;
+  if (isOllamaModel(model)) return Math.max(1, Math.floor(ollamaContextTokens))
+  return MILLION_TOKEN_CONTEXT_MODELS.test(model) ? 1_000_000 : 200_000
 }
 
 /**
@@ -57,7 +56,7 @@ export function contextWindowTokens(
  * the response. Generous on purpose - `charsPerToken` is an estimate, and a
  * chunk that overflows the window fails the whole run.
  */
-export const CONTEXT_RESERVE_TOKENS = 32_000;
+export const CONTEXT_RESERVE_TOKENS = 32_000
 
 /**
  * The fraction of a context window the reserve may take when the flat
@@ -65,7 +64,7 @@ export const CONTEXT_RESERVE_TOKENS = 32_000;
  * 32k has a window smaller than the flat reserve, which would leave a
  * budget of zero and shatter the diff into one chunk per line.
  */
-const MAX_RESERVE_FRACTION = 4;
+const MAX_RESERVE_FRACTION = 4
 
 /**
  * Tokens to hold back from `contextWindow` when sizing chunks: the flat
@@ -75,7 +74,7 @@ const MAX_RESERVE_FRACTION = 4;
  * Ollama - scale down.
  */
 export function contextReserveTokens(contextWindow: number): number {
-  return Math.min(CONTEXT_RESERVE_TOKENS, Math.floor(contextWindow / MAX_RESERVE_FRACTION));
+  return Math.min(CONTEXT_RESERVE_TOKENS, Math.floor(contextWindow / MAX_RESERVE_FRACTION))
 }
 
 /**
@@ -84,13 +83,9 @@ export function contextReserveTokens(contextWindow: number): number {
  * `maxChunkTokens` remains the user-facing cap; this only ever lowers it.
  * `ollamaContextTokens` supplies the window for an `ollama:` model.
  */
-export function clampChunkTokens(
-  model: string,
-  maxChunkTokens: number,
-  ollamaContextTokens?: number,
-): number {
-  const window = contextWindowTokens(model, ollamaContextTokens);
-  return Math.max(1, Math.min(maxChunkTokens, window - contextReserveTokens(window)));
+export function clampChunkTokens(model: string, maxChunkTokens: number, ollamaContextTokens?: number): number {
+  const window = contextWindowTokens(model, ollamaContextTokens)
+  return Math.max(1, Math.min(maxChunkTokens, window - contextReserveTokens(window)))
 }
 
 /**
@@ -104,7 +99,7 @@ export function clampChunkTokens(
  * chars/3.5 heuristic does. 1.0 leaves a small safety margin under the
  * measured value.
  */
-export const OPAQUE_CHARS_PER_TOKEN = 1.0;
+export const OPAQUE_CHARS_PER_TOKEN = 1.0
 
 /**
  * A diff line whose content (after an optional one-character diff marker) is
@@ -112,11 +107,11 @@ export const OPAQUE_CHARS_PER_TOKEN = 1.0;
  * rather than prose or code. Misclassifying dense text (e.g. minified JS) as
  * opaque merely over-reserves, which is the safe direction.
  */
-const OPAQUE_LINE = /^[+\- ]?\S{40,}$/;
+const OPAQUE_LINE = /^[+\- ]?\S{40,}$/
 
 /** Whether a single diff line should be estimated at the opaque ratio. */
 export function isOpaqueLine(line: string): boolean {
-  return OPAQUE_LINE.test(line);
+  return OPAQUE_LINE.test(line)
 }
 
 /**
@@ -127,11 +122,11 @@ export function isOpaqueLine(line: string): boolean {
  * looks within budget can overflow the model's real context window.
  */
 export function estimateDiffTokens(text: string, charsPerToken: number): number {
-  if (charsPerToken <= 0) throw new Error("charsPerToken must be positive");
-  let tokens = 0;
-  for (const line of text.split("\n")) {
-    const lineChars = line.length + 1; // account for the newline
-    tokens += lineChars / (isOpaqueLine(line) ? OPAQUE_CHARS_PER_TOKEN : charsPerToken);
+  if (charsPerToken <= 0) throw new Error('charsPerToken must be positive')
+  let tokens = 0
+  for (const line of text.split('\n')) {
+    const lineChars = line.length + 1 // account for the newline
+    tokens += lineChars / (isOpaqueLine(line) ? OPAQUE_CHARS_PER_TOKEN : charsPerToken)
   }
-  return Math.ceil(tokens);
+  return Math.ceil(tokens)
 }

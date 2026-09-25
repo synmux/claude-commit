@@ -17,9 +17,10 @@ runtimes:
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   disabled:
+    - oxlint
     - pinact
   enabled:
-    - oxlint@1.83.0
+    - biome@2.5.14
     - taplo@0.10.0
     - actionlint@1.7.12
     - checkov@3.3.17
@@ -42,6 +43,8 @@ lint:
         - prettier
       paths:
         - "**/*.ts"
+        - "**/*.js"
+        - "**/*.json"
 actions:
   enabled:
     - trunk-announce

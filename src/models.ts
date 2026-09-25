@@ -17,26 +17,26 @@
  * anything needing to know *which* provider a name refers to (chunk sizing
  * in `src/tokens.ts`, for one) can ask without pulling in a backend.
  */
-import { ClaudeCommitError } from "./errors.ts";
+import { ClaudeCommitError } from './errors.ts'
 
 /** Marks a model name as belonging to an Ollama server. Case-insensitive. */
-export const OLLAMA_PREFIX = "ollama:";
+export const OLLAMA_PREFIX = 'ollama:'
 
 /** Which backend serves a model. */
-export type ModelProvider = "claude" | "ollama";
+export type ModelProvider = 'claude' | 'ollama'
 
 /** A model string resolved into a provider and the name that provider expects. */
 export interface ModelRef {
-  provider: ModelProvider;
+  provider: ModelProvider
   /** The model name to send to the provider, with any cco prefix removed. */
-  name: string;
+  name: string
 }
 
 /**
  * Default Ollama base URL, used when neither the config nor `$OLLAMA_HOST`
  * names one. This is Ollama's own default listen address.
  */
-export const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
+export const DEFAULT_OLLAMA_HOST = 'http://localhost:11434'
 
 /**
  * Default `ollama.context`: ask the server what window it would run the
@@ -45,7 +45,7 @@ export const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
  * capped at the model's trained maximum, so it is the largest window the
  * server believes it can actually load.
  */
-export const DEFAULT_OLLAMA_CONTEXT = "auto" as const;
+export const DEFAULT_OLLAMA_CONTEXT = 'auto' as const
 
 /**
  * The window assumed for an `ollama:` model when nothing better is known:
@@ -54,11 +54,11 @@ export const DEFAULT_OLLAMA_CONTEXT = "auto" as const;
  * it - it resolves `"auto"` to a real number before sizing - so this only
  * matters to direct library use. 32768 is Ollama's middle VRAM tier.
  */
-export const DEFAULT_OLLAMA_CONTEXT_TOKENS = 32_768;
+export const DEFAULT_OLLAMA_CONTEXT_TOKENS = 32_768
 
 /** Whether `model` names an Ollama model (i.e. carries the `ollama:` prefix). */
 export function isOllamaModel(model: string): boolean {
-  return model.trim().toLowerCase().startsWith(OLLAMA_PREFIX);
+  return model.trim().toLowerCase().startsWith(OLLAMA_PREFIX)
 }
 
 /**
@@ -68,28 +68,26 @@ export function isOllamaModel(model: string): boolean {
  * an empty string, or an `ollama:` prefix with nothing after it.
  */
 export function parseModelRef(model: string): ModelRef {
-  const trimmed = model.trim();
-  if (trimmed === "") {
+  const trimmed = model.trim()
+  if (trimmed === '') {
     throw new ClaudeCommitError(
-      "No model configured. Set a model name, or an Ollama model as " +
-        `"${OLLAMA_PREFIX}<name>:<tag>".`,
-    );
+      'No model configured. Set a model name, or an Ollama model as ' + `"${OLLAMA_PREFIX}<name>:<tag>".`
+    )
   }
   if (!isOllamaModel(trimmed)) {
-    return { provider: "claude", name: trimmed };
+    return { provider: 'claude', name: trimmed }
   }
-  const name = trimmed.slice(OLLAMA_PREFIX.length).trim();
-  if (name === "") {
+  const name = trimmed.slice(OLLAMA_PREFIX.length).trim()
+  if (name === '') {
     throw new ClaudeCommitError(
-      `"${model}" names no Ollama model. Write the model after the prefix, ` +
-        `e.g. "${OLLAMA_PREFIX}ornith-1.5:35b".`,
-    );
+      `"${model}" names no Ollama model. Write the model after the prefix, ` + `e.g. "${OLLAMA_PREFIX}ornith-1.5:35b".`
+    )
   }
-  return { provider: "ollama", name };
+  return { provider: 'ollama', name }
 }
 
 /** A model string as it should appear in an error or a `--verbose` line. */
 export function describeModel(model: string): string {
-  const trimmed = model.trim();
-  return isOllamaModel(trimmed) ? `${trimmed} (Ollama)` : `${trimmed} (Claude)`;
+  const trimmed = model.trim()
+  return isOllamaModel(trimmed) ? `${trimmed} (Ollama)` : `${trimmed} (Claude)`
 }

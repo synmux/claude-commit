@@ -1,0 +1,52 @@
+diff --git a/.serena/memories/project_overview.md b/.serena/memories/project_overview.md
+index 52884d4..3133fcd 100644
+--- a/.serena/memories/project_overview.md
++++ b/.serena/memories/project_overview.md
+@@ -25,7 +25,7 @@ diff → (skipArmored redaction) → `partitionDiff` by `lowPriorityPaths` → p
+ 
+ ## Commands
+ 
+-- `pnpm test` · `pnpm run typecheck` · `pnpm run lint` (trunk) · `pnpm run build` · `node bin/cco.js --dry-run --no-spinner` (needs staged changes)
++- `pnpm test` · `pnpm run lint:types` · `pnpm run lint` (trunk) · `pnpm run build` · `node bin/cco.js --dry-run --no-spinner` (needs staged changes)
+ - Trunk pre-commit hook auto-formats on commit. Commits are SSH-signed via 1Password and fail from the Bash tool - see `mem:gotchas_environment`.
+ 
+ ## Conventions
+diff --git a/AGENTS.md b/AGENTS.md
+index 80696ce..eccf8f0 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -59,7 +59,7 @@ properties). Use Node built-ins (`node:fs/promises`, `node:child_process`,
+ - `node bin/cco.js` - the launcher imports `dist/bin/cco.js` when it exists,
+   else `bin/cco.ts` from source. `pnpm run build` (esbuild + declaration-only
+   `tsc`) is only needed for publishing; `prepublishOnly` runs it.
+-- `pnpm test` - vitest, `test/**/*.test.ts`. `pnpm run typecheck` -
++- `pnpm test` - vitest, `test/**/*.test.ts`. `pnpm run lint:types` -
+   `tsc --noEmit`. `pnpm run lint` - trunk.
+ 
+ ## Testing
+diff --git a/README.md b/README.md
+index 44518a7..dd199b8 100644
+--- a/README.md
++++ b/README.md
+@@ -446,7 +446,7 @@ Where the number comes from is `ollama.context`:
+ 
+ ```sh
+ pnpm test           # run the test suite (vitest)
+-pnpm run typecheck  # tsc --noEmit
++pnpm run lint:types # tsc --noEmit
+ pnpm run build      # bundle bin/ and index.ts into dist/ (only needed to publish)
+ ```
+ 
+diff --git a/WALKTHROUGH.md b/WALKTHROUGH.md
+index 335eaa2..e22ff1a 100644
+--- a/WALKTHROUGH.md
++++ b/WALKTHROUGH.md
+@@ -577,7 +577,7 @@ covered against a temporary repository and fake streams respectively.
+ 
+ ```sh
+ pnpm test
+-pnpm run typecheck
++pnpm run lint:types
+ node bin/cco.js --help
+ ```
+ 

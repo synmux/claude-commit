@@ -8,9 +8,9 @@
  * output wins when present, so `pnpm run build` is only ever needed for
  * publishing.
  */
-import { existsSync } from "node:fs";
+import { existsSync } from 'node:fs'
 
-const bundled = new URL("../dist/bin/cco.js", import.meta.url);
-const source = new URL("./cco.ts", import.meta.url);
+const bundled = new URL('../dist/bin/cco.js', import.meta.url)
+const source = new URL('./cco.ts', import.meta.url)
 
-await import(existsSync(bundled) ? bundled.href : source.href);
+await import(existsSync(bundled) ? bundled.href : source.href)

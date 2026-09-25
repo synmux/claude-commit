@@ -8,15 +8,7 @@
       {
         "id": "happy-path",
         "label": "Happy path",
-        "focus": [
-          "invoke",
-          "parse",
-          "prompt",
-          "run",
-          "extract",
-          "deliver",
-          "gitcommit"
-        ],
+        "focus": ["invoke", "parse", "prompt", "run", "extract", "deliver", "gitcommit"],
         "note": "From shell alias to git commit when everything works."
       },
       {
@@ -28,14 +20,7 @@
       {
         "id": "exits",
         "label": "Failure exits",
-        "focus": [
-          "run",
-          "extract",
-          "deliver",
-          "notfound",
-          "failed",
-          "cancelled"
-        ],
+        "focus": ["run", "extract", "deliver", "notfound", "failed", "cancelled"],
         "note": "Missing CLI, no extracted message, or a declined confirm all stop the run."
       }
     ]
@@ -80,15 +65,7 @@
       "toCol": 5
     }
   ],
-  "mainPath": [
-    "invoke",
-    "parse",
-    "prompt",
-    "run",
-    "extract",
-    "deliver",
-    "gitcommit"
-  ],
+  "mainPath": ["invoke", "parse", "prompt", "run", "extract", "deliver", "gitcommit"],
   "nodes": [
     {
       "id": "invoke",
@@ -270,18 +247,12 @@
     {
       "dot": "cyan",
       "title": "Entry",
-      "items": [
-        "First run prints a shell-alias install tip",
-        "Aliases from config.json expand before argparse"
-      ]
+      "items": ["First run prints a shell-alias install tip", "Aliases from config.json expand before argparse"]
     },
     {
       "dot": "amber",
       "title": "Outcomes",
-      "items": [
-        "No flags: prints a git commit command to paste",
-        "--preview stops at the panel, --copy to clipboard"
-      ]
+      "items": ["No flags: prints a git commit command to paste", "--preview stops at the panel, --copy to clipboard"]
     }
   ]
 }

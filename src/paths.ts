@@ -40,91 +40,91 @@
  * mis-classified diff, made visible by the `--verbose` match counts rather
  * than prevented.
  */
-import picomatch from "picomatch";
+import picomatch from 'picomatch'
 
 /** A predicate over repository-relative paths. */
-export type PathMatcher = (path: string) => boolean;
+export type PathMatcher = (path: string) => boolean
 
 /** The picomatch options every pattern compiles with: dotfiles are ordinary files. */
-const GLOB_OPTIONS: picomatch.PicomatchOptions = { dot: true };
+const GLOB_OPTIONS: picomatch.PicomatchOptions = { dot: true }
 
 /** A compiled glob: does `candidate` (a path or a single segment) match? */
-type GlobMatcher = (candidate: string) => boolean;
+type GlobMatcher = (candidate: string) => boolean
 
 /** A pattern the glob compiler rejected outright: it marks nothing. */
-const NEVER_MATCHES: GlobMatcher = () => false;
+const NEVER_MATCHES: GlobMatcher = () => false
 
 /** Compile a glob, falling back to {@link NEVER_MATCHES} if picomatch throws. */
 function compileGlob(pattern: string): GlobMatcher {
   try {
-    const matcher = picomatch(pattern, GLOB_OPTIONS);
-    return (candidate) => matcher(candidate);
+    const matcher = picomatch(pattern, GLOB_OPTIONS)
+    return (candidate) => matcher(candidate)
   } catch {
-    return NEVER_MATCHES;
+    return NEVER_MATCHES
   }
 }
 
 interface CompiledPattern {
-  glob: GlobMatcher;
+  glob: GlobMatcher
   /** Match against the path and its ancestors (true) or against each segment (false). */
-  anchored: boolean;
+  anchored: boolean
   /** A `!` pattern: a match un-marks the path instead of marking it. */
-  negated: boolean;
+  negated: boolean
 }
 
 /** Normalise a repository-relative path: no leading `./` or `/`. */
 function normalisePath(path: string): string {
-  let normalised = path;
-  while (normalised.startsWith("./")) normalised = normalised.slice(2);
-  return normalised.replace(/^\/+/, "");
+  let normalised = path
+  while (normalised.startsWith('./')) normalised = normalised.slice(2)
+  return normalised.replace(/^\/+/, '')
 }
 
 /** Compile one raw pattern, or `null` when nothing remains after normalising. */
 function compilePattern(raw: string): CompiledPattern | null {
-  let pattern = raw.trim();
-  if (pattern === "") return null;
+  let pattern = raw.trim()
+  if (pattern === '') return null
 
-  let negated = false;
-  if (pattern.startsWith("!")) {
-    negated = true;
-    pattern = pattern.slice(1).trim();
-    if (pattern === "") return null;
+  let negated = false
+  if (pattern.startsWith('!')) {
+    negated = true
+    pattern = pattern.slice(1).trim()
+    if (pattern === '') return null
   }
 
-  let anchored = false;
+  let anchored = false
   // `./x` is what shell completion produces at the repo root: anchor it.
-  while (pattern.startsWith("./")) {
-    anchored = true;
-    pattern = pattern.slice(2);
+  while (pattern.startsWith('./')) {
+    anchored = true
+    pattern = pattern.slice(2)
   }
 
   // gitignore's trailing slash ("directory only") - drop it; the ancestor
   // rule already makes a directory pattern cover everything beneath it.
-  while (pattern.length > 1 && pattern.endsWith("/")) {
-    pattern = pattern.slice(0, -1);
+  while (pattern.length > 1 && pattern.endsWith('/')) {
+    pattern = pattern.slice(0, -1)
   }
 
-  if (pattern.startsWith("/")) {
-    anchored = true;
-    pattern = pattern.replace(/^\/+/, "");
+  if (pattern.startsWith('/')) {
+    anchored = true
+    pattern = pattern.replace(/^\/+/, '')
   }
-  if (pattern === "") return null;
-  if (pattern.includes("/")) anchored = true;
+  if (pattern === '') return null
+  if (pattern.includes('/')) anchored = true
 
-  return { glob: compileGlob(pattern), anchored, negated };
+  return { glob: compileGlob(pattern), anchored, negated }
 }
 
 function matchesCompiled(segments: string[], compiled: CompiledPattern): boolean {
   if (compiled.anchored) {
     // The path itself first, then each ancestor directory, longest first.
     for (let length = segments.length; length >= 1; length--) {
-      if (compiled.glob(segments.slice(0, length).join("/"))) {
-        return true;
+      if (compiled.glob(segments.slice(0, length).join('/'))) {
+        return true
       }
     }
-    return false;
+    return false
   }
-  return segments.some((segment) => compiled.glob(segment));
+  return segments.some((segment) => compiled.glob(segment))
 }
 
 /**
@@ -132,26 +132,24 @@ function matchesCompiled(segments: string[], compiled: CompiledPattern): boolean
  * run and reuse it across every path in the diff.
  */
 export function createPathMatcher(patterns: string[]): PathMatcher {
-  const compiled = patterns
-    .map(compilePattern)
-    .filter((entry): entry is CompiledPattern => entry !== null);
-  if (compiled.length === 0) return () => false;
+  const compiled = patterns.map(compilePattern).filter((entry): entry is CompiledPattern => entry !== null)
+  if (compiled.length === 0) return () => false
 
   return (path: string): boolean => {
     const segments = normalisePath(path)
-      .split("/")
-      .filter((segment) => segment !== "");
-    if (segments.length === 0) return false;
+      .split('/')
+      .filter((segment) => segment !== '')
+    if (segments.length === 0) return false
     // gitignore semantics: the last pattern that matches decides.
-    let verdict = false;
+    let verdict = false
     for (const entry of compiled) {
-      if (matchesCompiled(segments, entry)) verdict = !entry.negated;
+      if (matchesCompiled(segments, entry)) verdict = !entry.negated
     }
-    return verdict;
-  };
+    return verdict
+  }
 }
 
 /** Whether `path` matches any of the gitignore-style `patterns`. */
 export function matchesPathPatterns(path: string, patterns: string[]): boolean {
-  return createPathMatcher(patterns)(path);
+  return createPathMatcher(patterns)(path)
 }

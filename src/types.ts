@@ -14,9 +14,9 @@
  */
 export interface ModelConfig {
   /** Model used to read diffs and write summaries. Defaults to `sonnet`. */
-  summary: string;
+  summary: string
   /** Model used to turn summaries into the final commit message. Defaults to `sonnet`. */
-  final: string;
+  final: string
 }
 
 /** Settings for the Ollama backend, used only by `ollama:`-prefixed models. */
@@ -26,7 +26,7 @@ export interface OllamaConfig {
    * to `http://localhost:11434`. A bare `host:port` (Ollama's own
    * convention for that variable) is given an `http://` scheme.
    */
-  host: string;
+  host: string
   /**
    * Context window requested for every Ollama call (`options.num_ctx`) and
    * used to size diff chunks: a token count, or `"auto"` (the default) to
@@ -47,67 +47,67 @@ export interface OllamaConfig {
    * it, multiplied by `OLLAMA_NUM_PARALLEL`), or raise it past the tier if
    * you know better than the server does.
    */
-  context: number | "auto";
+  context: number | 'auto'
   /**
    * How long the server keeps the model loaded after a request: a duration
    * string (`"10m"`), seconds as a number, `0` to unload immediately, or a
    * negative value to pin it. `null` leaves the server's own default (which
    * is itself 5 minutes unless `OLLAMA_KEEP_ALIVE` says otherwise).
    */
-  keepAlive: string | number | null;
+  keepAlive: string | number | null
 }
 
 /** Fully-resolved configuration after merging defaults, file config and CLI flags. */
 export interface Config {
   /** Format the subject line as a Conventional Commit (`type(scope): description`). */
-  conventionalCommits: boolean;
+  conventionalCommits: boolean
   /** Prefix the subject line with a gitmoji. */
-  gitmoji: boolean;
+  gitmoji: boolean
   /** Produce a multi-line commit (subject + body) instead of a single subject line. */
-  multiline: boolean;
+  multiline: boolean
   /**
    * Template for the first line. `{message}` is replaced with the generated
    * subject. Useful for ticket prefixes, e.g. `"[PROJ-123] {message}"`.
    */
-  template: string | null;
+  template: string | null
   /** Extra instructions appended to the standard prompt. */
-  customPrompt: string | null;
+  customPrompt: string | null
   /**
    * Default to interactive mode (the `-i` selection TUI) on every run, without
    * needing to pass `-i`. Override for a single run with `--no-interactive`.
    * When there is no interactive terminal (a pipe, CI, etc.) this is ignored and
    * cco falls back to the non-interactive flow rather than failing.
    */
-  interactive: boolean;
+  interactive: boolean
   /** How many candidate messages to generate in interactive mode. */
-  interactiveCount: number;
+  interactiveCount: number
   /**
    * Sampling temperature for the final model when generating interactive
    * options, to encourage variety between candidates. `null` leaves the model
    * at its default. Only applied in interactive mode.
    */
-  interactiveTemperature: number | null;
+  interactiveTemperature: number | null
   /**
    * Name of the progress spinner animation: any spinner from the cli-spinners
    * set bundled with ora (e.g. `"dots"`, `"moon"`, `"material"`). Unknown
    * names are ignored and the default is used instead.
    */
-  spinner: string;
+  spinner: string
   /** Models for each pipeline stage. */
-  models: ModelConfig;
+  models: ModelConfig
   /**
    * Skip diff summarisation and send only changed filenames to the final
    * model. Uses less time and tokens at the cost of less useful messages.
    * Defaults to false; ignore and lowPriorityPaths still apply.
    */
-  filenamesOnly: boolean;
+  filenamesOnly: boolean
   /**
    * Approximate maximum number of tokens of diff to send to the summary model
    * in a single request. Diffs larger than this are split across requests.
    */
-  maxChunkTokens: number;
+  maxChunkTokens: number
   /** Approximate characters-per-token ratio used for chunk-size estimation. */
-  charsPerToken: number;
+  charsPerToken: number
   /**
    * Replace runs of armored/encoded diff lines (age/gpg armor, base64 blobs,
    * git binary patch bodies) with a one-line `[... lines omitted]` marker
@@ -116,7 +116,7 @@ export interface Config {
    * encrypted-file repos (e.g. chezmoi with age) fast and cheap without
    * losing anything a summary could actually use.
    */
-  skipArmored: boolean;
+  skipArmored: boolean
   /**
    * Gitignore-style patterns for paths whose changes matter less than the
    * rest of the commit: generated docs, lockfiles, vendored snapshots, build
@@ -128,7 +128,7 @@ export interface Config {
    * path or any ancestor directory; a bare pattern matches any path segment
    * (see `src/paths.ts`).
    */
-  lowPriorityPaths: string[];
+  lowPriorityPaths: string[]
   /**
    * Gitignore-style patterns - the same language as `lowPriorityPaths` - for
    * paths whose changes should not be read at all: vendored dependency
@@ -143,9 +143,9 @@ export interface Config {
    * "this matters less" can degrade gracefully and "do not look at this"
    * cannot.
    */
-  ignore: string[];
+  ignore: string[]
   /** Settings for the Ollama backend (`ollama:`-prefixed models). */
-  ollama: OllamaConfig;
+  ollama: OllamaConfig
   /**
    * Allow API credentials from the environment (`ANTHROPIC_API_KEY` /
    * `ANTHROPIC_AUTH_TOKEN`) to be used, billing pay-as-you-go instead of the
@@ -153,17 +153,17 @@ export interface Config {
    * stripped from the environment passed to the Claude Agent SDK subprocess,
    * so an exported key can never silently switch billing.
    */
-  allowApiKey: boolean;
+  allowApiKey: boolean
 }
 
 /** Partial config as it may appear in a config file or be produced by flags. */
 export type PartialConfig = {
-  [K in keyof Config]?: K extends "models"
+  [K in keyof Config]?: K extends 'models'
     ? Partial<ModelConfig>
-    : K extends "ollama"
+    : K extends 'ollama'
       ? Partial<OllamaConfig>
-      : Config[K];
-};
+      : Config[K]
+}
 
 /**
  * How much weight a slice of the diff carries in the commit message.
@@ -171,32 +171,32 @@ export type PartialConfig = {
  * configured `lowPriorityPaths` - are summarised briefly and mentioned only
  * after the primary ones.
  */
-export type ChangePriority = "primary" | "low";
+export type ChangePriority = 'primary' | 'low'
 
 /** The summary of one diff chunk, tagged with the priority of the partition it came from. */
 export interface DiffSummary {
-  priority: ChangePriority;
-  text: string;
+  priority: ChangePriority
+  text: string
 }
 
 /** Result of a single model invocation. */
 export interface ModelResult {
   /** The text the model produced. */
-  text: string;
+  text: string
   /** Cost of the call in USD, if reported. */
-  costUsd: number;
+  costUsd: number
   /** The model that actually served the request, if reported. */
-  model?: string;
+  model?: string
   /** Parsed structured output, when a JSON-schema `outputFormat` was requested. */
-  structured?: unknown;
+  structured?: unknown
 }
 
 /** A staged change as seen by `git`. */
 export interface FileChange {
   /** Status code from `git diff --name-status` (e.g. `A`, `M`, `D`, `R100`). */
-  status: string;
+  status: string
   /** Path of the file (the destination path for renames). */
-  path: string;
+  path: string
 }
 
 /**
@@ -209,36 +209,36 @@ export interface FileChange {
  */
 export interface RunPromptOptions {
   /** Model string: an alias (`sonnet`), a full id, or `ollama:<name>[:<tag>]`. */
-  model: string;
+  model: string
   /** Full custom system prompt. */
-  system: string;
+  system: string
   /** Receives assistant text as it streams in (enables partial messages). */
-  onText?: (delta: string) => void;
+  onText?: (delta: string) => void
   /** Abort the in-flight request. */
-  abortController?: AbortController;
+  abortController?: AbortController
   /** Receives the underlying CLI's stderr (for `--verbose`). Claude only. */
-  onStderr?: (data: string) => void;
+  onStderr?: (data: string) => void
   /**
    * Sampling temperature. Used to add variety when generating several
    * interactive options. Models that don't accept a temperature override
    * will reject the request, so the caller should be prepared to retry
    * without it.
    */
-  temperature?: number;
+  temperature?: number
   /**
    * Request a structured JSON response matching this schema. The parsed object
    * is returned on {@link ModelResult.structured}. Models that don't support
    * structured outputs will reject the request or return unparseable content,
    * so the caller should be prepared to retry without it.
    */
-  outputFormat?: { type: "json_schema"; schema: Record<string, unknown> };
+  outputFormat?: { type: 'json_schema'; schema: Record<string, unknown> }
   /**
    * Allow API credentials from the environment to reach the Claude Agent SDK
    * subprocess. Defaults to false: `ANTHROPIC_API_KEY` /
    * `ANTHROPIC_AUTH_TOKEN` are stripped so the run is billed to the Claude
    * subscription. Has no meaning for Ollama, which takes no credential.
    */
-  allowApiKey?: boolean;
+  allowApiKey?: boolean
   /** Ollama host and context settings; required for an `ollama:` model. */
-  ollama?: OllamaConfig;
+  ollama?: OllamaConfig
 }

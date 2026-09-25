@@ -1,0 +1,110 @@
+diff --git a/.agents/skills/types-node-skilld/.claude/skills/skilld-lock.yaml b/.agents/skills/types-node-skilld/.claude/skills/skilld-lock.yaml
+deleted file mode 100644
+index d662758..0000000
+--- a/.agents/skills/types-node-skilld/.claude/skills/skilld-lock.yaml
++++ /dev/null
+@@ -1,8 +0,0 @@
+-skills:
+-  types-node-skilld:
+-    packageName: "@types/node"
+-    version: 26.5.1
+-    repo: DefinitelyTyped/DefinitelyTyped
+-    source: "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/docs"
+-    syncedAt: 2026-09-13
+-    generator: skilld
+diff --git a/.agents/skills/types-node-skilld/.claude/skills/types-node-skilld/SKILL.md b/.agents/skills/types-node-skilld/.claude/skills/types-node-skilld/SKILL.md
+deleted file mode 100644
+index d3ebd2b..0000000
+--- a/.agents/skills/types-node-skilld/.claude/skills/types-node-skilld/SKILL.md
++++ /dev/null
+@@ -1,16 +0,0 @@
+----
+-name: types-node-skilld
+-description: "TypeScript definitions for node. ALWAYS use when writing code importing \"@types/node\". Consult for debugging, best practices, or modifying @types/node, types/node, types node, DefinitelyTyped."
+-metadata:
+-  version: 26.5.1
+-  generated_at: 2026-09-13
+----
+-
+-# DefinitelyTyped/DefinitelyTyped `@types/node@26.5.1`
+-**Tags:** ts2.4: 12.12.6, ts2.6: 12.12.6, ts2.0: 12.12.6
+-
+-**References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Discussions](./.skilld/discussions/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
+-
+-## Search
+-
+-Use `skilld search "query" -p @types/node` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @types/node` for full syntax, filters, and operators.
+diff --git a/.agents/skills/types-node-skilld/.gitignore b/.agents/skills/types-node-skilld/.gitignore
+deleted file mode 100644
+index dcdc205..0000000
+--- a/.agents/skills/types-node-skilld/.gitignore
++++ /dev/null
+@@ -1,3 +0,0 @@
+-
+-# Skilld references (recreated by `skilld install`)
+-.skilld
+diff --git a/.agents/skills/types-node-skilld/CLAUDE.md b/.agents/skills/types-node-skilld/CLAUDE.md
+deleted file mode 100644
+index 287e25d..0000000
+--- a/.agents/skills/types-node-skilld/CLAUDE.md
++++ /dev/null
+@@ -1,4 +0,0 @@
+-<!-- skilld -->
+-Before modifying code, evaluate each installed skill against the current task.
+-For each skill, determine YES/NO relevance and invoke all YES skills before proceeding.
+-<!-- /skilld -->
+diff --git a/.agents/skills/types-picomatch-skilld/.claude/skills/skilld-lock.yaml b/.agents/skills/types-picomatch-skilld/.claude/skills/skilld-lock.yaml
+deleted file mode 100644
+index 323ec60..0000000
+--- a/.agents/skills/types-picomatch-skilld/.claude/skills/skilld-lock.yaml
++++ /dev/null
+@@ -1,8 +0,0 @@
+-skills:
+-  types-picomatch-skilld:
+-    packageName: "@types/picomatch"
+-    version: 4.0.3
+-    repo: DefinitelyTyped/DefinitelyTyped
+-    source: readme
+-    syncedAt: 2026-09-13
+-    generator: skilld
+diff --git a/.agents/skills/types-picomatch-skilld/.claude/skills/types-picomatch-skilld/SKILL.md b/.agents/skills/types-picomatch-skilld/.claude/skills/types-picomatch-skilld/SKILL.md
+deleted file mode 100644
+index 60ad26e..0000000
+--- a/.agents/skills/types-picomatch-skilld/.claude/skills/types-picomatch-skilld/SKILL.md
++++ /dev/null
+@@ -1,16 +0,0 @@
+----
+-name: types-picomatch-skilld
+-description: "TypeScript definitions for picomatch. ALWAYS use when writing code importing \"@types/picomatch\". Consult for debugging, best practices, or modifying @types/picomatch, types/picomatch, types picomatch, DefinitelyTyped."
+-metadata:
+-  version: 4.0.3
+-  generated_at: 2026-09-13
+----
+-
+-# DefinitelyTyped/DefinitelyTyped `@types/picomatch@4.0.3`
+-**Tags:** ts3.4: 2.2.1, ts3.1: 2.2.1, ts3.0: 2.2.1
+-
+-**References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Issues](./.skilld/issues/_INDEX.md) • [Discussions](./.skilld/discussions/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
+-
+-## Search
+-
+-Use `skilld search "query" -p @types/picomatch` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @types/picomatch` for full syntax, filters, and operators.
+diff --git a/.agents/skills/types-picomatch-skilld/.gitignore b/.agents/skills/types-picomatch-skilld/.gitignore
+deleted file mode 100644
+index dcdc205..0000000
+--- a/.agents/skills/types-picomatch-skilld/.gitignore
++++ /dev/null
+@@ -1,3 +0,0 @@
+-
+-# Skilld references (recreated by `skilld install`)
+-.skilld
+diff --git a/.agents/skills/types-picomatch-skilld/CLAUDE.md b/.agents/skills/types-picomatch-skilld/CLAUDE.md
+deleted file mode 100644
+index 287e25d..0000000
+--- a/.agents/skills/types-picomatch-skilld/CLAUDE.md
++++ /dev/null
+@@ -1,4 +0,0 @@
+-<!-- skilld -->
+-Before modifying code, evaluate each installed skill against the current task.
+-For each skill, determine YES/NO relevance and invoke all YES skills before proceeding.
+-<!-- /skilld -->

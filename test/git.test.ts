@@ -1,11 +1,11 @@
-import { test, expect, describe } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { partitionDiff, sectionPaths } from "../src/diff.ts";
-import { getStagedDiff, getStagedFiles, getStagedStat } from "../src/git.ts";
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import { describe, expect, test } from 'vitest'
+import { partitionDiff, sectionPaths } from '../src/diff.ts'
+import { getStagedDiff, getStagedFiles, getStagedStat } from '../src/git.ts'
 
 /**
  * A throwaway repository with `top.txt`, `sub/file.txt` and a freshly added
@@ -17,120 +17,102 @@ import { getStagedDiff, getStagedFiles, getStagedStat } from "../src/git.ts";
  * `diff.external` (an external driver that forges a `diff --git` header).
  * Runs `fn` with the working directory inside `sub/`, then restores it.
  */
-const execFileAsync = promisify(execFile);
+const execFileAsync = promisify(execFile)
 
 /** Run one git command in `dir`, throwing on a non-zero exit. */
 async function gitIn(dir: string, ...args: string[]): Promise<void> {
-  await execFileAsync("git", ["-C", dir, ...args]);
+  await execFileAsync('git', ['-C', dir, ...args])
 }
 
 async function withStagedRepo(fn: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "cco-git-"));
-  const originalCwd = process.cwd();
+  const dir = await mkdtemp(join(tmpdir(), 'cco-git-'))
+  const originalCwd = process.cwd()
   try {
     // A one-commit repository to add as a submodule (signing off: the
     // user's global 1Password signer cannot run headless).
-    const engine = join(dir, "engine-src");
-    await mkdir(engine);
-    await gitIn(engine, "init", "-q");
-    await gitIn(engine, "config", "user.email", "cco@example.invalid");
-    await gitIn(engine, "config", "user.name", "cco");
-    await gitIn(engine, "config", "commit.gpgsign", "false");
-    await writeFile(join(engine, "engine.txt"), "engine\n");
-    await gitIn(engine, "add", "-A");
-    await gitIn(engine, "commit", "-qm", "engine");
+    const engine = join(dir, 'engine-src')
+    await mkdir(engine)
+    await gitIn(engine, 'init', '-q')
+    await gitIn(engine, 'config', 'user.email', 'cco@example.invalid')
+    await gitIn(engine, 'config', 'user.name', 'cco')
+    await gitIn(engine, 'config', 'commit.gpgsign', 'false')
+    await writeFile(join(engine, 'engine.txt'), 'engine\n')
+    await gitIn(engine, 'add', '-A')
+    await gitIn(engine, 'commit', '-qm', 'engine')
 
-    const externalDiff = join(dir, "external-diff.sh");
+    const externalDiff = join(dir, 'external-diff.sh')
     await writeFile(externalDiff, '#!/bin/sh\necho "diff --git a/hijacked.txt b/hijacked.txt"\n', {
-      mode: 0o755,
-    });
+      mode: 0o755
+    })
 
-    const repo = join(dir, "repo");
-    await mkdir(repo);
-    await gitIn(repo, "init", "-q");
-    await gitIn(repo, "config", "user.email", "cco@example.invalid");
-    await gitIn(repo, "config", "user.name", "cco");
-    await gitIn(repo, "config", "diff.relative", "true");
-    await gitIn(repo, "config", "diff.noprefix", "true");
-    await gitIn(repo, "config", "diff.mnemonicPrefix", "true");
-    await gitIn(repo, "config", "diff.submodule", "log");
-    await gitIn(repo, "config", "diff.ignoreSubmodules", "all");
-    await gitIn(repo, "config", "diff.external", externalDiff);
-    await writeFile(join(repo, "top.txt"), "top\n");
-    await mkdir(join(repo, "sub"));
-    await writeFile(join(repo, "sub", "file.txt"), "nested\n");
-    await gitIn(
-      repo,
-      "-c",
-      "protocol.file.allow=always",
-      "submodule",
-      "add",
-      "-q",
-      engine,
-      "engine",
-    );
-    await gitIn(repo, "add", "-A");
-    process.chdir(join(repo, "sub"));
-    await fn(repo);
+    const repo = join(dir, 'repo')
+    await mkdir(repo)
+    await gitIn(repo, 'init', '-q')
+    await gitIn(repo, 'config', 'user.email', 'cco@example.invalid')
+    await gitIn(repo, 'config', 'user.name', 'cco')
+    await gitIn(repo, 'config', 'diff.relative', 'true')
+    await gitIn(repo, 'config', 'diff.noprefix', 'true')
+    await gitIn(repo, 'config', 'diff.mnemonicPrefix', 'true')
+    await gitIn(repo, 'config', 'diff.submodule', 'log')
+    await gitIn(repo, 'config', 'diff.ignoreSubmodules', 'all')
+    await gitIn(repo, 'config', 'diff.external', externalDiff)
+    await writeFile(join(repo, 'top.txt'), 'top\n')
+    await mkdir(join(repo, 'sub'))
+    await writeFile(join(repo, 'sub', 'file.txt'), 'nested\n')
+    await gitIn(repo, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', engine, 'engine')
+    await gitIn(repo, 'add', '-A')
+    process.chdir(join(repo, 'sub'))
+    await fn(repo)
   } finally {
-    process.chdir(originalCwd);
-    await rm(dir, { recursive: true, force: true });
+    process.chdir(originalCwd)
+    await rm(dir, { recursive: true, force: true })
   }
 }
 
-describe("staged-change readers", () => {
-  test("getStagedDiff ignores diff.relative/noprefix/mnemonicPrefix and the invocation directory", async () => {
+describe('staged-change readers', () => {
+  test('getStagedDiff ignores diff.relative/noprefix/mnemonicPrefix and the invocation directory', async () => {
     await withStagedRepo(async () => {
-      const diff = await getStagedDiff();
+      const diff = await getStagedDiff()
       // diff.relative would drop top.txt entirely and strip `sub/`;
       // noprefix/mnemonicPrefix would change the a/ b/ prefixes.
-      expect(diff).toContain("diff --git a/top.txt b/top.txt");
-      expect(diff).toContain("diff --git a/sub/file.txt b/sub/file.txt");
-      expect(diff).toContain("+++ b/sub/file.txt");
-      expect(diff).toContain("+++ b/top.txt");
-    });
-  });
+      expect(diff).toContain('diff --git a/top.txt b/top.txt')
+      expect(diff).toContain('diff --git a/sub/file.txt b/sub/file.txt')
+      expect(diff).toContain('+++ b/sub/file.txt')
+      expect(diff).toContain('+++ b/top.txt')
+    })
+  })
 
-  test("getStagedDiff keeps a submodule as its own diff --git section despite diff.submodule/ignoreSubmodules", async () => {
+  test('getStagedDiff keeps a submodule as its own diff --git section despite diff.submodule/ignoreSubmodules', async () => {
     await withStagedRepo(async () => {
-      const diff = await getStagedDiff();
-      expect(diff).toContain("diff --git a/engine b/engine");
-      expect(diff).toContain("+Subproject commit");
-      expect(diff).not.toContain("Submodule engine");
+      const diff = await getStagedDiff()
+      expect(diff).toContain('diff --git a/engine b/engine')
+      expect(diff).toContain('+Subproject commit')
+      expect(diff).not.toContain('Submodule engine')
       // The gitlink section is recognisable and partitionable on its own.
-      const { primary, totalFiles } = partitionDiff(diff, () => false);
-      const engineSection = primary
-        .split("\ndiff --git ")
-        .find((section) => section.includes("a/engine b/engine"));
-      expect(engineSection).toBeDefined();
-      expect(sectionPaths(`diff --git ${engineSection!.replace(/^diff --git /, "")}`)).toEqual([
-        "engine",
-      ]);
-      expect(totalFiles).toBe(4); // .gitmodules, engine, sub/file.txt, top.txt
-    });
-  });
+      const { primary, totalFiles } = partitionDiff(diff, () => false)
+      const engineSection = primary.split('\ndiff --git ').find((section) => section.includes('a/engine b/engine'))
+      expect(engineSection).toBeDefined()
+      expect(sectionPaths(`diff --git ${engineSection!.replace(/^diff --git /, '')}`)).toEqual(['engine'])
+      expect(totalFiles).toBe(4) // .gitmodules, engine, sub/file.txt, top.txt
+    })
+  })
 
-  test("getStagedDiff never runs an external diff driver", async () => {
+  test('getStagedDiff never runs an external diff driver', async () => {
     await withStagedRepo(async () => {
-      const diff = await getStagedDiff();
-      expect(diff).not.toContain("hijacked");
-      expect(diff).toContain("+++ b/top.txt");
-    });
-  });
+      const diff = await getStagedDiff()
+      expect(diff).not.toContain('hijacked')
+      expect(diff).toContain('+++ b/top.txt')
+    })
+  })
 
-  test("getStagedFiles and getStagedStat cover the whole staged set from a subdirectory", async () => {
+  test('getStagedFiles and getStagedStat cover the whole staged set from a subdirectory', async () => {
     await withStagedRepo(async () => {
-      const files = await getStagedFiles();
-      expect(files.map((file) => file.path).sort()).toEqual([
-        ".gitmodules",
-        "engine",
-        "sub/file.txt",
-        "top.txt",
-      ]);
-      const stat = await getStagedStat();
-      expect(stat).toContain("top.txt");
-      expect(stat).toContain("sub/file.txt");
-      expect(stat).toContain("engine");
-    });
-  });
-});
+      const files = await getStagedFiles()
+      expect(files.map((file) => file.path).sort()).toEqual(['.gitmodules', 'engine', 'sub/file.txt', 'top.txt'])
+      const stat = await getStagedStat()
+      expect(stat).toContain('top.txt')
+      expect(stat).toContain('sub/file.txt')
+      expect(stat).toContain('engine')
+    })
+  })
+})

@@ -11,16 +11,17 @@
  * The animation is chosen by the `spinner` config key: any name from the
  * cli-spinners set bundled with ora, defaulting to {@link DEFAULT_SPINNER}.
  */
-import ora, { type Ora } from "ora";
-import spinners, { type Spinner as SpinnerAnimation } from "cli-spinners";
-import { color } from "./colors.ts";
+
+import spinners, { type Spinner as SpinnerAnimation } from 'cli-spinners'
+import ora, { type Ora } from 'ora'
+import { color } from './colors.ts'
 
 /** The spinner used when none (or an unknown one) is configured. */
-export const DEFAULT_SPINNER = "material";
+export const DEFAULT_SPINNER = 'material'
 
 /** Whether `name` is one of the cli-spinners animations bundled with ora. */
 export function isSpinnerName(name: string): boolean {
-  return Object.hasOwn(spinners, name);
+  return Object.hasOwn(spinners, name)
 }
 
 /**
@@ -29,49 +30,49 @@ export function isSpinnerName(name: string): boolean {
  * never be able to break a commit).
  */
 export function resolveSpinner(name: string): SpinnerAnimation {
-  const known = (spinners as Record<string, SpinnerAnimation | undefined>)[name];
-  return known ?? spinners[DEFAULT_SPINNER];
+  const known = (spinners as Record<string, SpinnerAnimation | undefined>)[name]
+  return known ?? spinners[DEFAULT_SPINNER]
 }
 
 export class Spinner {
-  private instance: Ora | null = null;
-  private readonly enabled: boolean;
-  private readonly animation: SpinnerAnimation;
+  private instance: Ora | null = null
+  private readonly enabled: boolean
+  private readonly animation: SpinnerAnimation
 
   constructor(enabled = process.stderr.isTTY, spinnerName = DEFAULT_SPINNER) {
-    this.enabled = Boolean(enabled);
-    this.animation = resolveSpinner(spinnerName);
+    this.enabled = Boolean(enabled)
+    this.animation = resolveSpinner(spinnerName)
   }
 
   start(label: string): void {
-    if (!this.enabled) return;
-    this.instance?.stop();
+    if (!this.enabled) return
+    this.instance?.stop()
     this.instance = ora({
       text: label,
       spinner: this.animation,
       stream: process.stderr,
       // The caller already decided (TTY check + --no-spinner); don't let ora's
       // own TTY/CI detection silently disagree.
-      isEnabled: true,
-    }).start();
+      isEnabled: true
+    }).start()
   }
 
   update(label: string): void {
-    if (this.instance) this.instance.text = label;
+    if (this.instance) this.instance.text = label
   }
 
   /** Stop and clear the spinner line, optionally printing a final status line. */
   stop(finalLine?: string): void {
-    this.instance?.stop();
-    this.instance = null;
-    if (finalLine !== undefined) process.stderr.write(finalLine + "\n");
+    this.instance?.stop()
+    this.instance = null
+    if (finalLine !== undefined) process.stderr.write(finalLine + '\n')
   }
 
   succeed(label: string): void {
-    this.stop(`${color("32", "✔")} ${label}`);
+    this.stop(`${color('32', '✔')} ${label}`)
   }
 
   fail(label: string): void {
-    this.stop(`${color("31", "✖")} ${label}`);
+    this.stop(`${color('31', '✖')} ${label}`)
   }
 }

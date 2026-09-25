@@ -1,0 +1,315 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index b3b5bc5..fb02170 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+ Each version also has a [GitHub release](https://github.com/synmux/claude-commit/releases)
+ carrying the same notes at greater length.
+ 
++## [Unreleased]
++
++### [Unreleased] - Changed
++
++- `interactiveTemperature` now applies to Ollama models only. Claude runs
++  with adaptive thinking, where the API accepts only the default
++  temperature: any other value was rejected with a 400 and silently retried
++  without it, and the default changed nothing. `cco` no longer sends a
++  temperature to Claude, and the final stage drops the temperature-free
++  retry that existed only to absorb that rejection.
++
+ ## [1.1.0] - 2026-09-13
+ 
+ ### [1.1.0] - Changed
+diff --git a/README.md b/README.md
+index 2ae49fb..44518a7 100644
+--- a/README.md
++++ b/README.md
+@@ -163,11 +163,12 @@ library results have an empty `summaries` array and `chunkCount: 0`.
+ 
+ `cco -i` opens a picker (built on [Clack](https://github.com/bombshell-dev/clack))
+ listing several candidate messages, each with its subject and a one-line body
+-preview. The options are generated with a higher temperature
+-(`interactiveTemperature`) for more variety. Use the arrow keys (or `j`/`k`) to
+-move between options, `Enter` to commit the highlighted option, `e` to edit it
+-in your `$EDITOR` first, and `q`/`Esc`/`Ctrl-C` to cancel. The picker draws on
+-stderr, so stdout stays clean.
++preview. The model is asked to make the options genuinely different; with an
++Ollama final model, `interactiveTemperature` also sets the sampling temperature
++(Claude ignores it: with adaptive thinking it accepts only the default). Use the
++arrow keys (or `j`/`k`) to move between options, `Enter` to commit the
++highlighted option, `e` to edit it in your `$EDITOR` first, and
++`q`/`Esc`/`Ctrl-C` to cancel. The picker draws on stderr, so stdout stays clean.
+ 
+ To make interactive mode the default without typing `-i` every time, set
+ `"interactive": true` in your config (see below); opt out of a single run with
+diff --git a/WALKTHROUGH.md b/WALKTHROUGH.md
+index 32c132e..335eaa2 100644
+--- a/WALKTHROUGH.md
++++ b/WALKTHROUGH.md
+@@ -272,8 +272,10 @@ Otherwise, the pipeline has two model stages:
+      mode); with two priority groups its variety axis is scoped to the
+      primary changes, since it is the last instruction the model reads.
+    - `runPrompt()` sends the final prompt to the configured final model.
+-   - If multiple options are requested, `interactiveTemperature` is applied when
+-     available; if the model rejects that override, generation retries without it.
++   - If multiple options are requested, `interactiveTemperature` rides on the
++     structured attempt. Only an Ollama model honours it: Claude runs with
++     adaptive thinking, which accepts only the default temperature, so
++     `runClaudePrompt()` never sends one.
+ 
+ After the final response:
+ 
+@@ -347,8 +349,8 @@ failures turned out to be armored-content token density, not this leak - see
+ 
+ - `includePartialMessages` is enabled only when a caller provides `onText`.
+ - `abortController` is passed through for cancellation.
+-- Optional temperature is injected through `CLAUDE_CODE_EXTRA_BODY` while
+-  preserving any existing JSON body.
++- No sampling parameters are sent: with adaptive thinking the API rejects any
++  temperature but the default, so `RunPromptOptions.temperature` is ignored.
+ - API credential variables (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`) are
+   stripped from the subprocess environment unless the `allowApiKey` config
+   option is enabled (`buildSubprocessEnv`), so billing stays on the
+diff --git a/src/agent.ts b/src/agent.ts
+index cf33954..3eb536e 100644
+--- a/src/agent.ts
++++ b/src/agent.ts
+@@ -46,8 +46,6 @@ export interface SubprocessEnvOptions {
+    * Defaults to false so the gate fails safe when a caller omits it.
+    */
+   allowApiKey?: boolean;
+-  /** Sampling temperature to inject via `CLAUDE_CODE_EXTRA_BODY`, preserving any existing extra body. */
+-  temperature?: number;
+ }
+ 
+ /**
+@@ -62,29 +60,12 @@ export interface SubprocessEnvOptions {
+ export function buildSubprocessEnv(
+   opts: SubprocessEnvOptions,
+ ): Record<string, string | undefined> | undefined {
+-  const { baseEnv, allowApiKey = false, temperature } = opts;
++  const { baseEnv, allowApiKey = false } = opts;
+   const stripped = allowApiKey ? [] : presentCredentialVars(baseEnv);
+-  if (stripped.length === 0 && temperature == null) return undefined;
++  if (stripped.length === 0) return undefined;
+ 
+   const env = { ...baseEnv };
+   for (const name of stripped) delete env[name];
+-
+-  if (temperature != null) {
+-    let extra: Record<string, unknown> = {};
+-    const existing = baseEnv.CLAUDE_CODE_EXTRA_BODY;
+-    if (existing) {
+-      try {
+-        const parsed: unknown = JSON.parse(existing);
+-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+-          extra = parsed as Record<string, unknown>;
+-        }
+-      } catch {
+-        /* ignore a malformed existing value */
+-      }
+-    }
+-    env.CLAUDE_CODE_EXTRA_BODY = JSON.stringify({ ...extra, temperature });
+-  }
+-
+   return env;
+ }
+ 
+@@ -166,10 +147,12 @@ export async function runClaudePrompt(
+   prompt: string,
+   opts: RunPromptOptions,
+ ): Promise<ModelResult> {
++  // `opts.temperature` is deliberately not forwarded. The CLI runs Claude with
++  // adaptive thinking, where the API accepts only the default temperature:
++  // any other value is a 400, and the default itself changes nothing.
+   const subprocessEnv = buildSubprocessEnv({
+     baseEnv: process.env,
+     allowApiKey: opts.allowApiKey ?? false,
+-    ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+   });
+   const options = buildQueryOptions(opts, subprocessEnv);
+ 
+diff --git a/src/generate.ts b/src/generate.ts
+index 473506d..59b55f0 100644
+--- a/src/generate.ts
++++ b/src/generate.ts
+@@ -342,11 +342,10 @@ export async function generateCommit(
+   // Final stage: write the commit message(s) from summaries or filenames.
+   //
+   // Prefer a structured (JSON-schema) response so parsing is robust regardless
+-  // of how the model formats its prose. We try, in order: structured output
+-  // with a temperature bump (for interactive variety), then structured output
+-  // without it (for models that reject a temperature override), then plain text
+-  // with delimiter parsing (for models that don't support structured output at
+-  // all). Whichever succeeds first wins.
++  // of how the model formats its prose, then fall back to plain text with
++  // delimiter parsing for models that don't support structured output at all.
++  // Whichever succeeds first wins. The interactive temperature rides on the
++  // structured attempt; only an Ollama model honours it (see `runClaudePrompt`).
+   progress.onPhase?.(count > 1 ? "Writing commit options" : "Writing commit message");
+ 
+   const finalOllama = await contexts.settingsFor(config.models.final);
+@@ -359,10 +358,10 @@ export async function generateCommit(
+   const temperature =
+     count > 1 && config.interactiveTemperature != null ? config.interactiveTemperature : undefined;
+ 
+-  const attempts: Array<{ structured: boolean; temperature?: number }> = [];
+-  if (temperature != null) attempts.push({ structured: true, temperature });
+-  attempts.push({ structured: true });
+-  attempts.push({ structured: false });
++  const attempts: Array<{ structured: boolean; temperature?: number }> = [
++    { structured: true, ...(temperature != null ? { temperature } : {}) },
++    { structured: false },
++  ];
+ 
+   let messages: string[] | null = null;
+   let lastError: unknown;
+diff --git a/src/types.ts b/src/types.ts
+index 584792b..d2d2700 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -82,9 +82,11 @@ export interface Config {
+   /** How many candidate messages to generate in interactive mode. */
+   interactiveCount: number;
+   /**
+-   * Sampling temperature for the final model when generating interactive
+-   * options, to encourage variety between candidates. `null` leaves the model
+-   * at its default. Only applied in interactive mode.
++   * Sampling temperature for an Ollama final model when generating
++   * interactive options, to encourage variety between candidates. Claude
++   * models ignore it: they run with adaptive thinking, which accepts only the
++   * default temperature. `null` leaves the model at its default. Only applied
++   * in interactive mode.
+    */
+   interactiveTemperature: number | null;
+   /**
+@@ -205,7 +207,8 @@ export interface FileChange {
+  * `model` carries the provider: bare names go to Claude, `ollama:`-prefixed
+  * ones to Ollama (see {@link ModelConfig}). Some options only apply to one
+  * provider - `allowApiKey` gates Claude credentials, `ollama` supplies the
+- * host and context window - and each is simply ignored by the other.
++ * host and context window, `temperature` is only ever sent to Ollama - and
++ * each is simply ignored by the other.
+  */
+ export interface RunPromptOptions {
+   /** Model string: an alias (`sonnet`), a full id, or `ollama:<name>[:<tag>]`. */
+@@ -219,10 +222,9 @@ export interface RunPromptOptions {
+   /** Receives the underlying CLI's stderr (for `--verbose`). Claude only. */
+   onStderr?: (data: string) => void;
+   /**
+-   * Sampling temperature. Used to add variety when generating several
+-   * interactive options. Models that don't accept a temperature override
+-   * will reject the request, so the caller should be prepared to retry
+-   * without it.
++   * Sampling temperature, used to add variety when generating several
++   * interactive options. Ollama only: the Claude path never sends it (see
++   * `runClaudePrompt`).
+    */
+   temperature?: number;
+   /**
+diff --git a/test/agent.test.ts b/test/agent.test.ts
+index 804f227..170c225 100644
+--- a/test/agent.test.ts
++++ b/test/agent.test.ts
+@@ -76,66 +76,22 @@ describe("buildSubprocessEnv", () => {
+     expect(Object.keys(env!)).not.toContain("ANTHROPIC_API_KEY");
+   });
+ 
+-  test("passes credentials through when the gate is on", () => {
++  test("leaves a user's own CLAUDE_CODE_EXTRA_BODY untouched", () => {
+     const env = buildSubprocessEnv({
+-      baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: "sk-test" },
+-      allowApiKey: true,
+-      temperature: 1, // forces an env to be built so passthrough is observable
+-    });
+-    expect(env!.ANTHROPIC_API_KEY).toBe("sk-test");
+-  });
+-
+-  test("injects the temperature via CLAUDE_CODE_EXTRA_BODY", () => {
+-    const env = buildSubprocessEnv({
+-      baseEnv: cleanEnv,
++      baseEnv: {
++        ...cleanEnv,
++        ANTHROPIC_API_KEY: "sk-test",
++        CLAUDE_CODE_EXTRA_BODY: '{"foo":1}',
++      },
+       allowApiKey: false,
+-      temperature: 0.8,
+-    });
+-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+-      temperature: 0.8,
+-    });
+-  });
+-
+-  test("merges the temperature over an existing extra body", () => {
+-    const env = buildSubprocessEnv({
+-      baseEnv: { ...cleanEnv, CLAUDE_CODE_EXTRA_BODY: '{"foo":1}' },
+-      allowApiKey: false,
+-      temperature: 0.5,
+-    });
+-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+-      foo: 1,
+-      temperature: 0.5,
+-    });
+-  });
+-
+-  test("ignores a malformed existing extra body", () => {
+-    const env = buildSubprocessEnv({
+-      baseEnv: { ...cleanEnv, CLAUDE_CODE_EXTRA_BODY: "{oops" },
+-      allowApiKey: false,
+-      temperature: 0.5,
+-    });
+-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+-      temperature: 0.5,
+-    });
+-  });
+-
+-  test("combines credential stripping with the temperature override", () => {
+-    const env = buildSubprocessEnv({
+-      baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: "sk-test" },
+-      allowApiKey: false,
+-      temperature: 1.2,
+-    });
+-    expect(Object.keys(env!)).not.toContain("ANTHROPIC_API_KEY");
+-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+-      temperature: 1.2,
+     });
++    expect(env!.CLAUDE_CODE_EXTRA_BODY).toBe('{"foo":1}');
+   });
+ 
+   test("does not mutate the base environment", () => {
+     const baseEnv = { ...cleanEnv, ANTHROPIC_API_KEY: "sk-test" };
+-    buildSubprocessEnv({ baseEnv, allowApiKey: false, temperature: 0.5 });
++    buildSubprocessEnv({ baseEnv, allowApiKey: false });
+     expect(baseEnv.ANTHROPIC_API_KEY).toBe("sk-test");
+-    expect(Object.keys(baseEnv)).not.toContain("CLAUDE_CODE_EXTRA_BODY");
+   });
+ });
+ 
+diff --git a/test/generate.test.ts b/test/generate.test.ts
+index e7cb504..6d64e7e 100644
+--- a/test/generate.test.ts
++++ b/test/generate.test.ts
+@@ -399,19 +399,15 @@ describe("filenamesOnly", () => {
+       },
+     );
+     expect(probes).toEqual(["ollama:final"]);
+-    expect(temperatures).toEqual([
+-      config.interactiveTemperature ?? undefined,
+-      undefined,
+-      undefined,
+-    ]);
+-    expect(prompts).toHaveLength(3);
++    expect(temperatures).toEqual([config.interactiveTemperature ?? undefined, undefined]);
++    expect(prompts).toHaveLength(2);
+     for (const prompt of prompts) {
+       expect(prompt).toContain('"a.txt"');
+       expect(prompt).toContain("exactly 2 distinct");
+       expect(prompt).not.toMatch(/old line|new line|diff --git|@@/);
+     }
+     expect(result.messages).toEqual(["Update files", "Refresh files"]);
+-    expect(result.costUsd).toBeCloseTo(0.004);
++    expect(result.costUsd).toBeCloseTo(0.003);
+     expect(result.chunkCount).toBe(0);
+     expect(streamed).toEqual(["Update files"]);
+     expect(result.ollamaContexts).toEqual([

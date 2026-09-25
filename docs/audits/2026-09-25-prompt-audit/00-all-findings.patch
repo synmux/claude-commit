@@ -1,0 +1,586 @@
+diff --git a/.agents/skills/types-node-skilld/.claude/skills/skilld-lock.yaml b/.agents/skills/types-node-skilld/.claude/skills/skilld-lock.yaml
+deleted file mode 100644
+index d662758..0000000
+--- a/.agents/skills/types-node-skilld/.claude/skills/skilld-lock.yaml
++++ /dev/null
+@@ -1,8 +0,0 @@
+-skills:
+-  types-node-skilld:
+-    packageName: "@types/node"
+-    version: 26.5.1
+-    repo: DefinitelyTyped/DefinitelyTyped
+-    source: "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/docs"
+-    syncedAt: 2026-09-13
+-    generator: skilld
+diff --git a/.agents/skills/types-node-skilld/.claude/skills/types-node-skilld/SKILL.md b/.agents/skills/types-node-skilld/.claude/skills/types-node-skilld/SKILL.md
+deleted file mode 100644
+index d3ebd2b..0000000
+--- a/.agents/skills/types-node-skilld/.claude/skills/types-node-skilld/SKILL.md
++++ /dev/null
+@@ -1,16 +0,0 @@
+----
+-name: types-node-skilld
+-description: "TypeScript definitions for node. ALWAYS use when writing code importing \"@types/node\". Consult for debugging, best practices, or modifying @types/node, types/node, types node, DefinitelyTyped."
+-metadata:
+-  version: 26.5.1
+-  generated_at: 2026-09-13
+----
+-
+-# DefinitelyTyped/DefinitelyTyped `@types/node@26.5.1`
+-**Tags:** ts2.4: 12.12.6, ts2.6: 12.12.6, ts2.0: 12.12.6
+-
+-**References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Docs](./.skilld/docs/_INDEX.md) • [Issues](./.skilld/issues/_INDEX.md) • [Discussions](./.skilld/discussions/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
+-
+-## Search
+-
+-Use `skilld search "query" -p @types/node` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @types/node` for full syntax, filters, and operators.
+diff --git a/.agents/skills/types-node-skilld/.gitignore b/.agents/skills/types-node-skilld/.gitignore
+deleted file mode 100644
+index dcdc205..0000000
+--- a/.agents/skills/types-node-skilld/.gitignore
++++ /dev/null
+@@ -1,3 +0,0 @@
+-
+-# Skilld references (recreated by `skilld install`)
+-.skilld
+diff --git a/.agents/skills/types-node-skilld/CLAUDE.md b/.agents/skills/types-node-skilld/CLAUDE.md
+deleted file mode 100644
+index 287e25d..0000000
+--- a/.agents/skills/types-node-skilld/CLAUDE.md
++++ /dev/null
+@@ -1,4 +0,0 @@
+-<!-- skilld -->
+-Before modifying code, evaluate each installed skill against the current task.
+-For each skill, determine YES/NO relevance and invoke all YES skills before proceeding.
+-<!-- /skilld -->
+diff --git a/.agents/skills/types-picomatch-skilld/.claude/skills/skilld-lock.yaml b/.agents/skills/types-picomatch-skilld/.claude/skills/skilld-lock.yaml
+deleted file mode 100644
+index 323ec60..0000000
+--- a/.agents/skills/types-picomatch-skilld/.claude/skills/skilld-lock.yaml
++++ /dev/null
+@@ -1,8 +0,0 @@
+-skills:
+-  types-picomatch-skilld:
+-    packageName: "@types/picomatch"
+-    version: 4.0.3
+-    repo: DefinitelyTyped/DefinitelyTyped
+-    source: readme
+-    syncedAt: 2026-09-13
+-    generator: skilld
+diff --git a/.agents/skills/types-picomatch-skilld/.claude/skills/types-picomatch-skilld/SKILL.md b/.agents/skills/types-picomatch-skilld/.claude/skills/types-picomatch-skilld/SKILL.md
+deleted file mode 100644
+index 60ad26e..0000000
+--- a/.agents/skills/types-picomatch-skilld/.claude/skills/types-picomatch-skilld/SKILL.md
++++ /dev/null
+@@ -1,16 +0,0 @@
+----
+-name: types-picomatch-skilld
+-description: "TypeScript definitions for picomatch. ALWAYS use when writing code importing \"@types/picomatch\". Consult for debugging, best practices, or modifying @types/picomatch, types/picomatch, types picomatch, DefinitelyTyped."
+-metadata:
+-  version: 4.0.3
+-  generated_at: 2026-09-13
+----
+-
+-# DefinitelyTyped/DefinitelyTyped `@types/picomatch@4.0.3`
+-**Tags:** ts3.4: 2.2.1, ts3.1: 2.2.1, ts3.0: 2.2.1
+-
+-**References:** [package.json](./.skilld/pkg/package.json) • [README](./.skilld/pkg/README.md) • [Issues](./.skilld/issues/_INDEX.md) • [Discussions](./.skilld/discussions/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
+-
+-## Search
+-
+-Use `skilld search "query" -p @types/picomatch` instead of grepping `.skilld/` directories. Run `skilld search --guide -p @types/picomatch` for full syntax, filters, and operators.
+diff --git a/.agents/skills/types-picomatch-skilld/.gitignore b/.agents/skills/types-picomatch-skilld/.gitignore
+deleted file mode 100644
+index dcdc205..0000000
+--- a/.agents/skills/types-picomatch-skilld/.gitignore
++++ /dev/null
+@@ -1,3 +0,0 @@
+-
+-# Skilld references (recreated by `skilld install`)
+-.skilld
+diff --git a/.agents/skills/types-picomatch-skilld/CLAUDE.md b/.agents/skills/types-picomatch-skilld/CLAUDE.md
+deleted file mode 100644
+index 287e25d..0000000
+--- a/.agents/skills/types-picomatch-skilld/CLAUDE.md
++++ /dev/null
+@@ -1,4 +0,0 @@
+-<!-- skilld -->
+-Before modifying code, evaluate each installed skill against the current task.
+-For each skill, determine YES/NO relevance and invoke all YES skills before proceeding.
+-<!-- /skilld -->
+diff --git a/.serena/memories/project_overview.md b/.serena/memories/project_overview.md
+index 52884d4..a5fc00e 100644
+--- a/.serena/memories/project_overview.md
++++ b/.serena/memories/project_overview.md
+@@ -8,7 +8,7 @@ Node 24 / TypeScript CLI (`cco` / `claude-commit`) that generates git commit mes
+ - Sources run unbuilt via Node's native type stripping: relative imports carry `.ts` extensions, `erasableSyntaxOnly` (no parameter properties), `package.json` imported `with { type: "json" }`.
+ - `bin/cco.js` (plain JS launcher) imports `dist/bin/cco.js` if present else `bin/cco.ts`. `pnpm run build` = esbuild (both entries, `--outbase=.`) + `tsc -p tsconfig.build.json` (declarations only, `rewriteRelativeImportExtensions`) → `dist/`; gitignored; only `prepublishOnly` needs it. A stale `dist/` shadows the sources.
+ - Tests: vitest (`pnpm test`, 390 tests); typecheck `tsc --noEmit`; lint/format via trunk + prettier.
+-- mise pins node 24.20.0 only.
++- mise pins only Node (version in `mise.toml`).
+ 
+ ## Pipeline
+ 
+@@ -20,12 +20,11 @@ diff → (skipArmored redaction) → `partitionDiff` by `lowPriorityPaths` → p
+ - `src/paths.ts` - gitignore-style matcher on `picomatch` (`dot: true`): `/` patterns match path or any ancestor dir; bare patterns match any segment; `!` negates, last match wins. Ill-formed patterns never throw: unbalanced `{` matches nothing, unterminated `[` matches its literal text (pinned in `test/paths.test.ts`).
+ - `src/git.ts` - `spawn("git", …)` with uncapped buffering, exit code read on `close`; readers share `STAGED_DIFF_FLAGS` (neutralise `diff.relative/external/ignoreSubmodules/submodule/noprefix/mnemonicPrefix`); commit pipes the message to `git commit -F -`.
+ - `src/ui/interactive.ts` - Clack picker: `@clack/core` `SelectPrompt` with pure exported `renderPicker()`, `limitOptions` windowing from `@clack/prompts`, `e`/`q` via `prompt.on("key")` setting `prompt.state`; output on stderr; readline fallback kept. Never use Clack's `spinner()` (raw mode + `process.exit(0)` on Ctrl-C); the spinner stays `ora`.
+-- `src/diff.ts`, `src/prompts.ts`, `src/agent.ts`, `src/ollama.ts`, `src/tokens.ts` - unchanged by the migration.
+ - Tests in `test/*.test.ts` (vitest); `test/git.test.ts` builds a real temp repo (submodule, hostile diff config) via `execFile`; `test/interactive.test.ts` drives the real Clack prompt through a `PassThrough` input and a collecting `Writable` with `columns`/`rows` (wait 80 ms after a lone ESC).
+ 
+ ## Commands
+ 
+-- `pnpm test` · `pnpm run typecheck` · `pnpm run lint` (trunk) · `pnpm run build` · `node bin/cco.js --dry-run --no-spinner` (needs staged changes)
++- `pnpm test` · `pnpm run lint:types` · `pnpm run lint` (trunk) · `pnpm run build` · `node bin/cco.js --dry-run --no-spinner` (needs staged changes)
+ - Trunk pre-commit hook auto-formats on commit. Commits are SSH-signed via 1Password and fail from the Bash tool - see `mem:gotchas_environment`.
+ 
+ ## Conventions
+diff --git a/.serena/memories/release_publishing.md b/.serena/memories/release_publishing.md
+index cf368dd..c85f2f2 100644
+--- a/.serena/memories/release_publishing.md
++++ b/.serena/memories/release_publishing.md
+@@ -4,12 +4,12 @@ Releases are automated by `.github/workflows/publish.yml` (added 2026-07-09, com
+ 
+ ## Flow
+ 
+-Bump `version` in package.json → commit → `git tag 0.x.y` (bare semver, the repo convention; `v`-prefixed also accepted) → `git push --tags`. The workflow then: verifies tag == package.json version (strips optional `v`), `pnpm/action-setup` (reads `packageManager`), `actions/setup-node` 24 with pnpm cache, `pnpm install --frozen-lockfile`, `pnpm test`, `pnpm run typecheck`, `npm publish --access public`. `npm publish` triggers `prepublishOnly` = `pnpm run build`, which produces `dist/` (esbuild bundles + declaration tree); `files` ships `bin`, `dist`, `CHANGELOG.md`.
++Bump `version` in package.json → commit → `git tag X.Y.Z` (bare semver, the repo convention; `v`-prefixed also accepted) → `git push --tags`. The workflow chains three jobs: `verify-tag` (tag == package.json version, optional `v` stripped) → `ci` (runs `ci.yml` as a reusable workflow: trunk, `pnpm run lint:types`, build, test) → `publish` (`actions/setup-node` 24, `pnpm/action-setup` with cache, `npm publish --access public`). `npm publish` triggers `prepublishOnly` = `pnpm run build`, which produces `dist/` (esbuild bundles + declaration tree); `files` ships `bin`, `dist`, `CHANGELOG.md`.
+ 
+ ## Key constraints
+ 
+ - Auth is **npm trusted publishing (OIDC)** — no NPM_TOKEN secret anywhere. One-time setup required on npmjs.com: package Settings → Trusted Publisher → GitHub Actions, org `synmux`, repo `claude-commit`, workflow filename `publish.yml`, environment blank.
+ - The publish step uses **npm, not `pnpm publish`**: npm >= 11.5.1 (Node 24) is the known-good OIDC path. setup-node must NOT set `registry-url` — it writes an .npmrc expecting NODE_AUTH_TOKEN, which breaks tokenless OIDC publishes.
+-- Actions in workflows are pinned to full commit SHAs with `# vX.Y.Z` comments; trunk's `pinact` linter enforces this. pnpm/action-setup v4.2.0 = `41ff72655975bd51cab0327fa583b6e92b6d3061` (peeled commit, not the tag object).
++- Actions in workflows are pinned to full commit SHAs with `# vX.Y.Z` comments; trunk's `pinact` linter enforces this. Pin the peeled commit SHA, not the annotated tag object's SHA.
+ - CI's `--frozen-lockfile` install also re-validates the lockfile against `minimumReleaseAge`; a lockfile that slipped a too-young package past the policy locally will fail CI.
+-- Package is scoped (`@synmux/claude-commit`), hence `--access public`. Versions 0.1.0–0.1.2 were published before this workflow existed; 1.0.4 is the last Bun-era release. The Node/pnpm/Clack migration (2026-09-13) sits under `[Unreleased]` in CHANGELOG.md and warrants a major bump.
++- Package is scoped (`@synmux/claude-commit`), hence `--access public`. Versions 0.1.0–0.1.2 were published before this workflow existed; 1.0.4 is the last Bun-era release; the Node/pnpm/Clack migration shipped as 1.1.0 (2026-09-13).
+diff --git a/AGENTS.md b/AGENTS.md
+index 80696ce..170e553 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -59,7 +59,7 @@ properties). Use Node built-ins (`node:fs/promises`, `node:child_process`,
+ - `node bin/cco.js` - the launcher imports `dist/bin/cco.js` when it exists,
+   else `bin/cco.ts` from source. `pnpm run build` (esbuild + declaration-only
+   `tsc`) is only needed for publishing; `prepublishOnly` runs it.
+-- `pnpm test` - vitest, `test/**/*.test.ts`. `pnpm run typecheck` -
++- `pnpm test` - vitest, `test/**/*.test.ts`. `pnpm run lint:types` -
+   `tsc --noEmit`. `pnpm run lint` - trunk.
+ 
+ ## Testing
+@@ -68,14 +68,6 @@ Use `vitest` (`pnpm test`). Tests drive real code: the git tests build a
+ temporary repository, the picker tests drive `@clack/core` through fake
+ streams. Mock only what cannot run headless.
+ 
+-```ts
+-import { test, expect } from "vitest";
+-
+-test("hello world", () => {
+-  expect(1).toBe(1);
+-});
+-```
+-
+ ## Terminal UI
+ 
+ The interactive picker is a `@clack/core` `SelectPrompt` with a pure render
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index b3b5bc5..fb02170 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+ Each version also has a [GitHub release](https://github.com/synmux/claude-commit/releases)
+ carrying the same notes at greater length.
+ 
++## [Unreleased]
++
++### [Unreleased] - Changed
++
++- `interactiveTemperature` now applies to Ollama models only. Claude runs
++  with adaptive thinking, where the API accepts only the default
++  temperature: any other value was rejected with a 400 and silently retried
++  without it, and the default changed nothing. `cco` no longer sends a
++  temperature to Claude, and the final stage drops the temperature-free
++  retry that existed only to absorb that rejection.
++
+ ## [1.1.0] - 2026-09-13
+ 
+ ### [1.1.0] - Changed
+diff --git a/PROMPT.md b/PROMPT.md
+deleted file mode 100644
+index 1eb4594..0000000
+--- a/PROMPT.md
++++ /dev/null
+@@ -1,24 +0,0 @@
+-# Genius Idea
+-
+-Add support for Ollama models. This will set us up for the next upcoming change.
+-
+-The user can define the model, for example `ornith-1.5:35b`, in the config where the Claude model name would go, but with an `ollama:` prefix. For Ornith 1.5 35b as the summary model, the user would set -
+-
+-```json
+-{
+-  "models": {
+-    "summary": "ollama:ornith-1.5:35b",
+-    "final": "sonnet"
+-  }
+-}
+-```
+-
+-You'll need to understand the Ollama API. From what I understand it has some partial compatibility with both the OpenAI API shape and the Anthropic API shape. It also might have its own unique API shape entirely. You're welcome to use whichever is most appropriate.
+-
+-Start your research from <https://docs.ollama.com/llms.txt> and your `ollama-api` skill.
+-
+-An additional change, while you’re at it at the same time; an `ignore:` directive to go along with `lowPriorityPaths:` to list paths to totally ignore entirely.
+-
+----
+-
+-OpenTUI is pleasant enough, but it requires Bun. Rewrite using another UX framework and validate that everything else works under Node too. OpenTUI is probably too heavyweight for the TUI needs we have in this code anyway.
+diff --git a/README.md b/README.md
+index 2ae49fb..dd199b8 100644
+--- a/README.md
++++ b/README.md
+@@ -163,11 +163,12 @@ library results have an empty `summaries` array and `chunkCount: 0`.
+ 
+ `cco -i` opens a picker (built on [Clack](https://github.com/bombshell-dev/clack))
+ listing several candidate messages, each with its subject and a one-line body
+-preview. The options are generated with a higher temperature
+-(`interactiveTemperature`) for more variety. Use the arrow keys (or `j`/`k`) to
+-move between options, `Enter` to commit the highlighted option, `e` to edit it
+-in your `$EDITOR` first, and `q`/`Esc`/`Ctrl-C` to cancel. The picker draws on
+-stderr, so stdout stays clean.
++preview. The model is asked to make the options genuinely different; with an
++Ollama final model, `interactiveTemperature` also sets the sampling temperature
++(Claude ignores it: with adaptive thinking it accepts only the default). Use the
++arrow keys (or `j`/`k`) to move between options, `Enter` to commit the
++highlighted option, `e` to edit it in your `$EDITOR` first, and
++`q`/`Esc`/`Ctrl-C` to cancel. The picker draws on stderr, so stdout stays clean.
+ 
+ To make interactive mode the default without typing `-i` every time, set
+ `"interactive": true` in your config (see below); opt out of a single run with
+@@ -445,7 +446,7 @@ Where the number comes from is `ollama.context`:
+ 
+ ```sh
+ pnpm test           # run the test suite (vitest)
+-pnpm run typecheck  # tsc --noEmit
++pnpm run lint:types # tsc --noEmit
+ pnpm run build      # bundle bin/ and index.ts into dist/ (only needed to publish)
+ ```
+ 
+diff --git a/WALKTHROUGH.md b/WALKTHROUGH.md
+index 32c132e..8376561 100644
+--- a/WALKTHROUGH.md
++++ b/WALKTHROUGH.md
+@@ -272,8 +272,10 @@ Otherwise, the pipeline has two model stages:
+      mode); with two priority groups its variety axis is scoped to the
+      primary changes, since it is the last instruction the model reads.
+    - `runPrompt()` sends the final prompt to the configured final model.
+-   - If multiple options are requested, `interactiveTemperature` is applied when
+-     available; if the model rejects that override, generation retries without it.
++   - If multiple options are requested, `interactiveTemperature` rides on the
++     structured attempt. Only an Ollama model honours it: Claude runs with
++     adaptive thinking, which accepts only the default temperature, so
++     `runClaudePrompt()` never sends one.
+ 
+ After the final response:
+ 
+@@ -347,8 +349,8 @@ failures turned out to be armored-content token density, not this leak - see
+ 
+ - `includePartialMessages` is enabled only when a caller provides `onText`.
+ - `abortController` is passed through for cancellation.
+-- Optional temperature is injected through `CLAUDE_CODE_EXTRA_BODY` while
+-  preserving any existing JSON body.
++- No sampling parameters are sent: with adaptive thinking the API rejects any
++  temperature but the default, so `RunPromptOptions.temperature` is ignored.
+ - API credential variables (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`) are
+   stripped from the subprocess environment unless the `allowApiKey` config
+   option is enabled (`buildSubprocessEnv`), so billing stays on the
+@@ -511,7 +513,8 @@ The final system prompt changes based on config:
+ - Default mode asks for a concise, imperative, single-line subject.
+ - Conventional Commit mode asks for `type(scope): description` and provides a
+   curated type list.
+-- Gitmoji mode asks for one leading gitmoji and gives a compact guide.
++- Gitmoji mode asks for the one leading gitmoji that fits best, listing common
++  choices as examples rather than a closed list.
+ - Template mode requires the subject to match the template and substitute
+   `{message}`.
+ - Multiline mode asks for a subject, blank line, and concise body.
+@@ -575,7 +578,7 @@ covered against a temporary repository and fake streams respectively.
+ 
+ ```sh
+ pnpm test
+-pnpm run typecheck
++pnpm run lint:types
+ node bin/cco.js --help
+ ```
+ 
+diff --git a/src/agent.ts b/src/agent.ts
+index cf33954..3eb536e 100644
+--- a/src/agent.ts
++++ b/src/agent.ts
+@@ -46,8 +46,6 @@ export interface SubprocessEnvOptions {
+    * Defaults to false so the gate fails safe when a caller omits it.
+    */
+   allowApiKey?: boolean;
+-  /** Sampling temperature to inject via `CLAUDE_CODE_EXTRA_BODY`, preserving any existing extra body. */
+-  temperature?: number;
+ }
+ 
+ /**
+@@ -62,29 +60,12 @@ export interface SubprocessEnvOptions {
+ export function buildSubprocessEnv(
+   opts: SubprocessEnvOptions,
+ ): Record<string, string | undefined> | undefined {
+-  const { baseEnv, allowApiKey = false, temperature } = opts;
++  const { baseEnv, allowApiKey = false } = opts;
+   const stripped = allowApiKey ? [] : presentCredentialVars(baseEnv);
+-  if (stripped.length === 0 && temperature == null) return undefined;
++  if (stripped.length === 0) return undefined;
+ 
+   const env = { ...baseEnv };
+   for (const name of stripped) delete env[name];
+-
+-  if (temperature != null) {
+-    let extra: Record<string, unknown> = {};
+-    const existing = baseEnv.CLAUDE_CODE_EXTRA_BODY;
+-    if (existing) {
+-      try {
+-        const parsed: unknown = JSON.parse(existing);
+-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+-          extra = parsed as Record<string, unknown>;
+-        }
+-      } catch {
+-        /* ignore a malformed existing value */
+-      }
+-    }
+-    env.CLAUDE_CODE_EXTRA_BODY = JSON.stringify({ ...extra, temperature });
+-  }
+-
+   return env;
+ }
+ 
+@@ -166,10 +147,12 @@ export async function runClaudePrompt(
+   prompt: string,
+   opts: RunPromptOptions,
+ ): Promise<ModelResult> {
++  // `opts.temperature` is deliberately not forwarded. The CLI runs Claude with
++  // adaptive thinking, where the API accepts only the default temperature:
++  // any other value is a 400, and the default itself changes nothing.
+   const subprocessEnv = buildSubprocessEnv({
+     baseEnv: process.env,
+     allowApiKey: opts.allowApiKey ?? false,
+-    ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+   });
+   const options = buildQueryOptions(opts, subprocessEnv);
+ 
+diff --git a/src/generate.ts b/src/generate.ts
+index 473506d..59b55f0 100644
+--- a/src/generate.ts
++++ b/src/generate.ts
+@@ -342,11 +342,10 @@ export async function generateCommit(
+   // Final stage: write the commit message(s) from summaries or filenames.
+   //
+   // Prefer a structured (JSON-schema) response so parsing is robust regardless
+-  // of how the model formats its prose. We try, in order: structured output
+-  // with a temperature bump (for interactive variety), then structured output
+-  // without it (for models that reject a temperature override), then plain text
+-  // with delimiter parsing (for models that don't support structured output at
+-  // all). Whichever succeeds first wins.
++  // of how the model formats its prose, then fall back to plain text with
++  // delimiter parsing for models that don't support structured output at all.
++  // Whichever succeeds first wins. The interactive temperature rides on the
++  // structured attempt; only an Ollama model honours it (see `runClaudePrompt`).
+   progress.onPhase?.(count > 1 ? "Writing commit options" : "Writing commit message");
+ 
+   const finalOllama = await contexts.settingsFor(config.models.final);
+@@ -359,10 +358,10 @@ export async function generateCommit(
+   const temperature =
+     count > 1 && config.interactiveTemperature != null ? config.interactiveTemperature : undefined;
+ 
+-  const attempts: Array<{ structured: boolean; temperature?: number }> = [];
+-  if (temperature != null) attempts.push({ structured: true, temperature });
+-  attempts.push({ structured: true });
+-  attempts.push({ structured: false });
++  const attempts: Array<{ structured: boolean; temperature?: number }> = [
++    { structured: true, ...(temperature != null ? { temperature } : {}) },
++    { structured: false },
++  ];
+ 
+   let messages: string[] | null = null;
+   let lastError: unknown;
+diff --git a/src/prompts.ts b/src/prompts.ts
+index 10ce91a..b2b8faa 100644
+--- a/src/prompts.ts
++++ b/src/prompts.ts
+@@ -10,7 +10,11 @@ import type { ChangePriority, Config, DiffSummary } from "./types.ts";
+ /** Sentinel separating candidate messages in interactive mode. */
+ export const OPTION_DELIMITER = "===OPTION===";
+ 
+-/** A compact gitmoji cheat-sheet to steer the model toward sensible choices. */
++/**
++ * Common gitmoji, offered as examples rather than a closed list: the model may
++ * use any gitmoji that fits the change better (a revert, a new dependency, a
++ * release).
++ */
+ const GITMOJI_GUIDE = [
+   "✨ new feature",
+   "🐛 bug fix",
+@@ -182,8 +186,8 @@ export function buildFinalSystem(
+ 
+   if (config.gitmoji) {
+     rules.push(
+-      `Begin the subject line with a single appropriate gitmoji, followed by a space. ` +
+-        `Pick from: ${GITMOJI_GUIDE}.` +
++      `Begin the subject line with the single gitmoji (gitmoji.dev) that best fits the change, followed by a space. ` +
++        `Common choices include: ${GITMOJI_GUIDE}.` +
+         (config.conventionalCommits
+           ? ' Place the gitmoji before the conventional-commit type, e.g. "✨ feat: ...".'
+           : ""),
+diff --git a/src/types.ts b/src/types.ts
+index 584792b..d2d2700 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -82,9 +82,11 @@ export interface Config {
+   /** How many candidate messages to generate in interactive mode. */
+   interactiveCount: number;
+   /**
+-   * Sampling temperature for the final model when generating interactive
+-   * options, to encourage variety between candidates. `null` leaves the model
+-   * at its default. Only applied in interactive mode.
++   * Sampling temperature for an Ollama final model when generating
++   * interactive options, to encourage variety between candidates. Claude
++   * models ignore it: they run with adaptive thinking, which accepts only the
++   * default temperature. `null` leaves the model at its default. Only applied
++   * in interactive mode.
+    */
+   interactiveTemperature: number | null;
+   /**
+@@ -205,7 +207,8 @@ export interface FileChange {
+  * `model` carries the provider: bare names go to Claude, `ollama:`-prefixed
+  * ones to Ollama (see {@link ModelConfig}). Some options only apply to one
+  * provider - `allowApiKey` gates Claude credentials, `ollama` supplies the
+- * host and context window - and each is simply ignored by the other.
++ * host and context window, `temperature` is only ever sent to Ollama - and
++ * each is simply ignored by the other.
+  */
+ export interface RunPromptOptions {
+   /** Model string: an alias (`sonnet`), a full id, or `ollama:<name>[:<tag>]`. */
+@@ -219,10 +222,9 @@ export interface RunPromptOptions {
+   /** Receives the underlying CLI's stderr (for `--verbose`). Claude only. */
+   onStderr?: (data: string) => void;
+   /**
+-   * Sampling temperature. Used to add variety when generating several
+-   * interactive options. Models that don't accept a temperature override
+-   * will reject the request, so the caller should be prepared to retry
+-   * without it.
++   * Sampling temperature, used to add variety when generating several
++   * interactive options. Ollama only: the Claude path never sends it (see
++   * `runClaudePrompt`).
+    */
+   temperature?: number;
+   /**
+diff --git a/test/agent.test.ts b/test/agent.test.ts
+index 804f227..170c225 100644
+--- a/test/agent.test.ts
++++ b/test/agent.test.ts
+@@ -76,66 +76,22 @@ describe("buildSubprocessEnv", () => {
+     expect(Object.keys(env!)).not.toContain("ANTHROPIC_API_KEY");
+   });
+ 
+-  test("passes credentials through when the gate is on", () => {
++  test("leaves a user's own CLAUDE_CODE_EXTRA_BODY untouched", () => {
+     const env = buildSubprocessEnv({
+-      baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: "sk-test" },
+-      allowApiKey: true,
+-      temperature: 1, // forces an env to be built so passthrough is observable
+-    });
+-    expect(env!.ANTHROPIC_API_KEY).toBe("sk-test");
+-  });
+-
+-  test("injects the temperature via CLAUDE_CODE_EXTRA_BODY", () => {
+-    const env = buildSubprocessEnv({
+-      baseEnv: cleanEnv,
++      baseEnv: {
++        ...cleanEnv,
++        ANTHROPIC_API_KEY: "sk-test",
++        CLAUDE_CODE_EXTRA_BODY: '{"foo":1}',
++      },
+       allowApiKey: false,
+-      temperature: 0.8,
+-    });
+-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+-      temperature: 0.8,
+-    });
+-  });
+-
+-  test("merges the temperature over an existing extra body", () => {
+-    const env = buildSubprocessEnv({
+-      baseEnv: { ...cleanEnv, CLAUDE_CODE_EXTRA_BODY: '{"foo":1}' },
+-      allowApiKey: false,
+-      temperature: 0.5,
+-    });
+-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+-      foo: 1,
+-      temperature: 0.5,
+-    });
+-  });
+-
+-  test("ignores a malformed existing extra body", () => {
+-    const env = buildSubprocessEnv({
+-      baseEnv: { ...cleanEnv, CLAUDE_CODE_EXTRA_BODY: "{oops" },
+-      allowApiKey: false,
+-      temperature: 0.5,
+-    });
+-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+-      temperature: 0.5,
+-    });
+-  });
+-
+-  test("combines credential stripping with the temperature override", () => {
+-    const env = buildSubprocessEnv({
+-      baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: "sk-test" },
+-      allowApiKey: false,
+-      temperature: 1.2,
+-    });
+-    expect(Object.keys(env!)).not.toContain("ANTHROPIC_API_KEY");
+-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+-      temperature: 1.2,
+     });
++    expect(env!.CLAUDE_CODE_EXTRA_BODY).toBe('{"foo":1}');
+   });
+ 
+   test("does not mutate the base environment", () => {
+     const baseEnv = { ...cleanEnv, ANTHROPIC_API_KEY: "sk-test" };
+-    buildSubprocessEnv({ baseEnv, allowApiKey: false, temperature: 0.5 });
++    buildSubprocessEnv({ baseEnv, allowApiKey: false });
+     expect(baseEnv.ANTHROPIC_API_KEY).toBe("sk-test");
+-    expect(Object.keys(baseEnv)).not.toContain("CLAUDE_CODE_EXTRA_BODY");
+   });
+ });
+ 
+diff --git a/test/generate.test.ts b/test/generate.test.ts
+index e7cb504..6d64e7e 100644
+--- a/test/generate.test.ts
++++ b/test/generate.test.ts
+@@ -399,19 +399,15 @@ describe("filenamesOnly", () => {
+       },
+     );
+     expect(probes).toEqual(["ollama:final"]);
+-    expect(temperatures).toEqual([
+-      config.interactiveTemperature ?? undefined,
+-      undefined,
+-      undefined,
+-    ]);
+-    expect(prompts).toHaveLength(3);
++    expect(temperatures).toEqual([config.interactiveTemperature ?? undefined, undefined]);
++    expect(prompts).toHaveLength(2);
+     for (const prompt of prompts) {
+       expect(prompt).toContain('"a.txt"');
+       expect(prompt).toContain("exactly 2 distinct");
+       expect(prompt).not.toMatch(/old line|new line|diff --git|@@/);
+     }
+     expect(result.messages).toEqual(["Update files", "Refresh files"]);
+-    expect(result.costUsd).toBeCloseTo(0.004);
++    expect(result.costUsd).toBeCloseTo(0.003);
+     expect(result.chunkCount).toBe(0);
+     expect(streamed).toEqual(["Update files"]);
+     expect(result.ollamaContexts).toEqual([

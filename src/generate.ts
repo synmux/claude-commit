@@ -30,102 +30,96 @@
  * With filenamesOnly, the summary stage is skipped entirely and the final
  * model receives only paths from the filtered, priority-grouped diff.
  */
-import { runPrompt } from "./agent.ts";
-import { isOllamaModel } from "./models.ts";
-import { resolveOllamaContext } from "./ollama.ts";
+import { runPrompt } from './agent.ts'
+import { applyIgnorePatterns, diffPaths, partitionDiff, redactOpaqueRuns, splitDiffToFit } from './diff.ts'
+import { ClaudeCommitError, isPromptTooLongError } from './errors.ts'
+import { isOllamaModel } from './models.ts'
+import { resolveOllamaContext } from './ollama.ts'
+import { createPathMatcher } from './paths.ts'
 import {
-  applyIgnorePatterns,
-  diffPaths,
-  partitionDiff,
-  redactOpaqueRuns,
-  splitDiffToFit,
-} from "./diff.ts";
-import { createPathMatcher } from "./paths.ts";
-import { clampChunkTokens } from "./tokens.ts";
-import { ClaudeCommitError, isPromptTooLongError } from "./errors.ts";
-import {
+  buildFilenamesUser,
   buildFinalSystem,
   buildFinalUser,
-  buildFilenamesUser,
   buildSummarySystem,
   buildSummaryUser,
   cleanMessage,
   extractMessages,
   hasLowPrioritySummaries,
   MESSAGES_SCHEMA,
-  parseOptions,
-} from "./prompts.ts";
-import type { ChangePriority, Config, DiffSummary, OllamaConfig } from "./types.ts";
+  parseOptions
+} from './prompts.ts'
+import { clampChunkTokens } from './tokens.ts'
+import type { ChangePriority, Config, DiffSummary, OllamaConfig } from './types.ts'
 
 export interface GenerateProgress {
   /** Called when a new phase of work begins (for spinner labels). */
-  onPhase?: (label: string) => void;
+  onPhase?: (label: string) => void
   /** Receives streamed text of the final message as it is produced. */
-  onText?: (delta: string) => void;
+  onText?: (delta: string) => void
 }
 
 export interface GenerateOptions {
   /** Number of candidate messages to produce (interactive mode uses > 1). */
-  count?: number;
-  progress?: GenerateProgress;
-  abortController?: AbortController;
+  count?: number
+  progress?: GenerateProgress
+  abortController?: AbortController
   /**
    * Model runner used for every prompt; injectable so tests can exercise the
    * pipeline (including overflow retries) without real model calls.
    * Defaults to {@link runPrompt}.
    */
-  runner?: typeof runPrompt;
+  runner?: typeof runPrompt
   /**
    * Resolves an `ollama:` model's context window, called once per model
    * per run before any chunk is sized; injectable so tests can exercise an
    * `"auto"` configuration without a server. Defaults to
    * {@link resolveOllamaContext}.
    */
-  resolveOllamaContext?: typeof resolveOllamaContext;
+  resolveOllamaContext?: typeof resolveOllamaContext
 }
 
 /** The context window one Ollama model ran with during this run. */
 export interface OllamaContextWindow {
   /** The model string as configured, prefix included. */
-  model: string;
-  tokens: number;
+  model: string
+  tokens: number
   /** Whether the number was configured or chosen by the server (`"auto"`). */
-  source: "config" | "auto";
+  source: 'config' | 'auto'
 }
 
 /** How the `ignore` patterns applied to this diff (for `--verbose`). */
 export interface IgnoreStats {
   /** File sections dropped before any model saw them. */
-  ignoredFiles: number;
+  ignoredFiles: number
   /** File sections in the staged diff with a recognisable path. */
-  totalFiles: number;
+  totalFiles: number
 }
 
 /** How the `lowPriorityPaths` patterns applied to this diff (for `--verbose`). */
 export interface LowPriorityStats {
   /** File sections whose paths all matched a pattern. */
-  matchedFiles: number;
+  matchedFiles: number
   /** File sections in the diff with a recognisable path. */
-  totalFiles: number;
+  totalFiles: number
   /** Every file matched, so the changes were treated as primary after all. */
-  promoted: boolean;
+  promoted: boolean
 }
 
 export interface GenerateResult {
   /** Candidate commit messages (length 1 in non-interactive mode). */
-  messages: string[];
+  messages: string[]
   /** Intermediate summaries, primary first. Empty when filenamesOnly is enabled. */
-  summaries: DiffSummary[];
+  summaries: DiffSummary[]
   /** Number of diff chunks the summary stage processed, across both partitions. */
-  chunkCount: number;
+  chunkCount: number
   /** Total cost across all model calls, in USD. */
-  costUsd: number;
+  costUsd: number
   /** How the low-priority patterns applied to this diff. */
-  lowPriority: LowPriorityStats;
+  lowPriority: LowPriorityStats
   /** How the ignore patterns applied to this diff. */
-  ignored: IgnoreStats;
+  ignored: IgnoreStats
   /** The context window each Ollama model ran with, in order of first use. */
-  ollamaContexts: OllamaContextWindow[];
+  ollamaContexts: OllamaContextWindow[]
 }
 
 /**
@@ -135,40 +129,40 @@ export interface GenerateResult {
  * neither need nor understand the block.
  */
 class OllamaContextResolver {
-  private readonly windows = new Map<string, Promise<number>>();
-  readonly resolved: OllamaContextWindow[] = [];
+  private readonly windows = new Map<string, Promise<number>>()
+  readonly resolved: OllamaContextWindow[] = []
 
-  private readonly config: OllamaConfig;
-  private readonly resolve: typeof resolveOllamaContext;
-  private readonly signal: AbortSignal | undefined;
+  private readonly config: OllamaConfig
+  private readonly resolve: typeof resolveOllamaContext
+  private readonly signal: AbortSignal | undefined
 
   constructor(config: OllamaConfig, resolve: typeof resolveOllamaContext, signal?: AbortSignal) {
-    this.config = config;
-    this.resolve = resolve;
-    this.signal = signal;
+    this.config = config
+    this.resolve = resolve
+    this.signal = signal
   }
 
   /** The Ollama settings to run `model` with, or `undefined` for a Claude model. */
   async settingsFor(model: string): Promise<OllamaConfig | undefined> {
-    if (!isOllamaModel(model)) return undefined;
-    const tokens = await this.windowFor(model);
-    return { ...this.config, context: tokens };
+    if (!isOllamaModel(model)) return undefined
+    const tokens = await this.windowFor(model)
+    return { ...this.config, context: tokens }
   }
 
   private windowFor(model: string): Promise<number> {
-    let pending = this.windows.get(model);
+    let pending = this.windows.get(model)
     if (!pending) {
       pending = this.resolve(model, this.config, this.signal).then((tokens) => {
         this.resolved.push({
           model,
           tokens,
-          source: this.config.context === "auto" ? "auto" : "config",
-        });
-        return tokens;
-      });
-      this.windows.set(model, pending);
+          source: this.config.context === 'auto' ? 'auto' : 'config'
+        })
+        return tokens
+      })
+      this.windows.set(model, pending)
     }
-    return pending;
+    return pending
   }
 }
 
@@ -177,20 +171,20 @@ class OllamaContextResolver {
  * prompt-sized already, so a "prompt is too long" rejection indicates
  * something other than chunk sizing and is surfaced instead of retried.
  */
-const MIN_RETRY_CHUNK_TOKENS = 8_000;
+const MIN_RETRY_CHUNK_TOKENS = 8_000
 
 interface PartitionSummaryOptions {
-  config: Config;
-  runner: typeof runPrompt;
-  progress: GenerateProgress;
-  contexts: OllamaContextResolver;
-  abortController?: AbortController;
+  config: Config
+  runner: typeof runPrompt
+  progress: GenerateProgress
+  contexts: OllamaContextResolver
+  abortController?: AbortController
 }
 
 /** Spinner label for one chunk of a partition. */
 function readingLabel(priority: ChangePriority, position: number, total: number): string {
-  const subject = priority === "low" ? "low-priority diff" : "diff";
-  return total > 1 ? `Reading ${subject} (part ${position + 1}/${total})` : `Reading ${subject}`;
+  const subject = priority === 'low' ? 'low-priority diff' : 'diff'
+  return total > 1 ? `Reading ${subject} (part ${position + 1}/${total})` : `Reading ${subject}`
 }
 
 /**
@@ -204,9 +198,9 @@ function readingLabel(priority: ChangePriority, position: number, total: number)
 async function summarizePartition(
   diff: string,
   priority: ChangePriority,
-  options: PartitionSummaryOptions,
+  options: PartitionSummaryOptions
 ): Promise<{ summaries: DiffSummary[]; costUsd: number }> {
-  const { config, runner, progress, contexts, abortController } = options;
+  const { config, runner, progress, contexts, abortController } = options
 
   // The configured chunk budget is clamped to the summary model's context
   // window so a single chunk (plus prompt scaffolding and response headroom)
@@ -216,103 +210,97 @@ async function summarizePartition(
   // Chunks are sized by a content-classified token estimate: opaque content
   // (age/gpg armor, binary patches) measures near 1 char/token, so a plain
   // chars-based budget underestimates armor-heavy diffs more than threefold.
-  const ollama = await contexts.settingsFor(config.models.summary);
+  const ollama = await contexts.settingsFor(config.models.summary)
   const chunkTokens = clampChunkTokens(
     config.models.summary,
     config.maxChunkTokens,
-    typeof ollama?.context === "number" ? ollama.context : undefined,
-  );
-  const chunks = splitDiffToFit(diff, chunkTokens, config.charsPerToken);
+    typeof ollama?.context === 'number' ? ollama.context : undefined
+  )
+  const chunks = splitDiffToFit(diff, chunkTokens, config.charsPerToken)
 
-  const summarySystem = buildSummarySystem(priority);
-  const summaries: DiffSummary[] = [];
-  let costUsd = 0;
+  const summarySystem = buildSummarySystem(priority)
+  const summaries: DiffSummary[] = []
+  let costUsd = 0
 
-  const queue = chunks.map((chunk) => ({ chunk, tokenBudget: chunkTokens }));
+  const queue = chunks.map((chunk) => ({ chunk, tokenBudget: chunkTokens }))
   while (queue.length > 0) {
-    const task = queue.shift()!;
-    const position = summaries.length;
-    const total = summaries.length + queue.length + 1;
-    progress.onPhase?.(readingLabel(priority, position, total));
+    const task = queue.shift()!
+    const position = summaries.length
+    const total = summaries.length + queue.length + 1
+    progress.onPhase?.(readingLabel(priority, position, total))
     try {
       const result = await runner(buildSummaryUser(task.chunk, position, total, priority), {
         model: config.models.summary,
         system: summarySystem,
         allowApiKey: config.allowApiKey,
         ...(ollama ? { ollama } : {}),
-        ...(abortController ? { abortController } : {}),
-      });
-      summaries.push({ priority, text: result.text });
-      costUsd += result.costUsd;
+        ...(abortController ? { abortController } : {})
+      })
+      summaries.push({ priority, text: result.text })
+      costUsd += result.costUsd
     } catch (error) {
-      const halvedBudget = Math.floor(task.tokenBudget / 2);
+      const halvedBudget = Math.floor(task.tokenBudget / 2)
       if (!isPromptTooLongError(error) || halvedBudget < MIN_RETRY_CHUNK_TOKENS) {
-        throw error;
+        throw error
       }
-      const pieces = splitDiffToFit(task.chunk, halvedBudget, config.charsPerToken);
+      const pieces = splitDiffToFit(task.chunk, halvedBudget, config.charsPerToken)
       if (pieces.length === 1 && pieces[0] === task.chunk) {
         // Nothing left to split on (a single oversized hunk): retrying the
         // identical request would loop forever, so surface the error.
-        throw error;
+        throw error
       }
-      queue.unshift(...pieces.map((chunk) => ({ chunk, tokenBudget: halvedBudget })));
+      queue.unshift(...pieces.map((chunk) => ({ chunk, tokenBudget: halvedBudget })))
     }
   }
 
-  return { summaries, costUsd };
+  return { summaries, costUsd }
 }
 
 /** Run the full pipeline over a staged diff. */
 export async function generateCommit(
   diff: string,
   config: Config,
-  options: GenerateOptions = {},
+  options: GenerateOptions = {}
 ): Promise<GenerateResult> {
   const {
     count = 1,
     progress = {},
     abortController,
     runner = runPrompt,
-    resolveOllamaContext: resolveContext = resolveOllamaContext,
-  } = options;
-  const contexts = new OllamaContextResolver(
-    config.ollama,
-    resolveContext,
-    abortController?.signal,
-  );
+    resolveOllamaContext: resolveContext = resolveOllamaContext
+  } = options
+  const contexts = new OllamaContextResolver(config.ollama, resolveContext, abortController?.signal)
 
   // Ignore first: dropped sections cost nothing downstream. Unlike a
   // low-priority partition, an ignored one has nowhere to be promoted to,
   // so matching every file is a dead end rather than a special case.
-  const ignoreResult = applyIgnorePatterns(diff, createPathMatcher(config.ignore));
+  const ignoreResult = applyIgnorePatterns(diff, createPathMatcher(config.ignore))
   const ignored: IgnoreStats = {
     ignoredFiles: ignoreResult.ignoredFiles,
-    totalFiles: ignoreResult.totalFiles,
-  };
-  if (ignoreResult.diff.trim() === "" && ignoreResult.ignoredFiles > 0) {
-    throw new ClaudeCommitError(describeFullyIgnored(ignored));
+    totalFiles: ignoreResult.totalFiles
+  }
+  if (ignoreResult.diff.trim() === '' && ignoreResult.ignoredFiles > 0) {
+    throw new ClaudeCommitError(describeFullyIgnored(ignored))
   }
 
   const effectiveDiff =
-    config.skipArmored && !config.filenamesOnly
-      ? redactOpaqueRuns(ignoreResult.diff)
-      : ignoreResult.diff;
-  const partition = partitionDiff(effectiveDiff, createPathMatcher(config.lowPriorityPaths));
-  if (partition.primary.trim() === "") {
-    throw new ClaudeCommitError("There are no staged changes to summarize.");
+    config.skipArmored && !config.filenamesOnly ? redactOpaqueRuns(ignoreResult.diff) : ignoreResult.diff
+  const partition = partitionDiff(effectiveDiff, createPathMatcher(config.lowPriorityPaths))
+  if (partition.primary.trim() === '') {
+    throw new ClaudeCommitError('There are no staged changes to summarize.')
   }
 
   const filenames = config.filenamesOnly
     ? {
         primary: diffPaths(partition.primary),
-        lowPriority: diffPaths(partition.lowPriority),
+        lowPriority: diffPaths(partition.lowPriority)
       }
-    : undefined;
-  const summaries: DiffSummary[] = [];
-  let costUsd = 0;
+    : undefined
+  const summaries: DiffSummary[] = []
+  let costUsd = 0
   if (filenames) {
     if (filenames.primary.length + filenames.lowPriority.length === 0) {
-      throw new ClaudeCommitError("There are no staged filenames to describe.");
+      throw new ClaudeCommitError('There are no staged filenames to describe.')
     }
   } else {
     // Stage 1: primary first, then low priority. filenamesOnly bypasses
@@ -322,22 +310,22 @@ export async function generateCommit(
       runner,
       progress,
       contexts,
-      ...(abortController ? { abortController } : {}),
-    };
-    const primaryStage = await summarizePartition(partition.primary, "primary", partitionOptions);
-    const lowPriorityStage =
-      partition.lowPriority.trim() === ""
-        ? { summaries: [], costUsd: 0 }
-        : await summarizePartition(partition.lowPriority, "low", partitionOptions);
-    summaries.push(...primaryStage.summaries, ...lowPriorityStage.summaries);
-    if (summaries.length === 0) {
-      throw new ClaudeCommitError("There are no staged changes to summarize.");
+      ...(abortController ? { abortController } : {})
     }
-    costUsd = primaryStage.costUsd + lowPriorityStage.costUsd;
+    const primaryStage = await summarizePartition(partition.primary, 'primary', partitionOptions)
+    const lowPriorityStage =
+      partition.lowPriority.trim() === ''
+        ? { summaries: [], costUsd: 0 }
+        : await summarizePartition(partition.lowPriority, 'low', partitionOptions)
+    summaries.push(...primaryStage.summaries, ...lowPriorityStage.summaries)
+    if (summaries.length === 0) {
+      throw new ClaudeCommitError('There are no staged changes to summarize.')
+    }
+    costUsd = primaryStage.costUsd + lowPriorityStage.costUsd
   }
   const hasLowPriority = filenames
     ? filenames.primary.length > 0 && filenames.lowPriority.length > 0
-    : hasLowPrioritySummaries(summaries);
+    : hasLowPrioritySummaries(summaries)
 
   // Final stage: write the commit message(s) from summaries or filenames.
   //
@@ -347,25 +335,24 @@ export async function generateCommit(
   // without it (for models that reject a temperature override), then plain text
   // with delimiter parsing (for models that don't support structured output at
   // all). Whichever succeeds first wins.
-  progress.onPhase?.(count > 1 ? "Writing commit options" : "Writing commit message");
+  progress.onPhase?.(count > 1 ? 'Writing commit options' : 'Writing commit message')
 
-  const finalOllama = await contexts.settingsFor(config.models.final);
+  const finalOllama = await contexts.settingsFor(config.models.final)
   const baseOpts = {
     model: config.models.final,
     allowApiKey: config.allowApiKey,
     ...(finalOllama ? { ollama: finalOllama } : {}),
-    ...(abortController ? { abortController } : {}),
-  };
-  const temperature =
-    count > 1 && config.interactiveTemperature != null ? config.interactiveTemperature : undefined;
+    ...(abortController ? { abortController } : {})
+  }
+  const temperature = count > 1 && config.interactiveTemperature != null ? config.interactiveTemperature : undefined
 
-  const attempts: Array<{ structured: boolean; temperature?: number }> = [];
-  if (temperature != null) attempts.push({ structured: true, temperature });
-  attempts.push({ structured: true });
-  attempts.push({ structured: false });
+  const attempts: Array<{ structured: boolean; temperature?: number }> = []
+  if (temperature != null) attempts.push({ structured: true, temperature })
+  attempts.push({ structured: true })
+  attempts.push({ structured: false })
 
-  let messages: string[] | null = null;
-  let lastError: unknown;
+  let messages: string[] | null = null
+  let lastError: unknown
   for (const attempt of attempts) {
     try {
       const result = await runner(
@@ -378,35 +365,35 @@ export async function generateCommit(
           ...(attempt.structured
             ? {
                 outputFormat: {
-                  type: "json_schema" as const,
-                  schema: MESSAGES_SCHEMA,
-                },
+                  type: 'json_schema' as const,
+                  schema: MESSAGES_SCHEMA
+                }
               }
             : {}),
           ...(attempt.temperature != null ? { temperature: attempt.temperature } : {}),
-          ...(!attempt.structured && progress.onText ? { onText: progress.onText } : {}),
-        },
-      );
-      costUsd += result.costUsd;
+          ...(!attempt.structured && progress.onText ? { onText: progress.onText } : {})
+        }
+      )
+      costUsd += result.costUsd
       messages = attempt.structured
         ? extractMessages(result.structured)
         : count > 1
           ? parseOptions(result.text)
-          : [result.text];
-      if (messages && messages.length > 0) break;
+          : [result.text]
+      if (messages && messages.length > 0) break
     } catch (err) {
-      lastError = err;
+      lastError = err
       // If the run was cancelled, stop retrying: the shared abort signal would
       // make every remaining attempt fail immediately in the same way.
-      if (abortController?.signal.aborted) break;
+      if (abortController?.signal.aborted) break
     }
   }
 
-  const cleaned = (messages ?? []).map(cleanMessage).filter((message) => message.length > 0);
-  const deduped = dedupe(cleaned);
+  const cleaned = (messages ?? []).map(cleanMessage).filter((message) => message.length > 0)
+  const deduped = dedupe(cleaned)
   if (deduped.length === 0) {
-    if (lastError instanceof ClaudeCommitError) throw lastError;
-    throw new ClaudeCommitError("The model did not produce a commit message.");
+    if (lastError instanceof ClaudeCommitError) throw lastError
+    throw new ClaudeCommitError('The model did not produce a commit message.')
   }
 
   // Report chunks actually processed: overflow retries can split further
@@ -419,11 +406,11 @@ export async function generateCommit(
     lowPriority: {
       matchedFiles: partition.matchedFiles,
       totalFiles: partition.totalFiles,
-      promoted: partition.promoted,
+      promoted: partition.promoted
     },
     ignored,
-    ollamaContexts: contexts.resolved,
-  };
+    ollamaContexts: contexts.resolved
+  }
 }
 
 /**
@@ -437,22 +424,22 @@ export async function generateCommit(
  * kind of bug people spend an afternoon on.
  */
 export function describeFullyIgnored(stats: IgnoreStats): string {
-  const files = `${stats.ignoredFiles} staged file${stats.ignoredFiles === 1 ? "" : "s"}`;
+  const files = `${stats.ignoredFiles} staged file${stats.ignoredFiles === 1 ? '' : 's'}`
   return (
     `Every one of the ${files} matches an "ignore" pattern, so there is ` +
     `nothing left to describe. Narrow the patterns, or pass --no-ignore to ` +
     `write a message about these changes for this commit.`
-  );
+  )
 }
 
 function dedupe(items: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+  const seen = new Set<string>()
+  const out: string[] = []
   for (const item of items) {
     if (!seen.has(item)) {
-      seen.add(item);
-      out.push(item);
+      seen.add(item)
+      out.push(item)
     }
   }
-  return out;
+  return out
 }
