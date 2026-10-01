@@ -210,11 +210,11 @@ importers:
         specifier: ^0.28.2
         version: 0.28.2
       prettier:
-        specifier: 3.9.8
-        version: 3.9.8
+        specifier: 3.9.9
+        version: 3.9.9
       skilld:
         specifier: ^3.1.0
-        version: 3.1.0
+        version: 3.2.0
       vitest:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@26.6.2)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(yaml@2.9.1))
@@ -1204,8 +1204,8 @@ packages:
     resolution: {integrity: sha512-RRuzqDtt5Y9h3quz5hWhK+TPnsmVs6WwSU6LkJMeY4HstUEDuYTG8UJSdawMRzmzAtV+KEoG8N3Qg2qLy5vM/A==}
     engines: {node: ^10 || ^12 || >=14}
 
-  prettier@3.9.8:
-    resolution: {integrity: sha512-WRFq3Wn3WId7LLROfMLdH7xaFr2jR62wU8nLO6rQUOLOxNZUviyJQs1M0iIhLexSFy+L+w0ch66wtoO2jRjG0A==}
+  prettier@3.9.9:
+    resolution: {integrity: sha512-Z/CJHIkdujO/OtN7nXUii0Rf3VT5SRuhjBA82Xvu2XhBUgX3nhP67T0LHceBdQLex7OOFGTox+Q5Yg8Jk2Qivg==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -1295,52 +1295,52 @@ packages:
   sisteransi@1.0.5:
     resolution: {integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==}
 
-  skilld-cli-darwin-arm64@3.1.0:
-    resolution: {integrity: sha512-pebo3PikvdgWFBhlreuPEbqPZmLDMJahs1fW3DasbumV+JQFL94ZnWKxfOIhecpHfci6uhRl0jPYQGbqm1wJiw==}
+  skilld-cli-darwin-arm64@3.2.0:
+    resolution: {integrity: sha512-QD/GToNKH6SC/sFIhas251R1p04uIm5HAh2KdWp7nSlzxNHGsQ725mfDMtuR/ACbwUsrXswQog2cYRuFu5PNVw==}
     cpu: [arm64]
     os: [darwin]
 
-  skilld-cli-darwin-x64@3.1.0:
-    resolution: {integrity: sha512-9eiUux7ecmhOnR8vPNIlW8onIjgiFC2Fg4LWZsSG5VLbydBt6DkGkh5Enskjq456k5Typb1QHWTieWkqkwqwCg==}
+  skilld-cli-darwin-x64@3.2.0:
+    resolution: {integrity: sha512-JA0gpfhiVM3W3LHnllp9YA9QJD3mGDdu+HDImfxhOzhD2Xfi+Nm9PDjcWYCRD0pNVZpmXog9k09dByeWz5hpKA==}
     cpu: [x64]
     os: [darwin]
 
-  skilld-cli-linux-arm64-gnu@3.1.0:
-    resolution: {integrity: sha512-LWWhCUlVBOS6mfbQ2VQsJRLuClr1PFdalJNZ880GEiqIpGWJMSmf5GhGiFaA27zloTQpHaK1iy5FMN4kRlDBwg==}
+  skilld-cli-linux-arm64-gnu@3.2.0:
+    resolution: {integrity: sha512-ZEpedcPoWUfG6KytpEd/b61bX1c8mFKq/TNT18TCgytbmTEL43w4/XR4M11GwgH2C0c1L7JyQ/RXfGjCUZBIxQ==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  skilld-cli-linux-arm64-musl@3.1.0:
-    resolution: {integrity: sha512-98Y6Bt9pl3hajErmOvItbwX0LxA+EZJI4zVhYYtByp9l0SwkVaoYDKHIHzqvhNEhmOxN8kjNlPitfSw5XPjqtg==}
+  skilld-cli-linux-arm64-musl@3.2.0:
+    resolution: {integrity: sha512-/7cabcsZ4sMxXaOrbH7rQ3tRNI03m92D4GGvgQHkgS2OPQcDLg+5ZqdImoTyGCTDpbjij1+Y12lkFvx23oTPSQ==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  skilld-cli-linux-x64-gnu@3.1.0:
-    resolution: {integrity: sha512-iGjUxFkMAE4QBwpNOTrRPBXHRZgxETaq3NCcDSOypxlfofN1h+cPISJI/tHwTIcKK+53CWQywkt7qg3W59dlHA==}
+  skilld-cli-linux-x64-gnu@3.2.0:
+    resolution: {integrity: sha512-3XdYp1zhEc/OxS4GFv4spixFORwR2mMHaT5quAXrIFmTC1j9NRIrGNjQyJYgtsctSqQIxIdwK1ysSECxLTZpaA==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  skilld-cli-linux-x64-musl@3.1.0:
-    resolution: {integrity: sha512-AXxDYLIGEVJVpgDggIqlbpKudtI/yKrs04EnxhhuI+zMw6W6UJmo7AA8OfFrLz7zjwv1yNmQmWFAIfqVUcKoNQ==}
+  skilld-cli-linux-x64-musl@3.2.0:
+    resolution: {integrity: sha512-e1heY/OyzXvazDGbaJySuFpWcBR3SFl7b83F+t1Qip//tYURuec4e2lv0OMznUmfBHXvK7xRLzmvxiMEVbfCMw==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  skilld-cli-win32-arm64-msvc@3.1.0:
-    resolution: {integrity: sha512-3LQ5YYEc7H+L80bxUAIG0Yjo34BtPfrjZy2eOU3gdrHFndzpi2xJD2sJOiFzSgTJZbCu1tA9JKFs6sA04dS8Dg==}
+  skilld-cli-win32-arm64-msvc@3.2.0:
+    resolution: {integrity: sha512-Wf5Fjg34ssSiZte65HRTzG5RTpt/A2UzGD4P1bhxgGv1v2n/r2RSMfxn+eTVnssQ51W9JAflXmd00ZamXPdQEg==}
     cpu: [arm64]
     os: [win32]
 
-  skilld-cli-win32-x64-msvc@3.1.0:
-    resolution: {integrity: sha512-flv3vmuSREENRGC3ZIer3m9LXoEd1mvRrmxstyILArw4Z75sC5hB6ZSEBYyaWExH8XuKqFobcwi8Bpjhc066+A==}
+  skilld-cli-win32-x64-msvc@3.2.0:
+    resolution: {integrity: sha512-G0XUNNbzo2p2Gr+Rf1gvOf5+v1EkJXWuJ3AUy8wFGKWYYp4HBDIXzyC2l/XpTSnOO8AKDXS1DkENrsvLQbPZZQ==}
     cpu: [x64]
     os: [win32]
 
-  skilld@3.1.0:
-    resolution: {integrity: sha512-pzOGamAE/al2Ors/Kfawfwb0dfByIMZvnbu2FBeKDfxXf68dJk3m6lt2zHaxzUa4ai3cZ84EOdHYdnGreKgu5g==}
+  skilld@3.2.0:
+    resolution: {integrity: sha512-dnl5tjWOJTqIeyEwBmvMhj/vMn+DzLI7IYE4+pyKCwXxKQ8rO5bAPGfl030APZcwRdvFBLDL2DIdxezEddjU5A==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -2308,7 +2308,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  prettier@3.9.8: {}
+  prettier@3.9.9: {}
 
   proxy-addr@2.0.8:
     dependencies:
@@ -2438,40 +2438,40 @@ snapshots:
 
   sisteransi@1.0.5: {}
 
-  skilld-cli-darwin-arm64@3.1.0:
+  skilld-cli-darwin-arm64@3.2.0:
     optional: true
 
-  skilld-cli-darwin-x64@3.1.0:
+  skilld-cli-darwin-x64@3.2.0:
     optional: true
 
-  skilld-cli-linux-arm64-gnu@3.1.0:
+  skilld-cli-linux-arm64-gnu@3.2.0:
     optional: true
 
-  skilld-cli-linux-arm64-musl@3.1.0:
+  skilld-cli-linux-arm64-musl@3.2.0:
     optional: true
 
-  skilld-cli-linux-x64-gnu@3.1.0:
+  skilld-cli-linux-x64-gnu@3.2.0:
     optional: true
 
-  skilld-cli-linux-x64-musl@3.1.0:
+  skilld-cli-linux-x64-musl@3.2.0:
     optional: true
 
-  skilld-cli-win32-arm64-msvc@3.1.0:
+  skilld-cli-win32-arm64-msvc@3.2.0:
     optional: true
 
-  skilld-cli-win32-x64-msvc@3.1.0:
+  skilld-cli-win32-x64-msvc@3.2.0:
     optional: true
 
-  skilld@3.1.0:
+  skilld@3.2.0:
     optionalDependencies:
-      skilld-cli-darwin-arm64: 3.1.0
-      skilld-cli-darwin-x64: 3.1.0
-      skilld-cli-linux-arm64-gnu: 3.1.0
-      skilld-cli-linux-arm64-musl: 3.1.0
-      skilld-cli-linux-x64-gnu: 3.1.0
-      skilld-cli-linux-x64-musl: 3.1.0
-      skilld-cli-win32-arm64-msvc: 3.1.0
-      skilld-cli-win32-x64-msvc: 3.1.0
+      skilld-cli-darwin-arm64: 3.2.0
+      skilld-cli-darwin-x64: 3.2.0
+      skilld-cli-linux-arm64-gnu: 3.2.0
+      skilld-cli-linux-arm64-musl: 3.2.0
+      skilld-cli-linux-x64-gnu: 3.2.0
+      skilld-cli-linux-x64-musl: 3.2.0
+      skilld-cli-win32-arm64-msvc: 3.2.0
+      skilld-cli-win32-x64-msvc: 3.2.0
 
   source-map-js@1.2.1: {}
 
