@@ -11,6 +11,7 @@ import { commit, getRepoRoot, getStagedDiff, getStagedStat, isGitRepo, stageAll 
 import type { ModelConfig, OllamaConfig, PartialConfig } from './types.ts'
 import { color } from './ui/colors.ts'
 import { confirmCommit, editInEditor } from './ui/editor.ts'
+import { playParty } from './ui/party.ts'
 import { Spinner } from './ui/spinner.ts'
 import { getVersion } from './utils.ts'
 
@@ -204,6 +205,10 @@ export async function run(argv: string[]): Promise<number> {
   process.on('SIGINT', onSigint)
 
   try {
+    await playParty(abortController.signal)
+    if (abortController.signal.aborted) {
+      throw new ClaudeCommitError('Generation was cancelled.')
+    }
     if (!(await isGitRepo())) {
       throw new ClaudeCommitError('Not a git repository (or any parent). Run `cco` inside a repo.')
     }
