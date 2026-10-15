@@ -13,15 +13,22 @@ const PARTY_FRAMES = [
 ]
 const PARTY_COLORS = ['35', '36', '33'] as const
 const PARTY_TIME_ENABLED_VALUES = new Set(['1', 'true', 'yes', 'on'])
+// Each frame is 15 ASCII columns plus two 2-column emoji; keep one spare column so the cursor never wraps.
+const PARTY_FRAME_MIN_COLUMNS = 20
+
+function isTooNarrow(): boolean {
+  const columns = process.stderr.columns
+  return typeof columns === 'number' && columns < PARTY_FRAME_MIN_COLUMNS
+}
 
 export async function playParty(signal: AbortSignal): Promise<void> {
   const enabled = PARTY_TIME_ENABLED_VALUES.has((process.env.PARTY_TIME ?? '').trim().toLowerCase())
-  if (!enabled || !process.stderr.isTTY || signal.aborted) return
+  if (!enabled || !process.stderr.isTTY || signal.aborted || isTooNarrow()) return
 
   process.stderr.write('\x1b[?25l')
   try {
     for (const [index, frame] of PARTY_FRAMES.entries()) {
-      if (signal.aborted) return
+      if (signal.aborted || isTooNarrow()) return
       const colorCode = PARTY_COLORS[index % PARTY_COLORS.length] ?? '35'
       process.stderr.write(`\r\x1b[2K${color(colorCode, frame)}`)
       await waitForFrame(signal)
