@@ -3,6 +3,11 @@
 Generate high-quality git commit messages with Claude - using your **Claude Code
 subscription**, not an API key.
 
+> [!NOTE]
+> `claude-commit` has a sense of fun. It's always asking its environment whether it's `PARTY_TIME` on startup.
+>
+> Do with that information what you will.
+
 `claude-commit` reads your staged diff, has a strong model summarize it, and a fast
 model turn that summary into a well-formed commit message. It handles diffs of any
 size (including ones too large to fit in a single context window), and supports
@@ -100,18 +105,18 @@ and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 | `-i, --interactive` / `--no-interactive` | Choose between several options in an interactive picker, or skip it when enabled in config |
 | `-n, --count <n>`                        | Number of options to generate in interactive mode (default 3)                              |
 | `-a, --all`                              | Stage all changes (`git add -A`) before committing                                         |
-| `-c, --conventional`                     | Format as a [Conventional Commit](https://www.conventionalcommits.org)                     |
-| `-g, --gitmoji`                          | Prefix the subject with a [gitmoji](https://gitmoji.dev)                                   |
+| `-c, --conventional`                     | Format as a[Conventional Commit](https://www.conventionalcommits.org)                      |
+| `-g, --gitmoji`                          | Prefix the subject with a[gitmoji](https://gitmoji.dev)                                    |
 | `-m, --multiline` / `--no-multiline`     | Write a multi-line commit (subject + body), or force a single line                         |
-| `-t, --template <tpl>`                   | Template for the first line, e.g. `"[PROJ-1] {message}"`                                   |
+| `-t, --template <tpl>`                   | Template for the first line, e.g.`"[PROJ-1] {message}"`                                    |
 | `-p, --prompt <text>`                    | Extra instructions appended to the prompt                                                  |
 | `-f, --filenames-only`                   | Skip summarisation and send only filenames to the final model                              |
-| `--model-summary <model>`                | Model used to summarize the diff (default `sonnet`)                                        |
-| `--model-final <model>`                  | Model used to write the message (default `sonnet`)                                         |
+| `--model-summary <model>`                | Model used to summarize the diff (default`sonnet`)                                         |
+| `--model-final <model>`                  | Model used to write the message (default`sonnet`)                                          |
 | `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff          |
-| `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                    |
-| `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                            |
-| `--ollama-host <url>`                    | Base URL of the Ollama server for `ollama:` models                                         |
+| `--no-low-priority-paths`                | Ignore`lowPriorityPaths` for this run, so every change weighs the same                     |
+| `--no-ignore`                            | Disregard`ignore` for this run, so every staged change is read                             |
+| `--ollama-host <url>`                    | Base URL of the Ollama server for`ollama:` models                                          |
 | `--ollama-context <tokens>`              | Context window requested from Ollama models                                                |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                             |
 | `-y, --yes`                              | Commit without asking for confirmation                                                     |
