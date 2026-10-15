@@ -12,9 +12,11 @@ const PARTY_FRAMES = [
   '🎊  PARTY TIME!  ✨'
 ]
 const PARTY_COLORS = ['35', '36', '33'] as const
+const PARTY_TIME_ENABLED_VALUES = new Set(['1', 'true', 'yes', 'on'])
 
 export async function playParty(signal: AbortSignal): Promise<void> {
-  if (process.env.PARTY_TIME === undefined || !process.stderr.isTTY || signal.aborted) return
+  const enabled = PARTY_TIME_ENABLED_VALUES.has((process.env.PARTY_TIME ?? '').trim().toLowerCase())
+  if (!enabled || !process.stderr.isTTY || signal.aborted) return
 
   process.stderr.write('\x1b[?25l')
   try {

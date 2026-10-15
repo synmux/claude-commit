@@ -47,7 +47,7 @@ describe('playParty', () => {
     }
   })
 
-  test.each(['', '0', 'false'])('animates when PARTY_TIME is set to %j', async (value) => {
+  test.each(['1', 'true', 'TRUE', 'yes', 'on'])('animates when PARTY_TIME is set to %j', async (value) => {
     process.env.PARTY_TIME = value
     setStderrTty(true)
     vi.useFakeTimers()
@@ -68,6 +68,23 @@ describe('playParty', () => {
       stdout.mockRestore()
     }
   })
+
+  test.each(['', '0', 'false', ' false ', 'off', 'no'])(
+    'does not animate when PARTY_TIME is set to %j',
+    async (value) => {
+      process.env.PARTY_TIME = value
+      setStderrTty(true)
+      vi.useFakeTimers()
+      const stderr = spyOnStderr()
+      try {
+        await playParty(new AbortController().signal)
+        expect(stderr.writes).toEqual([])
+        expect(vi.getTimerCount()).toBe(0)
+      } finally {
+        stderr.restore()
+      }
+    }
+  )
 
   test('does not animate or delay when stderr is not a TTY', async () => {
     process.env.PARTY_TIME = '1'
