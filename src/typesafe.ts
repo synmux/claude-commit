@@ -8,8 +8,8 @@
  *
  * Jev returns typed judgments, not text, so this module does not go through
  * `runPrompt`. Every action - the order, the warnings, which near-duplicate
- * to drop - is decided here in code from named thresholds. The questions and
- * thresholds were tested against the last 20 commits of this repository; see
+ * to drop - is decided here in code from named thresholds. The thresholds were
+ * tuned on 200 real options for 20 commits of this repository; see
  * `docs/superpowers/specs/2026-10-19-typesafe-candidate-check-design.md`.
  */
 import { type Fetch, type Questions, TypeSafeClient } from '@typesafe-ai/sdk'
@@ -17,18 +17,32 @@ import { ClaudeCommitError } from './errors.ts'
 import type { TypeSafeConfig } from './types.ts'
 
 /**
- * A support answer below this flags the candidate. In testing, 0.2 caught
- * 19 of 20 mismatched subjects and flagged none of 20 real ones.
+ * A `subject_shown` answer below this flags the candidate. Tuned on 200 real
+ * opus options for 20 commits: real options scored 0.42 at the lowest,
+ * subjects taken from another commit 0.06 at the highest.
  */
-const NOT_SHOWN_BELOW = 0.2
+const SUBJECT_NOT_SHOWN_BELOW = 0.2
 
-/** A "subject describes the primary changes" answer below this flags the candidate. */
+/**
+ * An `edits_shown` answer below this flags the candidate. Real options
+ * scored 0.62 at the lowest; options with a bullet spliced in from another
+ * commit scored 0.34 at the highest. At 0.2, 3 of 20 of those slipped through.
+ */
+const EDITS_NOT_SHOWN_BELOW = 0.45
+
+/**
+ * A "subject describes the primary changes" answer below this flags the
+ * candidate. Real options on split commits scored 0.82 at the lowest. No
+ * churn-led control was tested, so this keeps the conservative 0.2.
+ */
 const NOT_PRIMARY_BELOW = 0.2
 
 /**
  * A near-duplicate answer at or above this drops the lower-ranked candidate.
- * Set high on purpose: dropping a real alternative costs the user a choice,
- * and the tested pairs that differed scored 0.07 at most.
+ * In practice this removes near-verbatim rewrites only: paraphrases scored
+ * 0.89 or more, but reworded real options that a person would call
+ * duplicates scored 0.75 to 0.86, overlapping options that differ. Lowering
+ * it would drop real alternatives, so it stays high.
  */
 const DUPLICATE_FROM = 0.85
 
@@ -209,10 +223,10 @@ export function rankCandidates(
   const doesNotShow = evidence.kind === 'summaries' ? 'the summaries do not show' : 'the file list does not show'
   const assessed = messages.map((message, index) => {
     const warnings: string[] = []
-    if (answerValue(answers, `c${index}_subject_shown`, 'noul') < NOT_SHOWN_BELOW) {
+    if (answerValue(answers, `c${index}_subject_shown`, 'noul') < SUBJECT_NOT_SHOWN_BELOW) {
       warnings.push(`subject names a change ${doesNotShow}`)
     }
-    if (answerValue(answers, `c${index}_edits_shown`, 'noul') < NOT_SHOWN_BELOW) {
+    if (answerValue(answers, `c${index}_edits_shown`, 'noul') < EDITS_NOT_SHOWN_BELOW) {
       warnings.push(`describes an edit ${doesNotShow}`)
     }
     if (

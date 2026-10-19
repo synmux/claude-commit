@@ -125,6 +125,21 @@ describe('rankCandidates', () => {
     ])
   })
 
+  test('is stricter about claimed edits than about the subject', () => {
+    // Tuned separately: 0.45 sits between real options (0.62 and up) and
+    // invented edits (0.34 and down), but well above mismatched subjects.
+    const request = buildCandidateRequest(messages, summaries)
+    const ranked = rankCandidates(
+      messages,
+      summaries,
+      answersFor(request, { c0_subject_shown: 0.4, c1_edits_shown: 0.4 })
+    )
+    expect(ranked.warnings[ranked.messages.indexOf(messages[0] ?? '')]).toEqual([])
+    expect(ranked.warnings[ranked.messages.indexOf(messages[1] ?? '')]).toEqual([
+      'describes an edit the summaries do not show'
+    ])
+  })
+
   test('drops the lower-ranked candidate of a near-duplicate pair', () => {
     const request = buildCandidateRequest(messages, summaries)
     const ranked = rankCandidates(messages, summaries, answersFor(request, { dup_0_2: 0.9, c2_specificity: 3 }))
