@@ -1,2 +1,5 @@
 # Prettier friendly markdownlint config (all formatting rules disabled)
 extends: markdownlint/style/prettier
+# Repeated subheadings (Problem, Behaviour, ...) are fine under different parents
+MD024:
+  siblings_only: true
