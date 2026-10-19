@@ -47,6 +47,17 @@ const NOT_PRIMARY_BELOW = 0.2
  */
 const DUPLICATE_FROM = 0.85
 
+/**
+ * A "follows the custom instructions" answer below this flags the
+ * candidate. Tested with 6 instructions on 6 commits: options written with
+ * the instruction scored 0.25 at the lowest (0 of 108 flagged). Options
+ * written without it were caught for 18 of 18 missing a required trailer,
+ * 10 of 11 using a banned word, 10 of 10 missing a test mention, and 9 of
+ * 18 in the wrong tense. Instructions that depend on facts Jev never sees,
+ * such as the branch name, were never flagged.
+ */
+const FOLLOWS_CUSTOM_BELOW = 0.2
+
 /** Retries after a failed attempt. The user is waiting at the picker, so keep it short. */
 const RETRIES = 1
 
@@ -60,11 +71,20 @@ export interface CandidateEvidence {
   lowPriority: string | null
 }
 
+/** What the user asked of every message, beyond the evidence. */
+export interface CandidateRules {
+  /** The configured `customPrompt`, judged per candidate when set. */
+  customPrompt: string | null
+}
+
+const NO_RULES: CandidateRules = { customPrompt: null }
+
 /** The state sent to Jev. A type alias so it satisfies the SDK's JSON state type. */
 export type CandidateState = {
   context: string
   evidence: { primary: string; low_priority?: string }
   candidates: Array<{ subject: string; body: string }>
+  custom_instructions?: string
 }
 
 /** Candidates in the order to show them, with near-duplicates removed. */
@@ -110,7 +130,8 @@ function splitMessage(message: string): { subject: string; body: string } {
 /** Questions and state for one check. Pure, so the exact request is testable. */
 export function buildCandidateRequest(
   messages: string[],
-  evidence: CandidateEvidence
+  evidence: CandidateEvidence,
+  rules: CandidateRules = NO_RULES
 ): { state: CandidateState; questions: Questions } {
   const split = evidence.lowPriority !== null
   const context = [
@@ -158,6 +179,16 @@ export function buildCandidateRequest(
         }
       }
     }
+    if (rules.customPrompt !== null) {
+      questions[`c${index}_follows_custom`] = {
+        type: 'noul',
+        instructions: `Does ${candidate} follow the instructions in \`custom_instructions\`?`,
+        criteria: {
+          true: 'The message does what `custom_instructions` asks, or the instructions do not apply to this change',
+          false: 'The message ignores or contradicts something `custom_instructions` asks for'
+        }
+      }
+    }
   })
   for (const [first, second] of pairs(messages.length)) {
     questions[`dup_${first}_${second}`] = {
@@ -176,7 +207,8 @@ export function buildCandidateRequest(
       evidence.lowPriority === null
         ? { primary: evidence.primary }
         : { primary: evidence.primary, low_priority: evidence.lowPriority },
-    candidates: messages.map(splitMessage)
+    candidates: messages.map(splitMessage),
+    ...(rules.customPrompt !== null ? { custom_instructions: rules.customPrompt } : {})
   }
   return { state, questions }
 }
@@ -199,9 +231,34 @@ function noulValue(answers: Record<string, unknown>, name: string): number {
 }
 
 /**
+ * The model's order with flagged messages moved last, each group keeping
+ * its own order. Used directly when TypeSafe is off, so warnings found in
+ * code (see `src/gitmoji.ts`) still sort the picker.
+ */
+export function orderFlaggedLast(
+  messages: string[],
+  warnings: string[][]
+): { messages: string[]; warnings: string[][] } {
+  const order = flaggedLastOrder(messages.length, warnings)
+  return {
+    messages: order.map((index) => messages[index] ?? ''),
+    warnings: order.map((index) => warnings[index] ?? [])
+  }
+}
+
+/** Indices `0..count-1`, unflagged first, each group in its original order. */
+function flaggedLastOrder(count: number, warnings: string[][]): number[] {
+  const flagged = (index: number) => Number((warnings[index] ?? []).length > 0)
+  return Array.from({ length: count }, (_unused, index) => index).sort(
+    (left, right) => flagged(left) - flagged(right) || left - right
+  )
+}
+
+/**
  * Turn Jev's answers into the order the picker shows: the model's own
  * order, with flagged candidates moved last, and a candidate dropped when
- * a near-duplicate already sits above it.
+ * a near-duplicate already sits above it. `priorWarnings` - found in code
+ * before the request - count as flags too.
  *
  * The model's order is kept on purpose. In a blind comparison over 37
  * commits (opus and local Ollama models), every attempt to reorder passing
@@ -214,11 +271,13 @@ function noulValue(answers: Record<string, unknown>, name: string): number {
 export function rankCandidates(
   messages: string[],
   evidence: CandidateEvidence,
-  answers: Record<string, unknown>
+  answers: Record<string, unknown>,
+  rules: CandidateRules = NO_RULES,
+  priorWarnings: string[][] = []
 ): RankedCandidates {
   const doesNotShow = evidence.kind === 'summaries' ? 'the summaries do not show' : 'the file list does not show'
   const assessed = messages.map((message, index) => {
-    const warnings: string[] = []
+    const warnings: string[] = [...(priorWarnings[index] ?? [])]
     if (noulValue(answers, `c${index}_subject_shown`) < SUBJECT_NOT_SHOWN_BELOW) {
       warnings.push(`subject names a change ${doesNotShow}`)
     }
@@ -228,6 +287,9 @@ export function rankCandidates(
     if (evidence.lowPriority !== null && noulValue(answers, `c${index}_subject_primary`) < NOT_PRIMARY_BELOW) {
       warnings.push('subject is about the low-priority changes')
     }
+    if (rules.customPrompt !== null && noulValue(answers, `c${index}_follows_custom`) < FOLLOWS_CUSTOM_BELOW) {
+      warnings.push('ignores your custom instructions')
+    }
     return { index, message, warnings }
   })
   const duplicates = new Map<string, number>()
@@ -235,10 +297,11 @@ export function rankCandidates(
     duplicates.set(`${first}_${second}`, noulValue(answers, `dup_${first}_${second}`))
   }
 
-  const ordered = [...assessed].sort(
-    (left, right) => Number(left.warnings.length > 0) - Number(right.warnings.length > 0) || left.index - right.index
-  )
-  const kept: typeof ordered = []
+  const ordered = flaggedLastOrder(
+    assessed.length,
+    assessed.map((candidate) => candidate.warnings)
+  ).map((index) => assessed[index] as (typeof assessed)[number])
+  const kept: typeof assessed = []
   for (const candidate of ordered) {
     const duplicateOfKept = kept.some((better) => {
       const key = `${Math.min(better.index, candidate.index)}_${Math.max(better.index, candidate.index)}`
@@ -258,6 +321,10 @@ export function rankCandidates(
 export interface CheckCandidatesOptions {
   apiKey: string
   settings: TypeSafeConfig
+  /** What the user asked of every message; defaults to no custom instructions. */
+  rules?: CandidateRules
+  /** Warnings already found in code, aligned with the messages. */
+  priorWarnings?: string[][]
   /** HTTP transport for the SDK; tests supply a stand-in. Defaults to the global `fetch`. */
   fetch?: Fetch
   signal?: AbortSignal
@@ -272,7 +339,7 @@ export async function checkCandidates(
   evidence: CandidateEvidence,
   options: CheckCandidatesOptions
 ): Promise<CheckedCandidates> {
-  const { apiKey, settings, fetch, signal } = options
+  const { apiKey, settings, rules = NO_RULES, priorWarnings = [], fetch, signal } = options
   const client = new TypeSafeClient({
     apiKey,
     defaultModel: settings.model,
@@ -282,10 +349,10 @@ export async function checkCandidates(
     logLevel: 'off',
     ...(fetch ? { fetch } : {})
   })
-  const { state, questions } = buildCandidateRequest(messages, evidence)
+  const { state, questions } = buildCandidateRequest(messages, evidence, rules)
   const result = await client.systemOne({ state, questions, model: settings.model }, signal ? { signal } : {})
   return {
-    ...rankCandidates(messages, evidence, result.answers as Record<string, unknown>),
+    ...rankCandidates(messages, evidence, result.answers as Record<string, unknown>, rules, priorWarnings),
     inputTokens: result.usage.input_tokens,
     model: result.model
   }

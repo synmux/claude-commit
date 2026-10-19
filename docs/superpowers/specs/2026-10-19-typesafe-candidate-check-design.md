@@ -26,6 +26,9 @@ Per candidate:
   ignored.
 - `subject_primary` (yes/no, only when low-priority paths matched): does
   the subject describe a primary change?
+- `follows_custom` (yes/no, only when `customPrompt` is set): does the
+  message follow the user's custom instructions, or do they not apply? The
+  instructions go into state as `custom_instructions`.
 
 Per pair: `dup_i_j` (yes/no): do the two say the same thing with the same
 emphasis?
@@ -34,9 +37,12 @@ emphasis?
 
 Code makes every decision from constants in `src/typesafe.ts`:
 
-- A `subject_shown` or `subject_primary` answer below 0.2, or an
-  `edits_shown` answer below 0.45, adds a warning. The picker shows the
-  warning under the candidate.
+- A `subject_shown`, `subject_primary` or `follows_custom` answer below
+  0.2, or an `edits_shown` answer below 0.45, adds a warning. The picker
+  shows the warning under the candidate.
+- A gitmoji that clashes with its Conventional Commit type is flagged in
+  code (`src/gitmoji.ts`), with or without TypeSafe. Those warnings are
+  passed in as `priorWarnings`, so they sort the same way.
 - Candidates without a warning keep the model's order, and flagged ones
   follow in the same order. An earlier version also sorted by a
   specificity score, but blind tests showed this demoted better options
@@ -132,6 +138,32 @@ comparisons, plus 1 tie. The specificity question was removed, and the
 model's order is now kept apart from moving flagged options down. The
 specificity results in the question-design section above are kept for
 the record.
+
+### Custom instructions and gitmoji (2026-10-19)
+
+Custom instructions: 6 instructions on 6 commits, 3 sonnet options
+written with each instruction and 3 written without it. Jev judged all 36
+options against each instruction.
+
+| Instruction                      | With it: flagged | Without it: flagged                |
+| -------------------------------- | ---------------- | ---------------------------------- |
+| End with `Refs: #123`            | 0 / 18           | 18 / 18                            |
+| Do not use the word "add"        | 0 / 18           | 10 / 18 (10 of 11 real violations) |
+| Say which tests cover the change | 0 / 18           | 10 / 18 (all 10 real violations)   |
+| Subject in the past tense        | 0 / 18           | 9 / 18                             |
+| Ticket id from the branch name   | 0 / 18           | 0 / 18 (cannot be checked)         |
+| British spelling                 | 0 / 18           | 0 / 18                             |
+
+None of the 108 compliant options was flagged. The lowest compliant score
+was 0.25 (past tense), so the threshold stays at 0.2. Grammatical
+judgments such as tense are the weak spot: half the violations got
+through.
+
+Gitmoji: a lookup table and a Jev Noul were both run on 251 generated
+options. The table found all 9 clashes with no false flags. Jev, at 0.2,
+caught 4, falsely flagged `🔒️ feat` (the guide allows security with any
+type), and gave two identical `🔧 feat(config)` patterns 0.08 and 0.51.
+The table shipped, and the Jev question did not.
 
 ## Approaches considered
 

@@ -5,6 +5,7 @@ import {
   buildCandidateRequest,
   type CandidateEvidence,
   checkCandidates,
+  orderFlaggedLast,
   rankCandidates,
   resolveTypeSafeKey
 } from '../src/typesafe.ts'
@@ -147,6 +148,56 @@ describe('rankCandidates', () => {
     const answers = answersFor(request)
     delete answers.c1_edits_shown
     expect(() => rankCandidates(messages, summaries, answers)).toThrow(/c1_edits_shown/)
+  })
+})
+
+describe('custom instructions', () => {
+  const rules = { customPrompt: "End the message with 'Refs: #123'." }
+
+  test('asks one question per candidate and sends the instructions as state', () => {
+    const request = buildCandidateRequest(messages, summaries, rules)
+    expect(request.questions.c0_follows_custom?.type).toBe('noul')
+    expect(request.questions.c2_follows_custom?.type).toBe('noul')
+    expect(request.state.custom_instructions).toBe(rules.customPrompt)
+  })
+
+  test('asks nothing about them when no customPrompt is set', () => {
+    const request = buildCandidateRequest(messages, summaries)
+    expect(request.questions.c0_follows_custom).toBeUndefined()
+    expect(request.state.custom_instructions).toBeUndefined()
+  })
+
+  test('flags a candidate that ignores them', () => {
+    const request = buildCandidateRequest(messages, summaries, rules)
+    const ranked = rankCandidates(messages, summaries, answersFor(request, { c0_follows_custom: 0.1 }), rules)
+    expect(ranked.messages).toEqual([messages[1], messages[2], messages[0]])
+    expect(ranked.warnings[2]).toEqual(['ignores your custom instructions'])
+  })
+})
+
+describe('prior warnings', () => {
+  test('count as flags and come before the warnings Jev adds', () => {
+    const request = buildCandidateRequest(messages, summaries)
+    const ranked = rankCandidates(messages, summaries, answersFor(request, { c1_edits_shown: 0.1 }), undefined, [
+      [],
+      ['gitmoji does not match the commit type'],
+      []
+    ])
+    expect(ranked.messages).toEqual([messages[0], messages[2], messages[1]])
+    expect(ranked.warnings[2]).toEqual([
+      'gitmoji does not match the commit type',
+      'describes an edit the summaries do not show'
+    ])
+  })
+
+  test('orderFlaggedLast keeps each group in model order', () => {
+    const ordered = orderFlaggedLast(['a', 'b', 'c', 'd'], [['x'], [], ['y'], []])
+    expect(ordered.messages).toEqual(['b', 'd', 'a', 'c'])
+    expect(ordered.warnings).toEqual([[], [], ['x'], ['y']])
+  })
+
+  test('orderFlaggedLast keeps identical messages apart', () => {
+    expect(orderFlaggedLast(['same', 'same'], [['x'], []]).warnings).toEqual([[], ['x']])
   })
 })
 

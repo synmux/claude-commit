@@ -35,11 +35,14 @@
  * summaries or paths, then moves doubtful ones last with a warning and
  * drops near-duplicates (`src/typesafe.ts`). A failed check leaves the
  * candidates in the model's order and reports why; it never blocks a commit.
+ * A gitmoji that does not fit its commit type is flagged in code, with or
+ * without TypeSafe (`src/gitmoji.ts`).
  */
 import type { Fetch } from '@typesafe-ai/sdk'
 import { runPrompt } from './agent.ts'
 import { applyIgnorePatterns, diffPaths, partitionDiff, redactOpaqueRuns, splitDiffToFit } from './diff.ts'
 import { ClaudeCommitError, isPromptTooLongError } from './errors.ts'
+import { gitmojiConflictsWithType } from './gitmoji.ts'
 import { isOllamaModel } from './models.ts'
 import { resolveOllamaContext } from './ollama.ts'
 import { createPathMatcher } from './paths.ts'
@@ -57,7 +60,7 @@ import {
 } from './prompts.ts'
 import { clampChunkTokens } from './tokens.ts'
 import type { ChangePriority, Config, DiffSummary, OllamaConfig } from './types.ts'
-import { type CandidateEvidence, checkCandidates, resolveTypeSafeKey } from './typesafe.ts'
+import { type CandidateEvidence, checkCandidates, orderFlaggedLast, resolveTypeSafeKey } from './typesafe.ts'
 
 export interface GenerateProgress {
   /** Called when a new phase of work begins (for spinner labels). */
@@ -427,7 +430,13 @@ export async function generateCommit(
     throw new ClaudeCommitError('The model did not produce a commit message.')
   }
 
-  let shown = { messages: deduped, warnings: deduped.map((): string[] => []) }
+  // Format checks need no model: they run whether or not TypeSafe is on.
+  const formatWarnings = deduped.map((message): string[] =>
+    config.gitmoji && config.conventionalCommits && gitmojiConflictsWithType(message)
+      ? ['gitmoji does not match the commit type']
+      : []
+  )
+  let shown = orderFlaggedLast(deduped, formatWarnings)
   let candidateCheck: CandidateCheckReport | null = null
   if (typesafeKey) {
     progress.onPhase?.('Checking options')
@@ -438,6 +447,8 @@ export async function generateCommit(
       const checked = await checkCandidates(deduped, evidence, {
         apiKey: typesafeKey,
         settings: config.typesafe,
+        rules: { customPrompt: config.customPrompt },
+        priorWarnings: formatWarnings,
         ...(typesafeFetch ? { fetch: typesafeFetch } : {}),
         ...(abortController ? { signal: abortController.signal } : {})
       })

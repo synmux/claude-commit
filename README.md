@@ -192,11 +192,19 @@ it was written from, then:
   summaries do not show, or that claims an edit they do not show
 - flags a subject about low-priority changes when the primary changes are
   elsewhere
+- flags an option that ignores your `customPrompt`, when one is set
 - drops an option that says the same thing as one above it
 
 Otherwise the options keep the order the model wrote them in. Tests
 showed the model's first option beats any reordering, and a flagged
 option moves to the bottom.
+
+One check needs no TypeSafe at all. With both `gitmoji` and
+`conventionalCommits` on, an option whose gitmoji clashes with its type,
+such as `🔧 feat:` or `🎨 feat:`, gets a `⚠` line and moves down.
+Pairings the guide allows, such as `🔒️` with any type, pass. In a
+non-interactive run, the warnings for the chosen message print on stderr
+before you confirm.
 
 One check costs a fraction of a cent and takes under a second. If it
 fails, cco says why and shows the options in the model's order. A failed

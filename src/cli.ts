@@ -326,6 +326,10 @@ async function runNonInteractive(
   }
 
   let message = result.messages[0]!
+  // Warnings go to stderr so a dry run's stdout stays the bare message.
+  for (const warning of result.warnings[0] ?? []) {
+    process.stderr.write(`${color('33', `⚠ ${warning}`)}\n`)
+  }
 
   // Dry run: emit to stdout so it can be piped, and never commit.
   if (opts.dryRun) {

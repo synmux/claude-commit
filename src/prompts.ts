@@ -5,28 +5,11 @@
  * Stage 2 (final model): turn the summaries into a commit message that obeys the
  * configured formatting rules (conventional commits, gitmoji, template, body).
  */
+import { GITMOJI_GUIDE } from './gitmoji.ts'
 import type { ChangePriority, Config, DiffSummary } from './types.ts'
 
 /** Sentinel separating candidate messages in interactive mode. */
 export const OPTION_DELIMITER = '===OPTION==='
-
-/** A compact gitmoji cheat-sheet to steer the model toward sensible choices. */
-const GITMOJI_GUIDE = [
-  '✨ new feature',
-  '🐛 bug fix',
-  '📝 documentation',
-  '♻️ refactor',
-  '⚡️ performance',
-  '✅ tests',
-  '🔧 configuration / tooling',
-  '🎨 structure / formatting',
-  '🚚 move / rename',
-  '🔥 remove code or files',
-  '⬆️ upgrade dependencies',
-  '👷 CI build system',
-  '🚑️ critical hotfix',
-  '🔒️ security'
-].join(', ')
 
 const CONVENTIONAL_TYPES = 'feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert'
 

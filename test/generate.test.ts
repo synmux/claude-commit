@@ -739,6 +739,17 @@ describe('TypeSafe candidate check', () => {
     expect(disabled.messages).toEqual(candidates)
   })
 
+  test('sends the custom instructions and flags a candidate that ignores them', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch({ c1_follows_custom: 0.05 })
+    const config: Config = { ...typesafeConfig, customPrompt: 'Mention the ticket.' }
+    const result = await generateCommit(textDiff, config, { runner, count: 3, env, typesafeFetch: fetch })
+
+    expect(requests[0]?.body.state.custom_instructions).toBe('Mention the ticket.')
+    expect(result.messages.at(-1)).toBe(candidates[1])
+    expect(result.warnings.at(-1)).toEqual(['ignores your custom instructions'])
+  })
+
   test('checks filenames-only candidates against the file list', async () => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch()
@@ -751,5 +762,27 @@ describe('TypeSafe candidate check', () => {
     const state = requests[0]?.body.state as { context: string; evidence: { primary: string } }
     expect(state.context).toMatch(/paths of the changed files/)
     expect(state.evidence.primary).toBe('a.txt')
+  })
+})
+
+describe('gitmoji format check', () => {
+  const clashing = ['🔧 feat(config): change a default', '✨ feat(config): change a default']
+  const runner: Runner = async (_prompt, opts): Promise<ModelResult> =>
+    opts.outputFormat
+      ? { text: '', costUsd: 0, structured: { messages: clashing } }
+      : { text: 'Summary: a default changed.', costUsd: 0 }
+
+  test('flags a clash and moves it last without TypeSafe', async () => {
+    const config: Config = { ...baseConfig, gitmoji: true, conventionalCommits: true }
+    const result = await generateCommit(textDiff, config, { runner, count: 2 })
+    expect(result.messages).toEqual([clashing[1], clashing[0]])
+    expect(result.warnings).toEqual([[], ['gitmoji does not match the commit type']])
+    expect(result.candidateCheck).toBeNull()
+  })
+
+  test('stays quiet unless both gitmoji and conventional commits are on', async () => {
+    const result = await generateCommit(textDiff, { ...baseConfig, gitmoji: true }, { runner, count: 2 })
+    expect(result.messages).toEqual(clashing)
+    expect(result.warnings).toEqual([[], []])
   })
 })

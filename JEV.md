@@ -21,7 +21,7 @@ Jev has three question types:
 | B. Mixed-commit warning          | Planned                                 |
 | C. Scope and breaking change     | Planned                                 |
 | D. Picker search                 | Planned                                 |
-| E. Instruction and format checks | Planned                                 |
+| E. Instruction and format checks | Shipped (see E)                         |
 
 All of it ships in one PR from `synmux/jev`, one commit per feature.
 
@@ -295,80 +295,34 @@ ties.
 
 About 2 hours, most of it in the picker.
 
-## E. Instruction and format checks
+## E. Instruction and format checks (shipped)
 
-### Problem
+### Result
 
-Options can ignore `customPrompt`, and the existing check never looks at
-it. Options can also mix up their parts. A tuning run produced
-`🔧 feat(config): ...`, with a chore gitmoji on a `feat` type.
+Both halves were tested before building, and the data split them:
 
-### Behaviour
+- **Custom instructions use Jev.** A `follows_custom` Noul per option
+  joins the candidate check's request when `customPrompt` is set. It
+  flagged none of 108 compliant options and caught 38 of the 59 labelled
+  violations. Tense was the weak spot. An instruction Jev cannot check,
+  such as one that needs the branch name, is never flagged.
+- **Gitmoji vs type uses code.** A lookup table in `src/gitmoji.ts` beat
+  the Jev question: it found all 9 clashes in 251 options with no false
+  flags, where Jev found 4 and was inconsistent. The table also feeds the
+  prompt's gitmoji guide, and it works without a TypeSafe key.
 
-Extra per-option judgments in the shared request, flagged like the
-existing warnings:
-
-- `follows_custom`, only when `customPrompt` is set. Below the threshold,
-  the warning reads "ignores your custom instructions".
-- `gitmoji_matches_type`, only when both `gitmoji` and
-  `conventionalCommits` are on. Below the threshold, the warning reads
-  "gitmoji does not match the commit type".
-
-### Questions
-
-```json
-{
-  "c0_follows_custom": {
-    "type": "noul",
-    "instructions": "Does `candidates[0]` follow the instructions in `custom_instructions`?",
-    "criteria": {
-      "true": "The message does what `custom_instructions` asks, or the instructions do not apply to this change",
-      "false": "The message ignores or contradicts something `custom_instructions` asks for"
-    }
-  },
-  "c0_gitmoji_matches_type": {
-    "type": "noul",
-    "instructions": "Does the gitmoji at the start of `candidates[0].subject` fit its conventional-commit type?",
-    "criteria": {
-      "true": "The gitmoji's meaning in `gitmoji_guide` fits the type, for example ✨ with feat or 🐛 with fix",
-      "false": "The gitmoji's meaning conflicts with the type, for example 🔧 (configuration) with feat"
-    }
-  }
-}
-```
-
-`gitmoji_guide` is the guide `src/prompts.ts` already sends to the final
-model, put into state.
-
-### Risks
-
-Custom instructions can depend on facts Jev never sees. For example,
-"reference the ticket id from the branch name" needs the branch name.
-The "do not apply" clause and a low threshold (0.2) keep these cases from
-being flagged. Include the branch name in state when it is cheap to read.
-
-### Validation before it ships
-
-- Gitmoji: label the 200 tuning options by hand from the guide, then
-  measure flags against those labels.
-- Custom instructions: write 5 instructions (a ticket prefix, "mention
-  tests", "no emoji in the body", "British spelling", a branch reference).
-  Generate options with and without each, and check that compliant
-  options are never flagged.
-
-### Effort
-
-About 30 minutes for the code, and 30 minutes to validate.
+Both warnings move an option to the bottom of the picker. In a
+non-interactive run, the warnings for the one message print on stderr.
+The numbers are in the design record, under "Custom instructions and
+gitmoji".
 
 ## Order of work
 
-1. **E, instruction and format checks.** Small, and it joins the
-   candidate check's request.
-2. **B, mixed-commit warning.** A cheap experiment first. It covers
+1. **B, mixed-commit warning.** A cheap experiment first. It covers
    non-interactive runs too.
-3. **C, scope and breaking change.** Its own request, and a history
+2. **C, scope and breaking change.** Its own request, and a history
    replay to validate.
-4. **D, picker search.** The most UI work, and only useful with `-i`.
+3. **D, picker search.** The most UI work, and only useful with `-i`.
 
 After each feature: run tests, typecheck and lint, run a live
 end-to-end check, update the design record and README, and commit with

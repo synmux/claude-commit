@@ -15,8 +15,12 @@ carrying the same notes at greater length.
   `--typesafe`, interactive options are checked by TypeSafe's Jev model
   before the picker opens. An option whose subject or edits the summaries
   do not show gets a `⚠` warning and moves to the bottom, and
-  near-duplicates are dropped. The key comes from `$TYPESAFE_API_KEY`, or
+  near-duplicates are dropped. With a `customPrompt` set, an option that
+  ignores it is flagged too. The key comes from `$TYPESAFE_API_KEY`, or
   the variable `typesafe.env` names. The check is off by default.
+- **Gitmoji and type check.** With `gitmoji` and `conventionalCommits` on,
+  an option that pairs a gitmoji with a type it does not fit (such as
+  `🔧 feat:`) is flagged and moved down. This needs no TypeSafe key.
 
 ### [Unreleased] - Fixed
 
