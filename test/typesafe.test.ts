@@ -49,12 +49,11 @@ describe('resolveTypeSafeKey', () => {
 })
 
 describe('buildCandidateRequest', () => {
-  test('asks the support and specificity questions once per candidate', () => {
+  test('asks the support questions once per candidate', () => {
     const request = buildCandidateRequest(messages, summaries)
     for (const index of [0, 1, 2]) {
       expect(request.questions[`c${index}_subject_shown`]?.type).toBe('noul')
       expect(request.questions[`c${index}_edits_shown`]?.type).toBe('noul')
-      expect(request.questions[`c${index}_specificity`]?.type).toBe('score')
       expect(JSON.stringify(request.questions[`c${index}_subject_shown`])).toContain(`candidates[${index}]`)
     }
   })
@@ -86,7 +85,7 @@ describe('buildCandidateRequest', () => {
 })
 
 describe('rankCandidates', () => {
-  test('keeps model order when every candidate passes with equal specificity', () => {
+  test('keeps model order when every candidate passes', () => {
     const request = buildCandidateRequest(messages, summaries)
     const ranked = rankCandidates(messages, summaries, answersFor(request))
     expect(ranked.messages).toEqual(messages)
@@ -99,16 +98,6 @@ describe('rankCandidates', () => {
     const ranked = rankCandidates(messages, split, answersFor(request, { c0_subject_primary: 0.05 }))
     expect(ranked.messages).toEqual([messages[1], messages[2], messages[0]])
     expect(ranked.warnings[2]).toEqual(['subject is about the low-priority changes'])
-  })
-
-  test('orders passing candidates by specificity', () => {
-    const request = buildCandidateRequest(messages, summaries)
-    const ranked = rankCandidates(
-      messages,
-      summaries,
-      answersFor(request, { c0_specificity: 1, c1_specificity: 2.9, c2_specificity: 2 })
-    )
-    expect(ranked.messages).toEqual([messages[1], messages[2], messages[0]])
   })
 
   test('flags claims the evidence does not show', () => {
@@ -140,11 +129,17 @@ describe('rankCandidates', () => {
     ])
   })
 
-  test('drops the lower-ranked candidate of a near-duplicate pair', () => {
+  test('drops the later candidate of a near-duplicate pair', () => {
     const request = buildCandidateRequest(messages, summaries)
-    const ranked = rankCandidates(messages, summaries, answersFor(request, { dup_0_2: 0.9, c2_specificity: 3 }))
-    expect(ranked.messages).toEqual([messages[2], messages[1]])
+    const ranked = rankCandidates(messages, summaries, answersFor(request, { dup_0_2: 0.9 }))
+    expect(ranked.messages).toEqual([messages[0], messages[1]])
     expect(ranked.droppedDuplicates).toBe(1)
+  })
+
+  test('keeps the unflagged one of a near-duplicate pair', () => {
+    const request = buildCandidateRequest(messages, summaries)
+    const ranked = rankCandidates(messages, summaries, answersFor(request, { dup_0_2: 0.9, c0_subject_shown: 0.05 }))
+    expect(ranked.messages).toEqual([messages[1], messages[2]])
   })
 
   test('a missing answer is an error, not a pass', () => {

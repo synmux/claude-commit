@@ -679,12 +679,12 @@ describe('TypeSafe candidate check', () => {
     return { runner, calls }
   }
 
-  test('ranks, flags and reports the candidates when enabled', async () => {
+  test('flags, reorders and reports the candidates when enabled', async () => {
     const { runner } = threeOptionRunner()
-    const { fetch, requests } = answeringJevFetch({ c0_subject_shown: 0.05, c2_specificity: 3 })
+    const { fetch, requests } = answeringJevFetch({ c0_subject_shown: 0.05 })
     const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 3, env, typesafeFetch: fetch })
 
-    expect(result.messages).toEqual([candidates[2], candidates[1], candidates[0]])
+    expect(result.messages).toEqual([candidates[1], candidates[2], candidates[0]])
     expect(result.warnings).toEqual([[], [], ['subject names a change the summaries do not show']])
     expect(result.candidateCheck).toEqual({
       status: 'checked',

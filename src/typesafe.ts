@@ -1,10 +1,11 @@
 /**
  * The TypeSafe candidate check: after the final model writes several
  * candidate messages, one request to TypeSafe's Jev model judges each of
- * them against the evidence it was written from, and the picker shows them
- * best first.
+ * them against the evidence it was written from. The picker keeps the
+ * model's order but moves doubtful candidates last, with a warning, and
+ * drops near-duplicates.
  *
- *   candidates + evidence ──Jev──▶ yes/no and score answers ──code──▶ ranked, flagged, deduplicated
+ *   candidates + evidence ──Jev──▶ yes/no answers ──code──▶ flagged, deduplicated
  *
  * Jev returns typed judgments, not text, so this module does not go through
  * `runPrompt`. Every action - the order, the warnings, which near-duplicate
@@ -147,16 +148,6 @@ export function buildCandidateRequest(
         false: 'The message says an edit or behaviour change was made that `evidence` does not state'
       }
     }
-    questions[`c${index}_specificity`] = {
-      type: 'score',
-      instructions: `How specifically does the subject line ${subject} say what changed?`,
-      criteria: [
-        "The subject could describe almost any commit, such as 'update files' or 'misc fixes'",
-        'The subject names the affected area but not what changed in it',
-        'The subject names the affected area and the kind of change',
-        'The subject names the specific change and its effect, so a reader of `git log --oneline` knows what changed without opening the commit'
-      ]
-    }
     if (split) {
       questions[`c${index}_subject_primary`] = {
         type: 'noul',
@@ -199,19 +190,24 @@ function pairs(count: number): Array<[number, number]> {
   return out
 }
 
-function answerValue(answers: Record<string, unknown>, name: string, type: 'noul' | 'score'): number {
-  const answer = answers[name] as { type?: unknown; noul?: unknown; score?: unknown } | undefined
-  const value = type === 'noul' ? answer?.noul : answer?.score
-  if (answer?.type !== type || typeof value !== 'number' || !Number.isFinite(value)) {
+function noulValue(answers: Record<string, unknown>, name: string): number {
+  const answer = answers[name] as { type?: unknown; noul?: unknown } | undefined
+  if (answer?.type !== 'noul' || typeof answer.noul !== 'number' || !Number.isFinite(answer.noul)) {
     throw new ClaudeCommitError(`TypeSafe returned no usable answer for "${name}".`)
   }
-  return value
+  return answer.noul
 }
 
 /**
- * Turn Jev's answers into the order the picker shows. Candidates without a
- * warning come first, then by specificity, keeping the model's order on
- * ties; a candidate whose near-duplicate already ranked higher is dropped.
+ * Turn Jev's answers into the order the picker shows: the model's own
+ * order, with flagged candidates moved last, and a candidate dropped when
+ * a near-duplicate already sits above it.
+ *
+ * The model's order is kept on purpose. In a blind comparison over 37
+ * commits (opus and local Ollama models), every attempt to reorder passing
+ * candidates - by a specificity score, or by asking Jev which option a
+ * maintainer would keep - lost to the model's first option (1 win in 26).
+ *
  * Every expected answer is read before anything is decided, so a missing
  * one is an error rather than a silent pass.
  */
@@ -223,30 +219,24 @@ export function rankCandidates(
   const doesNotShow = evidence.kind === 'summaries' ? 'the summaries do not show' : 'the file list does not show'
   const assessed = messages.map((message, index) => {
     const warnings: string[] = []
-    if (answerValue(answers, `c${index}_subject_shown`, 'noul') < SUBJECT_NOT_SHOWN_BELOW) {
+    if (noulValue(answers, `c${index}_subject_shown`) < SUBJECT_NOT_SHOWN_BELOW) {
       warnings.push(`subject names a change ${doesNotShow}`)
     }
-    if (answerValue(answers, `c${index}_edits_shown`, 'noul') < EDITS_NOT_SHOWN_BELOW) {
+    if (noulValue(answers, `c${index}_edits_shown`) < EDITS_NOT_SHOWN_BELOW) {
       warnings.push(`describes an edit ${doesNotShow}`)
     }
-    if (
-      evidence.lowPriority !== null &&
-      answerValue(answers, `c${index}_subject_primary`, 'noul') < NOT_PRIMARY_BELOW
-    ) {
+    if (evidence.lowPriority !== null && noulValue(answers, `c${index}_subject_primary`) < NOT_PRIMARY_BELOW) {
       warnings.push('subject is about the low-priority changes')
     }
-    return { index, message, warnings, specificity: answerValue(answers, `c${index}_specificity`, 'score') }
+    return { index, message, warnings }
   })
   const duplicates = new Map<string, number>()
   for (const [first, second] of pairs(messages.length)) {
-    duplicates.set(`${first}_${second}`, answerValue(answers, `dup_${first}_${second}`, 'noul'))
+    duplicates.set(`${first}_${second}`, noulValue(answers, `dup_${first}_${second}`))
   }
 
   const ordered = [...assessed].sort(
-    (left, right) =>
-      Number(left.warnings.length > 0) - Number(right.warnings.length > 0) ||
-      right.specificity - left.specificity ||
-      left.index - right.index
+    (left, right) => Number(left.warnings.length > 0) - Number(right.warnings.length > 0) || left.index - right.index
   )
   const kept: typeof ordered = []
   for (const candidate of ordered) {

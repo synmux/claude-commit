@@ -32,7 +32,7 @@
  *
  * When several candidates are requested and `typesafe.enable` is on, a last
  * step asks TypeSafe's Jev model to check each candidate against the same
- * summaries or paths, then orders them best first, flags doubtful ones and
+ * summaries or paths, then moves doubtful ones last with a warning and
  * drops near-duplicates (`src/typesafe.ts`). A failed check leaves the
  * candidates in the model's order and reports why; it never blocks a commit.
  */
@@ -128,7 +128,7 @@ export interface LowPriorityStats {
 export interface GenerateResult {
   /**
    * Candidate commit messages (length 1 in non-interactive mode). After a
-   * TypeSafe check they are in display order, best first.
+   * TypeSafe check they are in display order, doubtful ones last.
    */
   messages: string[]
   /** Why each message is doubtful, aligned with `messages`; all empty when nothing was checked. */
@@ -250,8 +250,7 @@ async function summarizePartition(
   let costUsd = 0
 
   const queue = chunks.map((chunk) => ({ chunk, tokenBudget: chunkTokens }))
-  while (queue.length > 0) {
-    const task = queue.shift()!
+  for (let task = queue.shift(); task !== undefined; task = queue.shift()) {
     const position = summaries.length
     const total = summaries.length + queue.length + 1
     progress.onPhase?.(readingLabel(priority, position, total))

@@ -60,7 +60,7 @@ export interface OllamaConfig {
 /**
  * Settings for the TypeSafe candidate check: in interactive mode, TypeSafe's
  * Jev model checks every candidate message against the evidence it was
- * written from, the picker lists the best first, flags the doubtful ones and
+ * written from, the picker moves doubtful ones last with a warning and
  * drops near-duplicates. See `src/typesafe.ts`.
  */
 export interface TypeSafeConfig {

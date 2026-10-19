@@ -17,7 +17,7 @@ Jev has three question types:
 | Item                             | State                                   |
 | -------------------------------- | --------------------------------------- |
 | Candidate check (interactive)    | Shipped and tuned: `79eade2`, `596ee5e` |
-| A. Autopick (non-interactive)    | Planned                                 |
+| A. Autopick (non-interactive)    | Rejected after testing (see A)          |
 | B. Mixed-commit warning          | Planned                                 |
 | C. Scope and breaking change     | Planned                                 |
 | D. Picker search                 | Planned                                 |
@@ -27,16 +27,17 @@ All of it ships in one PR from `synmux/jev`, one commit per feature.
 
 The shipped check is described in
 `docs/superpowers/specs/2026-10-19-typesafe-candidate-check-design.md`. In
-short, each option gets four judgments, and code ranks and flags the
-options from fixed thresholds:
+short, each option gets three judgments, and code flags options from
+fixed thresholds:
 
 - does the evidence show the change the subject names?
 - does it show the edits the body claims?
-- how specific is the subject?
 - is the subject about the primary changes?
 
-Tuning on 200 real opus options flagged none of them and caught all 60
-known-bad controls.
+Flagged options move to the bottom of the picker, and near-duplicates
+are dropped. The model's order is otherwise kept (see A for why). Tuning
+on 200 real opus options flagged none of them and caught all 60 known-bad
+controls.
 
 ## Shared design rules
 
@@ -44,10 +45,11 @@ These apply to every feature below.
 
 - **Off unless enabled.** Everything sits behind `typesafe.enable`. With
   the check off, `cco` behaves exactly as it does today.
-- **One request where possible.** A, B and E judge the same state (the
-  summaries and the options), so they go out as one request. C needs its
-  answer before the final model runs, so it is a separate, earlier
-  request. D runs only when the user asks for it.
+- **One request where possible.** In interactive runs, B and E join the
+  candidate check's request, which already holds the summaries and the
+  options. A non-interactive run sends B on its own. C needs its answer
+  before the final model runs, so it is a separate, earlier request. D
+  runs only when the user asks for it.
 - **Jev never blocks a commit.** A failed request leaves today's
   behaviour in place and says why. A missing key with the check on is an
   error before any model call, as now.
@@ -57,67 +59,52 @@ These apply to every feature below.
 - **No new data leaves the machine.** Jev sees the summaries, the options
   and, for C, past commit subjects and paths. It never sees diff content.
 
-## A. Autopick for non-interactive runs
+## A. Autopick for non-interactive runs (rejected)
 
-### Problem
+### Idea
 
-A non-interactive run writes one message and commits it. Whatever the
-final model produces first is what you get. A weak local model makes this
-worse: your global config uses `ollama:gemma4:31b-mlx` and
-`ollama:muse-glimmer:30b-mlx`.
+A non-interactive run would ask the final model for several options
+(default 3) and let Jev pick the one to commit, in place of whatever the
+model wrote first.
 
-### Behaviour
+### Test
 
-With `typesafe.enable` on, a non-interactive run asks the final model for
-`typesafe.autopickCount` options (default 3) in its single call. The
-candidate check then ranks them, and `cco` uses the top one. The flow after
-that is unchanged: confirmation, `--yes` or `--dry-run` work as before.
+The tuning harness ran on the same 20 commits with two model setups:
 
-- If the top option carries a warning (every option was flagged), `cco`
-  still uses it and prints the warning on stderr. It never blocks a commit.
-- `--verbose` prints every option with its rank and warnings, so the
-  choice can be checked.
-- If the check fails, `cco` uses the first option and says why.
-- An `autopickCount` of 1 turns autopick off and restores the
-  single-message flow.
+- the repository config: opus for both stages
+- your global config: `ollama:gemma4:31b-mlx` for summaries and
+  `ollama:muse-glimmer:30b-mlx` for messages, on 17 commits (the 3 largest
+  diffs failed on the Ollama side)
 
-Interactive runs are unchanged: they still use `interactiveCount` and the
-picker.
+Each commit got 3 options. Three picking policies were compared with
+option 0, and opus judged every case where the pick differed from
+option 0. The judge saw the summaries and both messages in a random A/B
+order.
 
-### Questions
+| Policy                             | Opus: differs, won | Ollama: differs, won |
+| ---------------------------------- | ------------------ | -------------------- |
+| Rank by a specificity score        | 10, won 1          | 7, won 0             |
+| Jev Choice: "best for the history" | 4, won 0 (1 tie)   | 5, won 0             |
+| Guard: skip flagged options only   | never differs      | never differs        |
 
-None new. Autopick reuses the shipped candidate check (`subject_shown`,
-`edits_shown`, `specificity`, `subject_primary`, `dup_i_j`).
+### Decision
 
-### Composition
+Not built. Option 0 never carried a warning with either model, so the
+guard had nothing to do. Every policy that moved away from option 0 lost
+the blind comparison: 1 win in 26 cases. Models already put their best
+option first. Picking among options cannot beat that, and it would add
+an extra model call's worth of output and a Jev request to every commit.
 
-Pick the first option from `rankCandidates`. Options with no warnings
-come first, then the most specific. Several options make generation more
-varied, and `interactiveTemperature` already applies to any request for
-more than one option. That setting is shared, and its name becomes
-misleading. Rename it `optionTemperature` as a breaking change.
+The same evidence changed the shipped picker. It used to sort passing
+options by the specificity score, which demoted better options. It now
+keeps the model's order, and the specificity question is gone.
 
-### Config
+### What would reopen it
 
-```json
-{ "typesafe": { "autopickCount": 3 } }
-```
-
-### Validation before it ships
-
-Run the tuning harness (scratchpad `tune/`) with the global Ollama models
-instead of opus, on the same 20 commits:
-
-1. Measure the flag rate on real options. This is the first measure of
-   how often a local model invents edits.
-2. Count how often the top-ranked option differs from option 0. If it
-   never differs, autopick costs time and adds nothing.
-3. Compare option 0 with the autopicked option blind, for the commits
-   where they differ.
-
-### Effort
-
-1 to 2 hours, plus the Ollama run (local, about 20 minutes).
+A model whose first option often carries a warning. Re-run the harness
+(`tune/autopick.ts <generated-dir> guard`) on that model. If the guard
+fires on 10% or more of commits and wins the blind comparison, build
+the guard version of autopick only.
 
 ## B. Mixed-commit warning
 
@@ -375,14 +362,13 @@ About 30 minutes for the code, and 30 minutes to validate.
 
 ## Order of work
 
-1. **A, autopick.** Biggest effect: every non-interactive commit gets
-   better. Validate on Ollama first.
-2. **E, instruction and format checks.** Small, and it rides on the same
-   request as A.
-3. **B, mixed-commit warning.** Same request, with a cheap experiment.
-4. **C, scope and breaking change.** Its own request, and a history
+1. **E, instruction and format checks.** Small, and it joins the
+   candidate check's request.
+2. **B, mixed-commit warning.** A cheap experiment first. It covers
+   non-interactive runs too.
+3. **C, scope and breaking change.** Its own request, and a history
    replay to validate.
-5. **D, picker search.** The most UI work, and only useful with `-i`.
+4. **D, picker search.** The most UI work, and only useful with `-i`.
 
 After each feature: run tests, typecheck and lint, run a live
 end-to-end check, update the design record and README, and commit with
@@ -391,8 +377,6 @@ end-to-end check, update the design record and README, and commit with
 ## Open questions
 
 - Should each feature get its own toggle under `typesafe`, or is
-  `enable` plus `autopickCount` enough? The plan assumes enough, because
-  every feature is either non-blocking or only shapes the prompt. A toggle
-  can be added if one misbehaves.
-- Should autopick also run with `--dry-run`? The plan says yes: a dry run
-  should print what a real run would commit.
+  `enable` enough? The plan assumes enough, because every feature is
+  either non-blocking or only shapes the prompt. A toggle can be added if
+  one misbehaves.

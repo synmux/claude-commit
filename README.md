@@ -188,12 +188,15 @@ asks [TypeSafe](https://typesafe.ai)'s Jev model to check every option
 before the picker opens. The check compares each option with the summaries
 it was written from, then:
 
-- lists the most specific options first
 - shows a `⚠` line under an option whose subject names a change the
   summaries do not show, or that claims an edit they do not show
 - flags a subject about low-priority changes when the primary changes are
   elsewhere
-- drops an option that says the same thing as a better one
+- drops an option that says the same thing as one above it
+
+Otherwise the options keep the order the model wrote them in. Tests
+showed the model's first option beats any reordering, and a flagged
+option moves to the bottom.
 
 One check costs a fraction of a cent and takes under a second. If it
 fails, cco says why and shows the options in the model's order. A failed

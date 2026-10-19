@@ -7,7 +7,7 @@
  * one-line body preview, the list windows itself to the terminal height, and
  * two extra keys (`e` to edit, `q` to cancel) sit alongside Clack's defaults
  * (arrows, `j`/`k`, Enter, Escape, Ctrl-C). When the TypeSafe check ran, the
- * candidates arrive best first and a doubtful one carries a warning line.
+ * doubtful candidates arrive last, each with a warning line.
  * Everything is drawn on stderr so stdout stays clean. If the prompt cannot start for any reason, we fall back
  * to a plain readline question.
  */

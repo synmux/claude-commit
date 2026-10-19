@@ -24,8 +24,6 @@ Per candidate:
 - `edits_shown` (yes/no): is every edit or behaviour change the message
   claims stated in the evidence? Stated reasons and motivations are
   ignored.
-- `specificity` (score, 4 levels): from "could describe any commit" to "a
-  `git log --oneline` reader knows what changed".
 - `subject_primary` (yes/no, only when low-priority paths matched): does
   the subject describe a primary change?
 
@@ -39,8 +37,10 @@ Code makes every decision from constants in `src/typesafe.ts`:
 - A `subject_shown` or `subject_primary` answer below 0.2, or an
   `edits_shown` answer below 0.45, adds a warning. The picker shows the
   warning under the candidate.
-- Candidates without a warning come first, then by specificity. Ties keep
-  the model's order.
+- Candidates without a warning keep the model's order, and flagged ones
+  follow in the same order. An earlier version also sorted by a
+  specificity score, but blind tests showed this demoted better options
+  (see Ordering), so that question was removed.
 - A near-duplicate answer of 0.85 or more drops the lower-ranked candidate
   of the pair.
 - Every expected answer is read before anything is decided. A missing
@@ -118,6 +118,21 @@ dropped 2 of 900 real pairs (one of them a true duplicate).
 With 10 options, a real request averaged 9,444 input tokens (about
 $0.0004) and took 0.46 s at the median and 0.53 s at most.
 
+### Ordering
+
+The first release sorted passing options by a 4-level specificity score.
+A blind test showed this was a mistake. For 37 commits (20 with opus, 17
+with the local `gemma4:31b-mlx` and `muse-glimmer:30b-mlx` models), the
+top-scoring option of 3 was compared with the model's first option, and
+opus judged each pair in random order. Where the two differed, the
+specificity pick won 1 of 17 comparisons. It preferred list-like subjects
+such as "upgrade pnpm/setup, upload-sarif and setup-node". A Jev Choice
+asking which option a maintainer would keep did no better: 0 wins in 9
+comparisons, plus 1 tie. The specificity question was removed, and the
+model's order is now kept apart from moving flagged options down. The
+specificity results in the question-design section above are kept for
+the record.
+
 ## Approaches considered
 
 1. **One `supported` question covering every claim** - rejected. Jev reads
@@ -126,12 +141,15 @@ $0.0004) and took 0.46 s at the median and 0.53 s at most.
 2. **Regenerating flagged messages in non-interactive mode** - deferred.
    It adds a request and latency to every commit, and no real option was
    flagged in tuning, so there was nothing to regenerate.
-3. **A facts-based duplicate question** - rejected after testing (see
+3. **Reordering passing options** - rejected after testing (see
+   Ordering). Neither a specificity score nor a Jev Choice beat the
+   model's first option.
+4. **A facts-based duplicate question** - rejected after testing (see
    Threshold tuning). It separated better but still dropped distinct
    options at any threshold that caught duplicates.
-4. **Choosing the scope and breaking-change marker before the final stage** -
+5. **Choosing the scope and breaking-change marker before the final stage** -
    deferred to a separate change (opportunity #2 in the Jevify review).
-5. **Hand-rolled HTTP** - rejected in favour of `@typesafe-ai/sdk`, which
+6. **Hand-rolled HTTP** - rejected in favour of `@typesafe-ai/sdk`, which
    brings typed answers, retries and error classes. Tests inject `fetch`
    into the real client rather than mocking the module.
 
