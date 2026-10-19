@@ -12,7 +12,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { ClaudeCommitError } from './errors.ts'
 import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST } from './models.ts'
-import type { Config, ModelConfig, OllamaConfig, PartialConfig } from './types.ts'
+import type { Config, ModelConfig, OllamaConfig, PartialConfig, TypeSafeConfig } from './types.ts'
 import { DEFAULT_SPINNER, isSpinnerName } from './ui/spinner.ts'
 
 export const DEFAULT_CONFIG: Config = {
@@ -39,6 +39,12 @@ export const DEFAULT_CONFIG: Config = {
     host: DEFAULT_OLLAMA_HOST,
     context: DEFAULT_OLLAMA_CONTEXT,
     keepAlive: null
+  },
+  typesafe: {
+    enable: false,
+    env: 'TYPESAFE_API_KEY',
+    model: 'jev-1.13.0',
+    timeout: 5_000
   },
   allowApiKey: false
 }
@@ -86,8 +92,8 @@ async function findGlobalConfigFile(
 }
 
 /**
- * Deep-ish merge of a partial config over a base config: `models` and
- * `ollama` are merged key by key; the path lists (`lowPriorityPaths`,
+ * Deep-ish merge of a partial config over a base config: `models`,
+ * `ollama` and `typesafe` are merged key by key; the path lists (`lowPriorityPaths`,
  * `ignore`) are replaced whole - a higher layer's list wins outright, so a
  * project can drop a global pattern - and copied so the result never
  * aliases the base's array.
@@ -95,6 +101,7 @@ async function findGlobalConfigFile(
 export function mergeConfig(base: Config, override: PartialConfig): Config {
   const models: ModelConfig = { ...base.models, ...override.models }
   const ollama: OllamaConfig = { ...base.ollama, ...override.ollama }
+  const typesafe: TypeSafeConfig = { ...base.typesafe, ...override.typesafe }
   const lowPriorityPaths = [...(override.lowPriorityPaths ?? base.lowPriorityPaths)]
   const ignore = [...(override.ignore ?? base.ignore)]
   const merged: Config = {
@@ -102,6 +109,7 @@ export function mergeConfig(base: Config, override: PartialConfig): Config {
     ...override,
     models,
     ollama,
+    typesafe,
     lowPriorityPaths,
     ignore
   }
@@ -188,6 +196,20 @@ export function sanitizePartial(raw: unknown): PartialConfig {
       ollama.keepAlive = null
     }
     if (Object.keys(ollama).length) out.ollama = ollama
+  }
+
+  if (obj.typesafe && typeof obj.typesafe === 'object') {
+    const t = obj.typesafe as Record<string, unknown>
+    const typesafe: Partial<TypeSafeConfig> = {}
+    if (typeof t.enable === 'boolean') typesafe.enable = t.enable
+    // A blank variable or model name is a mistake, not an override: the
+    // layer below still names a working one.
+    if (typeof t.env === 'string' && t.env.trim() !== '') typesafe.env = t.env.trim()
+    if (typeof t.model === 'string' && t.model.trim() !== '') typesafe.model = t.model.trim()
+    if (typeof t.timeout === 'number' && Number.isFinite(t.timeout) && t.timeout > 0) {
+      typesafe.timeout = Math.floor(t.timeout)
+    }
+    if (Object.keys(typesafe).length) out.typesafe = typesafe
   }
 
   return out
@@ -286,9 +308,9 @@ export async function loadFileConfig(
 }
 
 /**
- * Merge two partial configs: `models` and `ollama` are merged key by key;
- * every other key, including both path lists, is taken whole from the
- * override when present.
+ * Merge two partial configs: `models`, `ollama` and `typesafe` are merged
+ * key by key; every other key, including both path lists, is taken whole
+ * from the override when present.
  */
 export function mergePartial(base: PartialConfig, override: PartialConfig): PartialConfig {
   const out: PartialConfig = { ...base, ...override }
@@ -297,6 +319,9 @@ export function mergePartial(base: PartialConfig, override: PartialConfig): Part
   }
   if (base.ollama || override.ollama) {
     out.ollama = { ...base.ollama, ...override.ollama }
+  }
+  if (base.typesafe || override.typesafe) {
+    out.typesafe = { ...base.typesafe, ...override.typesafe }
   }
   const lowPriorityPaths = override.lowPriorityPaths ?? base.lowPriorityPaths
   if (lowPriorityPaths) out.lowPriorityPaths = [...lowPriorityPaths]

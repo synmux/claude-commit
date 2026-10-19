@@ -7,6 +7,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each version also has a [GitHub release](https://github.com/synmux/claude-commit/releases)
 carrying the same notes at greater length.
 
+## [Unreleased]
+
+### [Unreleased] - Added
+
+- **TypeSafe candidate check.** With `"typesafe": { "enable": true }` or
+  `--typesafe`, interactive options are checked by TypeSafe's Jev model
+  before the picker opens. The most specific options come first. An option
+  whose subject or edits the summaries do not show gets a `⚠` warning, and
+  near-duplicates are dropped. The key comes from `$TYPESAFE_API_KEY`, or
+  the variable `typesafe.env` names. The check is off by default.
+
+### [Unreleased] - Fixed
+
+- The picker types its states from Clack's own `State`, so the
+  `validating` state that `@clack/core` added no longer breaks the build.
+- Ollama tests now await their rejection assertions, which Vitest 5
+  requires. Those tests previously passed without checking anything.
+
 ## [1.1.0] - 2026-09-13
 
 ### [1.1.0] - Changed

@@ -118,6 +118,7 @@ and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 | `--no-ignore`                            | Disregard`ignore` for this run, so every staged change is read                             |
 | `--ollama-host <url>`                    | Base URL of the Ollama server for`ollama:` models                                          |
 | `--ollama-context <tokens>`              | Context window requested from Ollama models                                                |
+| `--typesafe` / `--no-typesafe`           | Check and rank interactive options with TypeSafe, or skip the check when enabled in config |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                             |
 | `-y, --yes`                              | Commit without asking for confirmation                                                     |
 | `--no-spinner`                           | Disable the progress spinner                                                               |
@@ -180,6 +181,34 @@ To make interactive mode the default without typing `-i` every time, set
 or with `--dry-run` - `cco` ignores the setting and falls back to the
 non-interactive flow rather than failing.
 
+### TypeSafe candidate check
+
+With `"typesafe": { "enable": true }` in your config (or `--typesafe`), cco
+asks [TypeSafe](https://typesafe.ai)'s Jev model to check every option
+before the picker opens. The check compares each option with the summaries
+it was written from, then:
+
+- lists the most specific options first
+- shows a `⚠` line under an option whose subject names a change the
+  summaries do not show, or that claims an edit they do not show
+- flags a subject about low-priority changes when the primary changes are
+  elsewhere
+- drops an option that says the same thing as a better one
+
+One check costs a fraction of a cent and takes under a second. If it
+fails, cco says why and shows the options in the model's order. A failed
+check never blocks a commit.
+
+The check needs a TypeSafe API key in `$TYPESAFE_API_KEY`. To read it from
+another variable, set `"typesafe.env"`, for example
+`"env": "__TYPESAFE_API_KEY"`. If the check is on and the key is missing,
+cco stops before it calls any model.
+
+When on, cco sends the summaries (or file paths) and the candidate
+messages to TypeSafe. It never sends diff content. The check is off by
+default for that reason. It runs only when cco writes more than one
+option, so a non-interactive run is unchanged.
+
 ## Configuration
 
 Configuration is layered, from lowest to highest precedence:
@@ -225,9 +254,20 @@ keys are valid at every level:
     "context": "auto",
     "keepAlive": null
   },
+  "typesafe": {
+    "enable": false,
+    "env": "TYPESAFE_API_KEY",
+    "model": "jev-1.13.0",
+    "timeout": 5000
+  },
   "allowApiKey": false
 }
 ```
+
+`typesafe` configures the [candidate check](#typesafe-candidate-check).
+`env` names the variable that holds the API key. `model` is pinned because
+the check's thresholds were tested against `jev-1.13.0`. `timeout` is the
+wait per attempt in milliseconds (one retry follows a failure).
 
 `spinner` chooses the progress animation: any name from the
 [cli-spinners](https://github.com/sindresorhus/cli-spinners) set bundled with

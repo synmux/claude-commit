@@ -17,25 +17,30 @@ git.ts ─▶ diff.ts (ignore, partition, chunk) ─▶ generate.ts ─▶ agent
                 paths.ts, tokens.ts             prompts.ts, config.ts
 ```
 
-| Module          | Owns                                                                        |
-| --------------- | --------------------------------------------------------------------------- |
-| `src/agent.ts`  | `runPrompt` - the one call seam; dispatches by provider, holds Claude's SDK |
-| `src/models.ts` | Model-string parsing: the `ollama:` prefix, Ollama defaults. No transport   |
-| `src/ollama.ts` | Ollama's native `/api/chat` over plain `fetch`; no SDK dependency           |
-| `src/diff.ts`   | Splitting, chunk packing, `applyIgnorePatterns`, `partitionDiff`            |
-| `src/paths.ts`  | The gitignore-style matcher shared by `lowPriorityPaths` and `ignore`       |
-| `src/tokens.ts` | Token estimation and context-window budgeting                               |
-| `src/config.ts` | The layered config (defaults < global < package.json < project < flags)     |
+| Module            | Owns                                                                          |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `src/agent.ts`    | `runPrompt` - the one call seam; dispatches by provider, holds Claude's SDK   |
+| `src/models.ts`   | Model-string parsing: the `ollama:` prefix, Ollama defaults. No transport     |
+| `src/ollama.ts`   | Ollama's native `/api/chat` over plain `fetch`; no SDK dependency             |
+| `src/diff.ts`     | Splitting, chunk packing, `applyIgnorePatterns`, `partitionDiff`              |
+| `src/paths.ts`    | The gitignore-style matcher shared by `lowPriorityPaths` and `ignore`         |
+| `src/tokens.ts`   | Token estimation and context-window budgeting                                 |
+| `src/config.ts`   | The layered config (defaults < global < package.json < project < flags)       |
+| `src/typesafe.ts` | The optional Jev candidate check: questions, ranking, `@typesafe-ai/sdk` call |
 
 Design records for each non-obvious feature live in
 `docs/superpowers/specs/`. Read the relevant one before changing that
 feature - they record what was rejected and why.
 
-Two behaviours are load-bearing and easy to break:
+Three behaviours are load-bearing and easy to break:
 
 - **Claude credentials are gated.** `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`
   are stripped from the SDK subprocess unless `allowApiKey` is set. Never
   widen that by accident.
+- **A failed TypeSafe check must never look like a pass.** A missing key
+  with `typesafe.enable` on is an error before any model call. A missing
+  answer throws, and an API failure is reported to the user. Jev returns
+  typed answers, not text, so it does not go through `runPrompt`.
 - **Ollama truncates an oversized prompt silently.** Every Ollama request
   pins `options.num_ctx` and the response's token counts are checked against
   it. Do not "simplify" either half away. The number comes from
@@ -59,7 +64,7 @@ properties). Use Node built-ins (`node:fs/promises`, `node:child_process`,
 - `node bin/cco.js` - the launcher imports `dist/bin/cco.js` when it exists,
   else `bin/cco.ts` from source. `pnpm run build` (esbuild + declaration-only
   `tsc`) is only needed for publishing; `prepublishOnly` runs it.
-- `pnpm test` - vitest, `test/**/*.test.ts`. `pnpm run typecheck` -
+- `pnpm test` - vitest, `test/**/*.test.ts`. `pnpm run lint:types` -
   `tsc --noEmit`. `pnpm run lint` - trunk.
 
 ## Testing

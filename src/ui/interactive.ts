@@ -6,13 +6,14 @@
  * function ({@link renderPicker}): every candidate shows its subject line and a
  * one-line body preview, the list windows itself to the terminal height, and
  * two extra keys (`e` to edit, `q` to cancel) sit alongside Clack's defaults
- * (arrows, `j`/`k`, Enter, Escape, Ctrl-C). Everything is drawn on stderr so
- * stdout stays clean. If the prompt cannot start for any reason, we fall back
+ * (arrows, `j`/`k`, Enter, Escape, Ctrl-C). When the TypeSafe check ran, the
+ * candidates arrive best first and a doubtful one carries a warning line.
+ * Everything is drawn on stderr so stdout stays clean. If the prompt cannot start for any reason, we fall back
  * to a plain readline question.
  */
 import { createInterface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
-import { isCancel, SelectPrompt } from '@clack/core'
+import { isCancel, SelectPrompt, type State } from '@clack/core'
 import {
   limitOptions,
   S_BAR,
@@ -23,7 +24,7 @@ import {
   S_STEP_CANCEL,
   S_STEP_SUBMIT
 } from '@clack/prompts'
-import { generateCommit } from '../generate.ts'
+import { type GenerateResult, generateCommit } from '../generate.ts'
 import { commit } from '../git.ts'
 import type { Config } from '../types.ts'
 import { color } from './colors.ts'
@@ -43,7 +44,7 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
   const count = Math.max(1, config.interactiveCount)
   const spinner = new Spinner(process.stderr.isTTY, config.spinner)
   spinner.start(`Generating ${count} option${count === 1 ? '' : 's'}`)
-  let result
+  let result: GenerateResult
   try {
     result = await generateCommit(diff, config, {
       count,
@@ -56,14 +57,19 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
   }
   spinner.stop()
 
-  const messages = result.messages
+  const { messages, warnings, candidateCheck } = result
+  if (candidateCheck?.status === 'failed') {
+    process.stderr.write(
+      color('33', `TypeSafe check failed (${candidateCheck.error}); options are in the model's order.`) + '\n'
+    )
+  }
 
   let selection: Selection
   try {
-    selection = await selectWithPrompt(messages)
+    selection = await selectWithPrompt(messages, { warnings })
   } catch {
     // The prompt failed to start (unusual terminal, etc.) - degrade gracefully.
-    selection = await selectWithReadline(messages)
+    selection = await selectWithReadline(messages, warnings)
   }
 
   if (selection.action === 'cancel') {
@@ -71,7 +77,9 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
     return 1
   }
 
-  let message = messages[selection.index]!
+  const chosen = messages[selection.index]
+  if (chosen === undefined) throw new Error(`Picker returned option ${selection.index} of ${messages.length}.`)
+  let message = chosen
   if (selection.action === 'edit') {
     message = await editInEditor(message)
     if (message.trim() === '') {
@@ -84,16 +92,35 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
   process.stderr.write(`${color('32', '✔')} Committed\n${color('90', firstLine(message))}\n`)
   if (opts.verbose) {
     process.stderr.write(color('90', `cost $${result.costUsd.toFixed(4)}`) + '\n')
+    if (candidateCheck?.status === 'checked') {
+      process.stderr.write(color('90', describeCandidateCheck(candidateCheck)) + '\n')
+    }
   }
   return 0
 }
 
-/** The lifecycle states a Clack prompt renders in. */
-export type PickerState = 'initial' | 'active' | 'submit' | 'cancel' | 'error'
+/** One `--verbose` line for a completed TypeSafe check. */
+export function describeCandidateCheck(check: {
+  model: string
+  inputTokens: number
+  droppedDuplicates: number
+}): string {
+  const dropped = `${check.droppedDuplicates} near-duplicate${check.droppedDuplicates === 1 ? '' : 's'} dropped`
+  return `TypeSafe check (${check.model}): ${check.inputTokens} input tokens, ${dropped}`
+}
+
+/**
+ * The lifecycle states a Clack prompt renders in. Taken from Clack itself so
+ * a state added upstream (as `validating` was) is handled by the default
+ * branch of {@link renderPicker} instead of breaking the build.
+ */
+export type PickerState = State
 
 /** Everything {@link renderPicker} needs to draw one frame. */
 export interface PickerFrame {
   messages: string[]
+  /** Warnings from the TypeSafe check, aligned with `messages`; omitted or empty when unchecked. */
+  warnings?: string[][]
   /** Index of the highlighted candidate. */
   cursor: number
   state: PickerState
@@ -125,7 +152,7 @@ const PICKER_GUTTER_COLUMNS = 3
  * Clack's visual language.
  */
 export function renderPicker(frame: PickerFrame): string {
-  const { messages, cursor, state, output } = frame
+  const { messages, warnings, cursor, state, output } = frame
   const chosen = firstLine(messages[cursor] ?? '')
   const dimBar = color('90', S_BAR)
 
@@ -140,7 +167,7 @@ export function renderPicker(frame: PickerFrame): string {
       const bar = color('36', S_BAR)
       const rows = limitOptions({
         cursor,
-        options: messages,
+        options: messages.map((message, index) => ({ message, warnings: warnings?.[index] ?? [] })),
         output,
         rowPadding: PICKER_CHROME_ROWS,
         columnPadding: PICKER_GUTTER_COLUMNS,
@@ -157,19 +184,26 @@ export function renderPicker(frame: PickerFrame): string {
   }
 }
 
-/** One candidate: its subject with a radio glyph, then an indented body preview. */
-function renderCandidate(message: string, active: boolean): string {
+/**
+ * One candidate: its subject with a radio glyph, then an indented body
+ * preview, then any TypeSafe warnings on a line of their own.
+ */
+function renderCandidate(candidate: { message: string; warnings: string[] }, active: boolean): string {
+  const { message, warnings } = candidate
   const glyph = active ? color('32', S_RADIO_ACTIVE) : color('90', S_RADIO_INACTIVE)
   const subject = active ? firstLine(message) : color('90', firstLine(message))
   const preview = bodyPreview(message)
   const previewLine = preview === '' ? '' : `\n  ${color('90', preview)}`
-  return `${glyph} ${subject}${previewLine}`
+  const warningLine = warnings.length === 0 ? '' : `\n  ${color('33', `⚠ ${warnings.join(' · ')}`)}`
+  return `${glyph} ${subject}${previewLine}${warningLine}`
 }
 
-/** The streams a prompt talks to; default to stdin and stderr. */
-export interface PromptStreams {
+/** The streams a prompt talks to (default stdin and stderr) and the candidates' warnings. */
+export interface PromptOptions {
   input?: Readable
   output?: Writable
+  /** Warnings from the TypeSafe check, aligned with the messages. */
+  warnings?: string[][]
 }
 
 /**
@@ -177,9 +211,9 @@ export interface PromptStreams {
  * highlighted candidate, `e` edits it first, and `q`, Escape or Ctrl-C cancel.
  * Rejects only if the prompt cannot be created at all.
  */
-export async function selectWithPrompt(messages: string[], streams: PromptStreams = {}): Promise<Selection> {
-  const input = streams.input ?? process.stdin
-  const output = streams.output ?? process.stderr
+export async function selectWithPrompt(messages: string[], options: PromptOptions = {}): Promise<Selection> {
+  const input = options.input ?? process.stdin
+  const output = options.output ?? process.stderr
   let action: 'commit' | 'edit' = 'commit'
 
   const prompt = new SelectPrompt<{ value: number }>({
@@ -190,6 +224,7 @@ export async function selectWithPrompt(messages: string[], streams: PromptStream
     render() {
       return renderPicker({
         messages,
+        ...(options.warnings ? { warnings: options.warnings } : {}),
         cursor: this.cursor,
         state: this.state,
         output
@@ -217,9 +252,13 @@ export async function selectWithPrompt(messages: string[], streams: PromptStream
 }
 
 /** Plain-prompt fallback when the picker is unavailable. */
-async function selectWithReadline(messages: string[]): Promise<Selection> {
+async function selectWithReadline(messages: string[], warnings: string[][]): Promise<Selection> {
   process.stderr.write('\nCandidate commit messages:\n')
-  messages.forEach((message, index) => process.stderr.write(`  ${index + 1}. ${firstLine(message)}\n`))
+  messages.forEach((message, index) => {
+    process.stderr.write(`  ${index + 1}. ${firstLine(message)}\n`)
+    const flagged = warnings[index] ?? []
+    if (flagged.length > 0) process.stderr.write(`     ⚠ ${flagged.join(' · ')}\n`)
+  })
 
   const rl = createInterface({ input: process.stdin, output: process.stderr })
   try {
@@ -236,7 +275,7 @@ async function selectWithReadline(messages: string[]): Promise<Selection> {
 
       const editMatch = answer.match(/^e\s*(\d+)$/)
       if (editMatch) {
-        const index = parseInt(editMatch[1]!, 10) - 1
+        const index = parseInt(editMatch[1] ?? '', 10) - 1
         if (index >= 0 && index < messages.length) return { action: 'edit', index }
       }
 

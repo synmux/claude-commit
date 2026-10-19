@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
 import { generateCommit } from '../src/generate.ts'
 import type { Config, ModelResult } from '../src/types.ts'
+import { answeringJevFetch, fakeJevFetch } from './typesafe-fixtures.ts'
 
 type Runner = typeof runPrompt
 
@@ -154,9 +155,9 @@ describe('generateCommit', () => {
     const { runner, summaryCalls } = stubRunner()
     const result = await generateCommit(`${textDiff}\n${skillDiff}`, baseConfig, { runner })
     expect(result.summaries.map((summary) => summary.priority)).toEqual(['primary'])
-    expect(summaryCalls[0]!.prompt).toContain('old line')
-    expect(summaryCalls[0]!.prompt).toContain('generated 2026-08-24')
-    expect(summaryCalls[0]!.system).not.toMatch(LOW_PRIORITY_SYSTEM)
+    expect(summaryCalls[0]?.prompt).toContain('old line')
+    expect(summaryCalls[0]?.prompt).toContain('generated 2026-08-24')
+    expect(summaryCalls[0]?.system).not.toMatch(LOW_PRIORITY_SYSTEM)
   })
 
   test('low-priority sections are summarised separately, after the primary ones, with their own prompt', async () => {
@@ -186,7 +187,7 @@ describe('generateCommit', () => {
       runner
     })
     expect(summaryCalls.length).toBe(1)
-    expect(summaryCalls[0]!.system).not.toMatch(LOW_PRIORITY_SYSTEM)
+    expect(summaryCalls[0]?.system).not.toMatch(LOW_PRIORITY_SYSTEM)
     expect(result.summaries.map((summary) => summary.priority)).toEqual(['primary'])
     expect(finalPrompts[0]).not.toContain('Low-priority changes')
   })
@@ -215,7 +216,7 @@ describe('generateCommit', () => {
     const result = await generateCommit(`${textDiff}\n${armorDiff(1_000)}`, config, { runner })
     expect(rejected).toBe(true)
     // One primary chunk, then several low-priority pieces after the retry.
-    expect(result.summaries[0]!.priority).toBe('primary')
+    expect(result.summaries[0]?.priority).toBe('primary')
     const lowSummaries = result.summaries.slice(1)
     expect(lowSummaries.length).toBeGreaterThan(1)
     expect(lowSummaries.every((summary) => summary.priority === 'low')).toBe(true)
@@ -259,9 +260,9 @@ describe('generateCommit', () => {
       runner
     })
     expect(summaryCalls.length).toBe(2)
-    expect(summaryCalls[1]!.system).toMatch(LOW_PRIORITY_SYSTEM)
-    expect(summaryCalls[1]!.prompt).toContain('[cco: 400 armored/encoded lines omitted]')
-    expect(summaryCalls[1]!.prompt).not.toContain('Ab9Xy')
+    expect(summaryCalls[1]?.system).toMatch(LOW_PRIORITY_SYSTEM)
+    expect(summaryCalls[1]?.prompt).toContain('[cco: 400 armored/encoded lines omitted]')
+    expect(summaryCalls[1]?.prompt).not.toContain('Ab9Xy')
   })
 
   test('skipArmored redacts ciphertext before it reaches the model', async () => {
@@ -304,12 +305,12 @@ describe('filenamesOnly', () => {
       }
     )
     expect(calls).toHaveLength(1)
-    expect(calls[0]!.model).toBe('final-model')
-    expect(calls[0]!.prompt).toContain('"a.txt"')
-    expect(calls[0]!.prompt).toContain('".agents/skills/ora-skilld/SKILL.md"')
-    expect(calls[0]!.prompt).toContain('Low-priority changes')
-    expect(calls[0]!.prompt).not.toMatch(/old line|new line|generated 2026|diff --git|@@|summary of/)
-    expect(calls[0]!.system).toContain('only the filenames')
+    expect(calls[0]?.model).toBe('final-model')
+    expect(calls[0]?.prompt).toContain('"a.txt"')
+    expect(calls[0]?.prompt).toContain('".agents/skills/ora-skilld/SKILL.md"')
+    expect(calls[0]?.prompt).toContain('Low-priority changes')
+    expect(calls[0]?.prompt).not.toMatch(/old line|new line|generated 2026|diff --git|@@|summary of/)
+    expect(calls[0]?.system).toContain('only the filenames')
     expect(result.messages).toEqual(['Update files'])
     expect(result.chunkCount).toBe(0)
     expect(result.summaries).toEqual([])
@@ -580,7 +581,7 @@ describe('Ollama auto context', () => {
       ollamaConfig({ ollama: { ...baseConfig.ollama, context: 16_384 } }),
       {
         runner: stubRunner,
-        resolveOllamaContext: async (model, config) => {
+        resolveOllamaContext: async (_model, config) => {
           probes += 1
           // The real resolver short-circuits on a number; mirror that.
           return typeof config?.context === 'number' ? config.context : 0
@@ -661,3 +662,94 @@ function armorFreeDiff(lines: number): string {
     ...body
   ].join('\n')
 }
+
+describe('TypeSafe candidate check', () => {
+  const candidates = ['fix(a): first option', 'fix(a): second option', 'fix(a): third option']
+  const typesafeConfig: Config = { ...baseConfig, typesafe: { ...baseConfig.typesafe, enable: true } }
+  const env = { TYPESAFE_API_KEY: 'ts-key' }
+
+  /** A runner whose final stage returns three candidates, counting every call. */
+  function threeOptionRunner() {
+    const calls: string[] = []
+    const runner: Runner = async (prompt, opts): Promise<ModelResult> => {
+      calls.push(prompt)
+      if (opts.outputFormat) return { text: '', costUsd: 0.001, structured: { messages: candidates } }
+      return { text: 'Summary: a.txt replaces old line with new line.', costUsd: 0.002 }
+    }
+    return { runner, calls }
+  }
+
+  test('ranks, flags and reports the candidates when enabled', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch({ c0_subject_shown: 0.05, c2_specificity: 3 })
+    const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 3, env, typesafeFetch: fetch })
+
+    expect(result.messages).toEqual([candidates[2], candidates[1], candidates[0]])
+    expect(result.warnings).toEqual([[], [], ['subject names a change the summaries do not show']])
+    expect(result.candidateCheck).toEqual({
+      status: 'checked',
+      model: 'jev-1.13.0',
+      inputTokens: 1500,
+      droppedDuplicates: 0
+    })
+    expect(requests).toHaveLength(1)
+    expect(JSON.stringify(requests[0]?.body.state)).toContain('a.txt replaces old line')
+  })
+
+  test('a missing key fails before any model is called', async () => {
+    const { runner, calls } = threeOptionRunner()
+    await expect(generateCommit(textDiff, typesafeConfig, { runner, count: 3, env: {} })).rejects.toThrow(
+      /TYPESAFE_API_KEY/
+    )
+    expect(calls).toHaveLength(0)
+  })
+
+  test('reads the key from the variable "typesafe.env" names', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch()
+    const config: Config = { ...typesafeConfig, typesafe: { ...typesafeConfig.typesafe, env: '__TYPESAFE_API_KEY' } }
+    await generateCommit(textDiff, config, {
+      runner,
+      count: 3,
+      env: { __TYPESAFE_API_KEY: 'alt' },
+      typesafeFetch: fetch
+    })
+    expect(requests[0]?.headers.get('authorization')).toBe('Bearer alt')
+  })
+
+  test('a failed check keeps the model order and says why', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch } = fakeJevFetch(() => ({ status: 401, json: { error: 'invalid key' } }))
+    const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 3, env, typesafeFetch: fetch })
+
+    expect(result.messages).toEqual(candidates)
+    expect(result.warnings).toEqual([[], [], []])
+    expect(result.candidateCheck?.status).toBe('failed')
+  })
+
+  test('does not run for a single message or when disabled', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch()
+    const single = await generateCommit(textDiff, typesafeConfig, { runner, count: 1, env: {}, typesafeFetch: fetch })
+    const disabled = await generateCommit(textDiff, baseConfig, { runner, count: 3, env: {}, typesafeFetch: fetch })
+
+    expect(requests).toHaveLength(0)
+    expect(single.candidateCheck).toBeNull()
+    expect(disabled.candidateCheck).toBeNull()
+    expect(disabled.messages).toEqual(candidates)
+  })
+
+  test('checks filenames-only candidates against the file list', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch()
+    await generateCommit(
+      textDiff,
+      { ...typesafeConfig, filenamesOnly: true },
+      { runner, count: 3, env, typesafeFetch: fetch }
+    )
+
+    const state = requests[0]?.body.state as { context: string; evidence: { primary: string } }
+    expect(state.context).toMatch(/paths of the changed files/)
+    expect(state.evidence.primary).toBe('a.txt')
+  })
+})

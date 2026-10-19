@@ -29,7 +29,14 @@
  * message(s), applying the configured formatting rules.
  * With filenamesOnly, the summary stage is skipped entirely and the final
  * model receives only paths from the filtered, priority-grouped diff.
+ *
+ * When several candidates are requested and `typesafe.enable` is on, a last
+ * step asks TypeSafe's Jev model to check each candidate against the same
+ * summaries or paths, then orders them best first, flags doubtful ones and
+ * drops near-duplicates (`src/typesafe.ts`). A failed check leaves the
+ * candidates in the model's order and reports why; it never blocks a commit.
  */
+import type { Fetch } from '@typesafe-ai/sdk'
 import { runPrompt } from './agent.ts'
 import { applyIgnorePatterns, diffPaths, partitionDiff, redactOpaqueRuns, splitDiffToFit } from './diff.ts'
 import { ClaudeCommitError, isPromptTooLongError } from './errors.ts'
@@ -50,6 +57,7 @@ import {
 } from './prompts.ts'
 import { clampChunkTokens } from './tokens.ts'
 import type { ChangePriority, Config, DiffSummary, OllamaConfig } from './types.ts'
+import { type CandidateEvidence, checkCandidates, resolveTypeSafeKey } from './typesafe.ts'
 
 export interface GenerateProgress {
   /** Called when a new phase of work begins (for spinner labels). */
@@ -76,7 +84,19 @@ export interface GenerateOptions {
    * {@link resolveOllamaContext}.
    */
   resolveOllamaContext?: typeof resolveOllamaContext
+  /**
+   * HTTP transport for the TypeSafe check; injectable so tests can exercise
+   * the real SDK client without a network. Defaults to the global `fetch`.
+   */
+  typesafeFetch?: Fetch
+  /** Environment the TypeSafe API key is read from. Defaults to `process.env`. */
+  env?: Record<string, string | undefined>
 }
+
+/** What the TypeSafe candidate check did on this run. */
+export type CandidateCheckReport =
+  | { status: 'checked'; model: string; inputTokens: number; droppedDuplicates: number }
+  | { status: 'failed'; error: string }
 
 /** The context window one Ollama model ran with during this run. */
 export interface OllamaContextWindow {
@@ -106,8 +126,15 @@ export interface LowPriorityStats {
 }
 
 export interface GenerateResult {
-  /** Candidate commit messages (length 1 in non-interactive mode). */
+  /**
+   * Candidate commit messages (length 1 in non-interactive mode). After a
+   * TypeSafe check they are in display order, best first.
+   */
   messages: string[]
+  /** Why each message is doubtful, aligned with `messages`; all empty when nothing was checked. */
+  warnings: string[][]
+  /** What the TypeSafe check did, or `null` when it did not run. */
+  candidateCheck: CandidateCheckReport | null
   /** Intermediate summaries, primary first. Empty when filenamesOnly is enabled. */
   summaries: DiffSummary[]
   /** Number of diff chunks the summary stage processed, across both partitions. */
@@ -267,8 +294,13 @@ export async function generateCommit(
     progress = {},
     abortController,
     runner = runPrompt,
-    resolveOllamaContext: resolveContext = resolveOllamaContext
+    resolveOllamaContext: resolveContext = resolveOllamaContext,
+    typesafeFetch,
+    env = process.env
   } = options
+  // Resolve the key before any model is paid for: a check the user turned on
+  // but cannot run is a configuration error, found best before the work.
+  const typesafeKey = count > 1 && config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
   const contexts = new OllamaContextResolver(config.ollama, resolveContext, abortController?.signal)
 
   // Ignore first: dropped sections cost nothing downstream. Unlike a
@@ -396,10 +428,39 @@ export async function generateCommit(
     throw new ClaudeCommitError('The model did not produce a commit message.')
   }
 
+  let shown = { messages: deduped, warnings: deduped.map((): string[] => []) }
+  let candidateCheck: CandidateCheckReport | null = null
+  if (typesafeKey) {
+    progress.onPhase?.('Checking options')
+    const evidence = filenames
+      ? filenameEvidence(filenames, hasLowPriority)
+      : summaryEvidence(summaries, hasLowPriority)
+    try {
+      const checked = await checkCandidates(deduped, evidence, {
+        apiKey: typesafeKey,
+        settings: config.typesafe,
+        ...(typesafeFetch ? { fetch: typesafeFetch } : {}),
+        ...(abortController ? { signal: abortController.signal } : {})
+      })
+      shown = { messages: checked.messages, warnings: checked.warnings }
+      candidateCheck = {
+        status: 'checked',
+        model: checked.model,
+        inputTokens: checked.inputTokens,
+        droppedDuplicates: checked.droppedDuplicates
+      }
+    } catch (error) {
+      if (abortController?.signal.aborted) throw new ClaudeCommitError('Generation was cancelled.')
+      candidateCheck = { status: 'failed', error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
   // Report chunks actually processed: overflow retries can split further
   // than the initial estimate planned.
   return {
-    messages: deduped,
+    messages: shown.messages,
+    warnings: shown.warnings,
+    candidateCheck,
     summaries,
     chunkCount: summaries.length,
     costUsd,
@@ -430,6 +491,29 @@ export function describeFullyIgnored(stats: IgnoreStats): string {
     `nothing left to describe. Narrow the patterns, or pass --no-ignore to ` +
     `write a message about these changes for this commit.`
   )
+}
+
+/** The summaries as TypeSafe check evidence, split by priority only when both groups exist. */
+function summaryEvidence(summaries: DiffSummary[], hasLowPriority: boolean): CandidateEvidence {
+  const join = (priority?: ChangePriority) =>
+    summaries
+      .filter((summary) => priority === undefined || summary.priority === priority)
+      .map((summary) => summary.text)
+      .join('\n\n')
+  return hasLowPriority
+    ? { kind: 'summaries', primary: join('primary'), lowPriority: join('low') }
+    : { kind: 'summaries', primary: join(), lowPriority: null }
+}
+
+/** The changed paths as TypeSafe check evidence (filenamesOnly mode). */
+function filenameEvidence(
+  filenames: { primary: string[]; lowPriority: string[] },
+  hasLowPriority: boolean
+): CandidateEvidence {
+  const list = (paths: string[]) => paths.join('\n')
+  return hasLowPriority
+    ? { kind: 'filenames', primary: list(filenames.primary), lowPriority: list(filenames.lowPriority) }
+    : { kind: 'filenames', primary: list([...filenames.primary, ...filenames.lowPriority]), lowPriority: null }
 }
 
 function dedupe(items: string[]): string[] {

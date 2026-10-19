@@ -41,6 +41,8 @@ interface CliOptions {
   ignore?: boolean
   ollamaHost?: string
   ollamaContext?: number | 'auto'
+  /** `true` for `--typesafe`, `false` for `--no-typesafe`, unset otherwise. */
+  typesafe?: boolean
 }
 
 /** Build the Commander program. Exported for tests. */
@@ -79,6 +81,8 @@ export function buildProgram(): Command {
       'context window for Ollama models: a token count, or auto to use ' + "the server's own choice for this machine",
       parseContextFlag
     )
+    .option('--typesafe', 'check and rank interactive options with TypeSafe (needs an API key)')
+    .option('--no-typesafe', 'skip the TypeSafe check even when "typesafe.enable" is set in config')
     .option('-d, --dry-run', 'print the message to stdout without committing')
     .option('-y, --yes', 'commit without asking for confirmation')
     .option('--no-spinner', 'disable the progress spinner')
@@ -99,6 +103,12 @@ export function buildProgram(): Command {
         '  e.g. --model-summary ollama:ornith-1.5:35b. Everything after the',
         '  prefix is the Ollama model name, tag included. The server needs no',
         '  credential; point cco at it with --ollama-host or $OLLAMA_HOST.',
+        '',
+        'TypeSafe check:',
+        '  With "typesafe": { "enable": true } in config (or --typesafe),',
+        "  interactive options are checked by TypeSafe's Jev model: best",
+        '  first, doubtful ones flagged, near-duplicates dropped. The key is',
+        '  read from $TYPESAFE_API_KEY, or the variable "typesafe.env" names.',
         '',
         'Examples:',
         '  cco                     generate and commit a message for staged changes',
@@ -143,6 +153,7 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
     ollama.context = Math.max(1, opts.ollamaContext)
   }
   if (Object.keys(ollama).length) cfg.ollama = ollama
+  if (opts.typesafe !== undefined) cfg.typesafe = { enable: opts.typesafe }
   if (opts.count !== undefined && Number.isFinite(opts.count)) {
     cfg.interactiveCount = Math.max(1, opts.count)
   }
