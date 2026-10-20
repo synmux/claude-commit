@@ -25,6 +25,12 @@ carrying the same notes at greater length.
   does not fit (such as `🔧 feat:`) is flagged and moved down. It runs in
   code without a request, so non-interactive runs get it too.
 
+### [Unreleased] - Changed
+
+- **Requires Node.js 26** (26.10 or later), up from 24. The Ollama timeout
+  uses undici's `Agent` with Node's built-in fetch, which only accepts one
+  from the same undici major as the fetch: Node 26 ships undici 8.
+
 ### [Unreleased] - Fixed
 
 - **Ollama requests on large diffs no longer fail with a bare "fetch

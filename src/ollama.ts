@@ -184,8 +184,10 @@ export async function resolveOllamaContext(
  * model failed at exactly 300.9 s with nothing but "fetch failed". Setting
  * them here makes the limit explicit and configurable.
  *
- * `undici` is pinned to 7: Node 24's built-in fetch is undici 7 and rejects
- * an undici 8 dispatcher outright (`UND_ERR_INVALID_ARG`).
+ * `undici`'s major version must match the one inside the supported Node:
+ * Node 26 bundles undici 8, and a fetch rejects a dispatcher from another
+ * major outright (`UND_ERR_INVALID_ARG`, seen with undici 8 on Node 24).
+ * `engines` and Dependabot's ignore rule keep the two together.
  */
 const dispatchers = new Map<number, Agent>()
 function dispatcherFor(timeout: number): Agent {
@@ -205,12 +207,11 @@ async function ollamaFetch(
   signal?: AbortSignal
 ): Promise<Response> {
   try {
-    // The cast bridges @types/node's undici-types and the undici 7 package's own Agent type.
     return await fetch(url, {
       ...init,
       dispatcher: dispatcherFor(target.timeout),
       ...(signal ? { signal } : {})
-    } as RequestInit)
+    })
   } catch (error) {
     if (signal?.aborted) {
       throw new ClaudeCommitError('Generation was cancelled.')
