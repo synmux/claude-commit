@@ -227,7 +227,10 @@ function multiOptionInstruction(count: number, hasLowPriority = false): string {
 
 /** Join a group of summaries, numbering them as parts when there are several. */
 function joinSummaryTexts(texts: string[]): string {
-  return texts.length === 1 ? texts[0]! : texts.map((text, index) => `Part ${index + 1}:\n${text}`).join('\n\n')
+  const [only] = texts
+  return texts.length === 1 && only !== undefined
+    ? only
+    : texts.map((text, index) => `Part ${index + 1}:\n${text}`).join('\n\n')
 }
 
 /** Whether the summaries span both priority groups (the only case that needs the weighting rules). */
@@ -335,7 +338,7 @@ export function cleanMessage(text: string): string {
 
   // Remove a single wrapping fenced code block.
   const fence = msg.match(/^```[^\n]*\n([\s\S]*?)\n?```$/)
-  if (fence) msg = fence[1]!.trim()
+  if (fence?.[1] !== undefined) msg = fence[1].trim()
 
   // Remove matching wrapping quotes only if the whole message is quoted.
   if (msg.length >= 2) {

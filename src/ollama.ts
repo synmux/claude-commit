@@ -373,8 +373,7 @@ async function consumeStream(
     const { value, done } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    let newline: number
-    while ((newline = buffer.indexOf('\n')) >= 0) {
+    for (let newline = buffer.indexOf('\n'); newline >= 0; newline = buffer.indexOf('\n')) {
       const line = buffer.slice(0, newline)
       buffer = buffer.slice(newline + 1)
       handleLine(line)
