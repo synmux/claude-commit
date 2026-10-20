@@ -58,10 +58,11 @@ export interface OllamaConfig {
 }
 
 /**
- * Settings for the TypeSafe candidate check: in interactive mode, TypeSafe's
- * Jev model checks every candidate message against the evidence it was
- * written from, the picker moves doubtful ones last with a warning and
- * drops near-duplicates. See `src/typesafe.ts`.
+ * Settings for the TypeSafe candidate check: on every run, interactive or
+ * not, TypeSafe's Jev model checks each candidate message against the
+ * evidence it was written from and asks whether the staged changes look
+ * like more than one commit. Doubtful candidates move last with a warning
+ * and near-duplicates are dropped. See `src/typesafe.ts`.
  */
 export interface TypeSafeConfig {
   /** Run the check. Off by default: it sends summaries and candidates to TypeSafe. */
@@ -78,8 +79,9 @@ export interface TypeSafeConfig {
    */
   model: string
   /**
-   * Milliseconds to wait for each attempt (one retry follows a timeout). The
-   * picker waits for the check, so this bounds the delay a slow service adds.
+   * Milliseconds to wait for each attempt (one retry follows a timeout).
+   * Every run waits for the check, so this bounds the delay a slow service
+   * adds.
    */
   timeout: number
 }
@@ -173,7 +175,7 @@ export interface Config {
   ignore: string[]
   /** Settings for the Ollama backend (`ollama:`-prefixed models). */
   ollama: OllamaConfig
-  /** Settings for the TypeSafe candidate check (interactive mode). */
+  /** Settings for the TypeSafe candidate check. */
   typesafe: TypeSafeConfig
   /**
    * Allow API credentials from the environment (`ANTHROPIC_API_KEY` /
