@@ -28,7 +28,7 @@ import { describeCandidateCheck, describeCheckNotices, type GenerateResult, gene
 import { commit } from '../git.ts'
 import type { Config } from '../types.ts'
 import { color } from './colors.ts'
-import { editInEditor } from './editor.ts'
+import { askLine, editInEditor, type PromptIo } from './editor.ts'
 import { Spinner } from './spinner.ts'
 
 export interface InteractiveOptions {
@@ -155,7 +155,10 @@ export function renderPicker(frame: PickerFrame): string {
       const bar = color('36', S_BAR)
       const rows = limitOptions({
         cursor,
-        options: messages.map((message, index) => ({ message, warnings: warnings?.[index] ?? [] })),
+        options: messages.map((message, index) => ({
+          message,
+          warnings: warnings?.[index] ?? []
+        })),
         output,
         rowPadding: PICKER_CHROME_ROWS,
         columnPadding: PICKER_GUTTER_COLUMNS,
@@ -240,26 +243,28 @@ export async function selectWithPrompt(messages: string[], options: PromptOption
 }
 
 /** Plain-prompt fallback when the picker is unavailable. */
-async function selectWithReadline(messages: string[], warnings: string[][]): Promise<Selection> {
-  process.stderr.write('\nCandidate commit messages:\n')
+export async function selectWithReadline(
+  messages: string[],
+  warnings: string[][],
+  io: PromptIo = {}
+): Promise<Selection> {
+  const input = io.input ?? process.stdin
+  const output = io.output ?? process.stderr
+  output.write('\nCandidate commit messages:\n')
   messages.forEach((message, index) => {
-    process.stderr.write(`  ${index + 1}. ${firstLine(message)}\n`)
+    output.write(`  ${index + 1}. ${firstLine(message)}\n`)
     const flagged = warnings[index] ?? []
-    if (flagged.length > 0) process.stderr.write(`     ⚠ ${flagged.join(' · ')}\n`)
+    if (flagged.length > 0) output.write(`     ⚠ ${flagged.join(' · ')}\n`)
   })
 
-  const rl = createInterface({ input: process.stdin, output: process.stderr })
+  const rl = createInterface({ input, output })
   try {
     for (;;) {
-      const answer = (
-        await new Promise<string>((res) =>
-          rl.question(`Choose 1-${messages.length}, "e N" to edit, or q to quit: `, res)
-        )
-      )
-        .trim()
+      const answer = (await askLine(rl, `Choose 1-${messages.length}, "e N" to edit, or q to quit: `))
+        ?.trim()
         .toLowerCase()
 
-      if (answer === 'q' || answer === '') return { action: 'cancel' }
+      if (answer === undefined || answer === 'q' || answer === '') return { action: 'cancel' }
 
       const editMatch = answer.match(/^e\s*(\d+)$/)
       if (editMatch) {
@@ -271,7 +276,7 @@ async function selectWithReadline(messages: string[], warnings: string[][]): Pro
       if (choice >= 1 && choice <= messages.length) {
         return { action: 'commit', index: choice - 1 }
       }
-      process.stderr.write('Invalid choice.\n')
+      output.write('Invalid choice.\n')
     }
   } finally {
     rl.close()
