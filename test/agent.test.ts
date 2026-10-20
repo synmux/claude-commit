@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import { buildQueryOptions, buildSubprocessEnv, presentCredentialVars } from '../src/agent.ts'
 
+/** `buildSubprocessEnv` for a case that must produce an env, as a non-optional value. */
+function builtEnv(opts: Parameters<typeof buildSubprocessEnv>[0]): Record<string, string | undefined> {
+  return buildSubprocessEnv(opts) ?? expect.unreachable('expected a subprocess env to be built')
+}
+
 const cleanEnv = { PATH: '/usr/bin', HOME: '/home/user' }
 
 describe('presentCredentialVars', () => {
@@ -40,89 +45,88 @@ describe('buildSubprocessEnv', () => {
   })
 
   test('strips ANTHROPIC_API_KEY when the gate is off', () => {
-    const env = buildSubprocessEnv({
+    const env = builtEnv({
       baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: 'sk-test' },
       allowApiKey: false
     })
-    expect(env).toBeDefined()
-    expect(Object.keys(env!)).not.toContain('ANTHROPIC_API_KEY')
-    expect(env!.PATH).toBe('/usr/bin')
+    expect(Object.keys(env)).not.toContain('ANTHROPIC_API_KEY')
+    expect(env.PATH).toBe('/usr/bin')
   })
 
   test('strips ANTHROPIC_AUTH_TOKEN when the gate is off', () => {
-    const env = buildSubprocessEnv({
+    const env = builtEnv({
       baseEnv: { ...cleanEnv, ANTHROPIC_AUTH_TOKEN: 'token' },
       allowApiKey: false
     })
-    expect(Object.keys(env!)).not.toContain('ANTHROPIC_AUTH_TOKEN')
+    expect(Object.keys(env)).not.toContain('ANTHROPIC_AUTH_TOKEN')
   })
 
   test('strips credentials that are set to an empty string', () => {
-    const env = buildSubprocessEnv({
+    const env = builtEnv({
       baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: '' },
       allowApiKey: false
     })
-    expect(Object.keys(env!)).not.toContain('ANTHROPIC_API_KEY')
+    expect(Object.keys(env)).not.toContain('ANTHROPIC_API_KEY')
   })
 
   test('defaults to stripping when allowApiKey is omitted', () => {
-    const env = buildSubprocessEnv({
+    const env = builtEnv({
       baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: 'sk-test' }
     })
-    expect(Object.keys(env!)).not.toContain('ANTHROPIC_API_KEY')
+    expect(Object.keys(env)).not.toContain('ANTHROPIC_API_KEY')
   })
 
   test('passes credentials through when the gate is on', () => {
-    const env = buildSubprocessEnv({
+    const env = builtEnv({
       baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: 'sk-test' },
       allowApiKey: true,
       temperature: 1 // forces an env to be built so passthrough is observable
     })
-    expect(env!.ANTHROPIC_API_KEY).toBe('sk-test')
+    expect(env.ANTHROPIC_API_KEY).toBe('sk-test')
   })
 
   test('injects the temperature via CLAUDE_CODE_EXTRA_BODY', () => {
-    const env = buildSubprocessEnv({
+    const env = builtEnv({
       baseEnv: cleanEnv,
       allowApiKey: false,
       temperature: 0.8
     })
-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+    expect(JSON.parse(env.CLAUDE_CODE_EXTRA_BODY ?? '')).toEqual({
       temperature: 0.8
     })
   })
 
   test('merges the temperature over an existing extra body', () => {
-    const env = buildSubprocessEnv({
+    const env = builtEnv({
       baseEnv: { ...cleanEnv, CLAUDE_CODE_EXTRA_BODY: '{"foo":1}' },
       allowApiKey: false,
       temperature: 0.5
     })
-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+    expect(JSON.parse(env.CLAUDE_CODE_EXTRA_BODY ?? '')).toEqual({
       foo: 1,
       temperature: 0.5
     })
   })
 
   test('ignores a malformed existing extra body', () => {
-    const env = buildSubprocessEnv({
+    const env = builtEnv({
       baseEnv: { ...cleanEnv, CLAUDE_CODE_EXTRA_BODY: '{oops' },
       allowApiKey: false,
       temperature: 0.5
     })
-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+    expect(JSON.parse(env.CLAUDE_CODE_EXTRA_BODY ?? '')).toEqual({
       temperature: 0.5
     })
   })
 
   test('combines credential stripping with the temperature override', () => {
-    const env = buildSubprocessEnv({
+    const env = builtEnv({
       baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: 'sk-test' },
       allowApiKey: false,
       temperature: 1.2
     })
-    expect(Object.keys(env!)).not.toContain('ANTHROPIC_API_KEY')
-    expect(JSON.parse(env!.CLAUDE_CODE_EXTRA_BODY!)).toEqual({
+    expect(Object.keys(env)).not.toContain('ANTHROPIC_API_KEY')
+    expect(JSON.parse(env.CLAUDE_CODE_EXTRA_BODY ?? '')).toEqual({
       temperature: 1.2
     })
   })

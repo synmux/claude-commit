@@ -171,9 +171,8 @@ export async function runClaudePrompt(prompt: string, opts: RunPromptOptions): P
   let structured: unknown
   let assistantError: string | undefined
 
-  let response
   try {
-    response = query({ prompt, options })
+    const response = query({ prompt, options })
     for await (const message of response as AsyncIterable<SDKMessage>) {
       switch (message.type) {
         case 'stream_event': {

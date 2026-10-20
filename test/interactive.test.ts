@@ -5,13 +5,12 @@ import { describe, expect, test } from 'vitest'
 import { describeCandidateCheck } from '../src/generate.ts'
 import { renderPicker, selectWithPrompt } from '../src/ui/interactive.ts'
 
-const messages = [
-  'feat(alpha): first candidate subject line\n\nBody one preview.',
-  'fix(bravo): second candidate subject line\n\nBody two preview.',
-  'refactor(charlie): third candidate subject line\n\nBody three preview.'
-]
+const first = 'feat(alpha): first candidate subject line\n\nBody one preview.'
+const second = 'fix(bravo): second candidate subject line\n\nBody two preview.'
+const third = 'refactor(charlie): third candidate subject line\n\nBody three preview.'
+const messages = [first, second, third]
 
-const subject = (message: string): string => message.split('\n', 1)[0]!
+const subject = (message: string): string => message.split('\n', 1)[0] ?? message
 
 /**
  * A stand-in for a terminal: a writable that remembers everything written
@@ -56,9 +55,10 @@ describe('renderPicker', () => {
       output
     })
     const lines = frame.split('\n')
-    const subjectLine = (message: string) => lines.find((line) => line.includes(subject(message)))!
-    expect(subjectLine(messages[1]!)).toContain(S_RADIO_ACTIVE)
-    for (const other of [messages[0]!, messages[2]!]) {
+    const subjectLine = (message: string) =>
+      lines.find((line) => line.includes(subject(message))) ?? expect.unreachable(`no line for ${subject(message)}`)
+    expect(subjectLine(second)).toContain(S_RADIO_ACTIVE)
+    for (const other of [first, third]) {
       expect(subjectLine(other)).toContain(S_RADIO_INACTIVE)
       expect(subjectLine(other)).not.toContain(S_RADIO_ACTIVE)
     }
@@ -96,7 +96,12 @@ describe('renderPicker', () => {
   })
 
   test('draws no warning line when nothing was checked', () => {
-    const frame = renderPicker({ messages, cursor: 0, state: 'active', output })
+    const frame = renderPicker({
+      messages,
+      cursor: 0,
+      state: 'active',
+      output
+    })
     expect(frame).not.toContain('⚠')
   })
 
@@ -108,8 +113,8 @@ describe('renderPicker', () => {
       output
     })
     expect(frame).toContain(S_STEP_SUBMIT)
-    expect(frame).toContain(subject(messages[2]!))
-    expect(frame).not.toContain(subject(messages[0]!))
+    expect(frame).toContain(subject(third))
+    expect(frame).not.toContain(subject(first))
     expect(frame).not.toContain('↑/↓ select')
   })
 
@@ -121,7 +126,7 @@ describe('renderPicker', () => {
       output
     })
     expect(frame).toContain(S_STEP_CANCEL)
-    expect(frame).not.toContain(subject(messages[1]!))
+    expect(frame).not.toContain(subject(second))
   })
 
   test('truncates a long body preview to a single line with an ellipsis', () => {
@@ -270,11 +275,19 @@ describe('selectWithPrompt', () => {
 
 describe('describeCandidateCheck', () => {
   test('names the model, the tokens and the dropped duplicates', () => {
-    expect(describeCandidateCheck({ model: 'jev-1.13.0', inputTokens: 1500, droppedDuplicates: 1 })).toBe(
-      'TypeSafe check (jev-1.13.0): 1500 input tokens, 1 near-duplicate dropped'
-    )
-    expect(describeCandidateCheck({ model: 'jev-1.13.0', inputTokens: 900, droppedDuplicates: 0 })).toMatch(
-      /0 near-duplicates dropped$/
-    )
+    expect(
+      describeCandidateCheck({
+        model: 'jev-1.13.0',
+        inputTokens: 1500,
+        droppedDuplicates: 1
+      })
+    ).toBe('TypeSafe check (jev-1.13.0): 1500 input tokens, 1 near-duplicate dropped')
+    expect(
+      describeCandidateCheck({
+        model: 'jev-1.13.0',
+        inputTokens: 900,
+        droppedDuplicates: 0
+      })
+    ).toMatch(/0 near-duplicates dropped$/)
   })
 })
