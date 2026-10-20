@@ -550,8 +550,10 @@ touching your real config, put them under a `claude-commit` key in a
 `package.stopwatch.json` at the repo root. When that file exists, the
 stopwatch reads it in place of `package.json` (git ignores it):
 
-````json
-{ "claude-commit": { "ollama": { "context": "auto", "maxChunkTokens": 24000 } } }
+```json
+{
+  "claude-commit": { "ollama": { "context": "auto", "maxChunkTokens": 24000 } }
+}
 ```
 
 The commits are generated fresh each run, so a server's prompt cache cannot flatter a second run.
@@ -573,4 +575,3 @@ If you just shout at a chat and hope for the best, that's vibe coding.
 This was AI-assisted development.
 
 Thanks for coming to my TED talk.
-````
