@@ -22,8 +22,6 @@ feat(auth): add error handling and refresh token rotation to login
 
 ## How it works
 
-Want more details? See [WALKTHROUGH.md](WALKTHROUGH.md).
-
 ```plaintext
 staged diff ──ignore──▶ ──split──▶ [chunk, …] ──sonnet──▶ summaries ──sonnet──▶ commit message
 ```
