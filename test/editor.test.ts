@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, test } from 'vitest'
-import { confirmCommit } from '../src/ui/editor.ts'
+import { confirmCommit, editInEditor } from '../src/ui/editor.ts'
 import { selectWithReadline } from '../src/ui/interactive.ts'
 
 /** Streams standing in for stdin/stderr; `tty` makes readline treat them as a terminal. */
@@ -14,6 +14,26 @@ function fakeIo(tty = false) {
   }
   return { input, output }
 }
+
+describe('editInEditor', () => {
+  const saved = { ...process.env }
+  afterEach(() => {
+    process.env.GIT_EDITOR = saved.GIT_EDITOR
+    if (saved.GIT_EDITOR === undefined) delete process.env.GIT_EDITOR
+  })
+
+  test('returns what the editor saved', async () => {
+    process.env.GIT_EDITOR = `sh -c 'printf "edited" > "$0"'`
+    await expect(editInEditor('original')).resolves.toBe('edited')
+  })
+
+  test('an editor killed by a signal is an error, not a successful edit', async () => {
+    // The user pressed Ctrl-C while `code --wait` (or any waiting editor)
+    // was open: the editor dies from the signal with the file untouched.
+    process.env.GIT_EDITOR = `sh -c 'kill -TERM $$'`
+    await expect(editInEditor('original')).rejects.toThrow(/SIGTERM.*nothing was committed/i)
+  })
+})
 
 describe('confirmCommit', () => {
   test('answers y, n and e', async () => {

@@ -52,8 +52,13 @@ function runEditor(editor: string, file: string): Promise<void> {
       shell: true
     })
     child.on('error', reject)
-    child.on('exit', (code) => {
-      if (code === 0 || code === null) resolvePromise()
+    child.on('exit', (code, signal) => {
+      // A signal means the user (or something) killed the editor rather
+      // than saving: git treats that as a failed edit, and so do we, or a
+      // Ctrl-C meant to back out would commit the unedited message.
+      if (signal !== null) {
+        reject(new ClaudeCommitError(`Editor (${editor}) was killed by ${signal}; nothing was committed.`))
+      } else if (code === 0) resolvePromise()
       else reject(new Error(`Editor exited with code ${code}`))
     })
   })
