@@ -25,7 +25,7 @@
       "pnpm-lock.yaml",
       ".serena"
     ],
-    "maxChunkTokens": 11,
+    "maxChunkTokens": 100000,
     "models": {
       "final": "haiku",
       "summary": "haiku"
