@@ -75,6 +75,7 @@
   },
   "files": [
     "bin",
+    "!bin/stopwatch.ts",
     "dist",
     "CHANGELOG.md"
   ],

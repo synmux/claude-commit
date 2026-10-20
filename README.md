@@ -516,10 +516,23 @@ send smaller chunks with `maxChunkTokens` or a smaller `ollama.context`.
 ## Development
 
 ```sh
-pnpm test           # run the test suite (vitest)
-pnpm run typecheck  # tsc --noEmit
-pnpm run build      # bundle bin/ and index.ts into dist/ (only needed to publish)
+pnpm test            # run the test suite (vitest)
+pnpm run lint:types  # tsc --noEmit
+pnpm run build       # bundle bin/ and index.ts into dist/ (only needed to publish)
 ```
+
+To see whether a model is too slow for this machine, time it on three
+synthetic commits of about 400, 8.5k and 40k tokens:
+
+```sh
+node bin/stopwatch.ts ollama:gemma4:e4b-it-qat
+node bin/stopwatch.ts sonnet
+```
+
+It runs the real pipeline with that model in both stages, using the rest
+of your config (Ollama host, window and `ollama.timeout`), and prints the
+summary, final and total time for each commit. The commits are generated
+fresh each run, so a server's prompt cache cannot flatter a second run.
 
 The sources run directly on Node's native type stripping, so there is no build
 step during development: `node bin/cco.js` picks up `dist/` when it exists and
