@@ -4,16 +4,37 @@
 
 ## Behaviour
 
-With `typesafe.enable` (or `--typesafe`), interactive mode checks each
-candidate message before the picker opens. One request to TypeSafe's Jev
-model asks typed questions about every candidate. Code then orders the
-candidates, adds warnings and drops near-duplicates. The check runs only
-when more than one message is requested. A single non-interactive message
-has nothing to rank, so it skips the request and the extra latency.
+With `typesafe.enable` (or `--typesafe`), cco checks its messages before
+showing them: every option before the picker opens, or the single message
+of a non-interactive run. One request to TypeSafe's Jev model asks typed
+questions about every candidate. Code then flags doubtful candidates,
+moves them down and drops near-duplicates.
+
+Jev answers three kinds of question, and cannot write text:
+
+- a **Noul** returns the probability that a yes/no statement is true
+- a **Choice** picks one option from a list and reports its confidence
+- a **Score** places the answer on an ordered scale of described levels
 
 The check reads the same evidence the final model wrote from: the diff
 summaries, or the file list in filenames-only mode. When the change has
 low-priority paths, the evidence keeps the two groups apart.
+
+## Design rules
+
+- **Off unless enabled.** Everything, including the gitmoji check that
+  needs no request, sits behind `typesafe.enable`. With it off, `cco`
+  behaves exactly as it did before the feature.
+- **One request per run.** Every question shares the request that holds
+  the summaries and the options.
+- **Jev never blocks a commit.** A failed request leaves the model's order
+  in place and says why. A missing key with the check on is an error
+  before any model call.
+- **Code decides.** Thresholds are named constants in `src/typesafe.ts`,
+  each with the evidence that set it, tuned on real `cco` output before
+  shipping.
+- **No diff content leaves the machine.** Jev sees the summaries (or file
+  paths) and the options.
 
 ## Questions
 
@@ -208,10 +229,94 @@ request.
    Threshold tuning). It separated better but still dropped distinct
    options at any threshold that caught duplicates.
 5. **Choosing the scope and breaking-change marker before the final stage** -
-   deferred to a separate change (opportunity #2 in the Jevify review).
+   rejected after testing (see Rejected features).
 6. **Hand-rolled HTTP** - rejected in favour of `@typesafe-ai/sdk`, which
    brings typed answers, retries and error classes. Tests inject `fetch`
    into the real client rather than mocking the module.
+
+## Rejected features
+
+Three further uses of Jev were tested and not built. The test scripts
+were one-off and not kept; each method below is described in enough
+detail to repeat. `TODO.md` lists what would reopen each one.
+
+### Autopick for non-interactive runs
+
+Idea: write several options in a non-interactive run and let Jev choose
+the one to commit.
+
+The real pipeline wrote 3 options per commit for the 20 tuning commits,
+with opus for both stages, and for 17 of them with
+`ollama:gemma4:31b-mlx` (summaries) and `ollama:muse-glimmer:30b-mlx`
+(messages). The 3 largest diffs failed on the Ollama side. Each picking
+policy was compared with option 0, and opus judged every case where they
+differed, seeing the summaries and both messages in random A/B order.
+
+| Policy                             | Opus: differs, won | Ollama: differs, won |
+| ---------------------------------- | ------------------ | -------------------- |
+| Rank by a specificity score        | 10, won 1          | 7, won 0             |
+| Jev Choice: "best for the history" | 4, won 0 (1 tie)   | 5, won 0             |
+| Guard: skip flagged options only   | never differs      | never differs        |
+
+Option 0 never carried a warning with either model, so the guard had
+nothing to do, and every policy that moved away from option 0 lost (1 win
+in 26). Models put their best option first. This is also why the picker
+keeps the model's order (see Ordering).
+
+### Scope and breaking change from history
+
+Idea: before the final stage, a Choice picks a scope from the
+repository's history and a Noul decides whether the change is breaking;
+confident answers go into the final prompt.
+
+History replay on the last 50 scoped commits: for each, options were
+built only from earlier commits (the 40 most-used scopes, each with its 3
+most-touched paths), with the commit's diff and paths as evidence. The
+breaking-change question also ran on the summaries of the 20 tuning
+commits.
+
+| Question                | Result                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| Scope, confidence ≥ 0.8 | Used on 22 of 50 commits, matched the scope used 12 times                                     |
+| Scope, confidence ≥ 0.9 | Used on 11, matched 7                                                                         |
+| Scope, new areas        | Forced an old scope (at 0.8 or more) onto 5 of the 16 commits that started a new one          |
+| Breaking, on diffs      | The 2 real `!` commits scored 0.61 and 0.75; the highest unmarked commit 0.79                 |
+| Breaking, on summaries  | Fired on 6 of 20 commits at 0.6 and 3 at 0.85; only `2d11c56` (0.93) is marked `!` in history |
+
+- **Scope:** some mismatches were wanted consistency (`release` instead
+  of `publish`), but others overrode conventions: dependency bumps got
+  `workflows` where the history uses `deps`. About 55% agreement is not
+  worth reshaping the prompt for.
+- **Breaking change:** the question finds default and behaviour changes,
+  which strict semver calls breaking but this history leaves unmarked
+  (`!` on 2 of 134 commits). Only 0.9 matches that practice, on a single
+  positive case with a 0.04 margin, and a false `!` cuts a major release.
+  Opus did miss the real one (`!` on none of its 10 options for
+  `2d11c56`).
+
+Jev judges what is true of the text; it does not know a repository's
+conventions, and both questions depend on them.
+
+### Picker search
+
+Idea: `/` in the picker opens a line for a typed request, and Jev
+re-ranks the options by it.
+
+A retrieval benchmark on the 200 real opus options (10 per commit): for 3
+targets per commit, sonnet wrote the request a developer would type to
+find that option, once naturally and once reworded to avoid the target's
+distinctive words. Each request ranked all 10 options three ways.
+
+| Request style | Jev Choice, top 1 | Word overlap, top 1 | Jev Score per option, top 1 |
+| ------------- | ----------------- | ------------------- | --------------------------- |
+| Natural       | 60 / 60           | 60 / 60             | 42 / 60                     |
+| Reworded      | 50 / 60           | 41 / 60             | 27 / 60                     |
+
+People search a visible list with the words they see, where plain word
+overlap is already perfect; Jev only wins on reworded requests. A filter
+over 10 options already on screen does not repay the picker work. The
+test did confirm that one Choice across all options ranks better than a
+Score per option.
 
 ## Data handling
 
