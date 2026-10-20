@@ -3,6 +3,7 @@ import { ClaudeCommitError, isPromptTooLongError } from '../src/errors.ts'
 import {
   buildChatRequest,
   normaliseOllamaHost,
+  type OllamaRequestSettings,
   probeOllamaContext,
   resolveOllamaConfig,
   resolveOllamaContext,
@@ -142,7 +143,11 @@ describe('resolveOllamaConfig', () => {
 })
 
 describe('buildChatRequest', () => {
-  const resolved = { host: ollama.host, contextTokens: 8192, keepAlive: null }
+  const resolved: OllamaRequestSettings = {
+    host: 'http://ollama.test:11434',
+    contextTokens: 8192,
+    keepAlive: null
+  }
 
   test("sends the model name without cco's prefix", () => {
     const body = buildChatRequest('diff', baseOpts(), resolved)
@@ -441,7 +446,9 @@ describe('runOllamaPrompt - failures', () => {
     // Node's fetch says only "fetch failed"; the reason is in the cause.
     globalThis.fetch = (async () => {
       throw new TypeError('fetch failed', {
-        cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+        cause: Object.assign(new Error('connect ECONNREFUSED'), {
+          code: 'ECONNREFUSED'
+        })
       })
     }) as unknown as typeof fetch
     await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/Cannot reach the Ollama server.*ollama serve/s)
@@ -450,7 +457,9 @@ describe('runOllamaPrompt - failures', () => {
   test('names the underlying cause of any other transport failure', async () => {
     globalThis.fetch = (async () => {
       throw new TypeError('fetch failed', {
-        cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' })
+        cause: Object.assign(new Error('other side closed'), {
+          code: 'UND_ERR_SOCKET'
+        })
       })
     }) as unknown as typeof fetch
     await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
@@ -674,7 +683,9 @@ describe("Node's fetch timeout", () => {
     'explains %s instead of "fetch failed"',
     async (code) => {
       globalThis.fetch = (async () => {
-        throw new TypeError('fetch failed', { cause: Object.assign(new Error('Timeout Error'), { code }) })
+        throw new TypeError('fetch failed', {
+          cause: Object.assign(new Error('Timeout Error'), { code })
+        })
       }) as unknown as typeof fetch
       await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
         /sent nothing for 300 s, Node's fetch limit.*smaller model.*maxChunkTokens.*bin\/stopwatch\.ts/s

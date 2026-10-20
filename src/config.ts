@@ -11,7 +11,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { ClaudeCommitError } from './errors.ts'
-import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST } from './models.ts'
+import { DEFAULT_OLLAMA_CONTEXT } from './models.ts'
 import type { Config, ModelConfig, OllamaConfig, PartialConfig, TypeSafeConfig } from './types.ts'
 import { DEFAULT_SPINNER, isSpinnerName } from './ui/spinner.ts'
 
@@ -36,7 +36,8 @@ export const DEFAULT_CONFIG: Config = {
   lowPriorityPaths: [],
   ignore: [],
   ollama: {
-    host: DEFAULT_OLLAMA_HOST,
+    // No default host: `resolveOllamaHost` falls back to `$OLLAMA_HOST`,
+    // then localhost, and a value here would shadow the variable.
     context: DEFAULT_OLLAMA_CONTEXT,
     keepAlive: null
   },
