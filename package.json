@@ -60,6 +60,7 @@
     "esbuild": "^0.28.2",
     "prettier": "3.9.10",
     "skilld": "^3.6.8",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.4"
   },
   "engines": {
@@ -81,9 +82,6 @@
   "main": "./dist/index.js",
   "name": "@synmux/claude-commit",
   "packageManager": "pnpm@12.8.2",
-  "peerDependencies": {
-    "typescript": "^6.0.3"
-  },
   "private": false,
   "repository": {
     "type": "git",
