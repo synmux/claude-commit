@@ -3,6 +3,8 @@
 Generate high-quality git commit messages with Claude - using your **Claude Code
 subscription**, not an API key.
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/synmux/claude-commit)
+
 > [!NOTE]
 > `claude-commit` has a sense of fun. It's always asking its environment whether it's `PARTY_TIME` on startup.
 >
