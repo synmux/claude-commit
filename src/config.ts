@@ -11,7 +11,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { ClaudeCommitError } from './errors.ts'
-import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST } from './models.ts'
+import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_TIMEOUT_MS } from './models.ts'
 import type { Config, ModelConfig, OllamaConfig, PartialConfig, TypeSafeConfig } from './types.ts'
 import { DEFAULT_SPINNER, isSpinnerName } from './ui/spinner.ts'
 
@@ -38,7 +38,8 @@ export const DEFAULT_CONFIG: Config = {
   ollama: {
     host: DEFAULT_OLLAMA_HOST,
     context: DEFAULT_OLLAMA_CONTEXT,
-    keepAlive: null
+    keepAlive: null,
+    timeout: DEFAULT_OLLAMA_TIMEOUT_MS
   },
   typesafe: {
     enable: false,
@@ -194,6 +195,10 @@ export function sanitizePartial(raw: unknown): PartialConfig {
       ollama.keepAlive = o.keepAlive
     } else if (o.keepAlive === null) {
       ollama.keepAlive = null
+    }
+    // 0 is meaningful: it turns the timeout off.
+    if (typeof o.timeout === 'number' && Number.isFinite(o.timeout) && o.timeout >= 0) {
+      ollama.timeout = Math.floor(o.timeout)
     }
     if (Object.keys(ollama).length) out.ollama = ollama
   }

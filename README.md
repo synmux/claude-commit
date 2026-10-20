@@ -266,7 +266,8 @@ keys are valid at every level:
   "ollama": {
     "host": "http://localhost:11434",
     "context": "auto",
-    "keepAlive": null
+    "keepAlive": null,
+    "timeout": 300000
   },
   "typesafe": {
     "enable": false,
@@ -486,6 +487,20 @@ Where the number comes from is `ollama.context`:
   duration string (`"10m"`), seconds as a number, `0` to unload immediately,
   or negative to pin it. `null` leaves the server's own default. Pinning is
   worth it if you commit often; a 35b model takes a while to load.
+
+### Timeout
+
+`ollama.timeout` is how long, in milliseconds, cco waits for Ollama to
+send anything before giving up. The default is 300000 (5 minutes).
+Summary requests are not streamed, so nothing arrives until the whole
+summary is written. A large chunk on a big local model can take longer
+than that, and then cco stops with a message naming the setting. Raise it,
+set it to `0` to wait as long as Ollama takes (Ctrl-C still cancels), or
+send smaller chunks with `maxChunkTokens` or a smaller `ollama.context`.
+
+```json
+{ "ollama": { "timeout": 900000 } }
+```
 
 ### What differs from a Claude model
 

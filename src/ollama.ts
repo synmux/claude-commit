@@ -35,8 +35,9 @@
  * status line said everything was fine, so every parsed line is checked for
  * it rather than trusting the status code.
  */
+import { Agent } from 'undici'
 import { ClaudeCommitError } from './errors.ts'
-import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST, parseModelRef } from './models.ts'
+import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_TIMEOUT_MS, parseModelRef } from './models.ts'
 import type { ModelResult, OllamaConfig, RunPromptOptions } from './types.ts'
 
 /** Ollama settings with every default filled in; the context may still be `"auto"`. */
@@ -44,6 +45,8 @@ export interface ResolvedOllama {
   host: string
   context: number | 'auto'
   keepAlive: string | number | null
+  /** Milliseconds to wait for Ollama to send anything; `0` waits forever. */
+  timeout: number
 }
 
 /** {@link ResolvedOllama} after `"auto"` has been turned into a number. */
@@ -51,6 +54,7 @@ export interface OllamaRequestSettings {
   host: string
   contextTokens: number
   keepAlive: string | number | null
+  timeout: number
 }
 
 /**
@@ -86,7 +90,8 @@ export function resolveOllamaConfig(
   return {
     host: resolveOllamaHost(config?.host, env),
     context: typeof context === 'number' && context > 0 ? Math.floor(context) : DEFAULT_OLLAMA_CONTEXT,
-    keepAlive: config?.keepAlive ?? null
+    keepAlive: config?.keepAlive ?? null,
+    timeout: typeof config?.timeout === 'number' && config.timeout >= 0 ? config.timeout : DEFAULT_OLLAMA_TIMEOUT_MS
   }
 }
 
@@ -115,10 +120,10 @@ interface OllamaLoadedModel {
  */
 export async function probeOllamaContext(
   model: string,
-  settings: { host: string; keepAlive: string | number | null },
+  settings: { host: string; keepAlive: string | number | null; timeout?: number },
   signal?: AbortSignal
 ): Promise<number> {
-  const { host, keepAlive } = settings
+  const { host, keepAlive, timeout = DEFAULT_OLLAMA_TIMEOUT_MS } = settings
   const preload = await ollamaFetch(
     `${host}/api/chat`,
     {
@@ -131,14 +136,14 @@ export async function probeOllamaContext(
         ...(keepAlive !== null ? { keep_alive: keepAlive } : {})
       })
     },
-    host,
+    { host, timeout },
     signal
   )
   if (!preload.ok) {
     throw new ClaudeCommitError(await describeHttpFailure(preload, host, model))
   }
 
-  const ps = await ollamaFetch(`${host}/api/ps`, { method: 'GET' }, host, signal)
+  const ps = await ollamaFetch(`${host}/api/ps`, { method: 'GET' }, { host, timeout }, signal)
   if (!ps.ok) {
     throw new ClaudeCommitError(await describeHttpFailure(ps, host, model))
   }
@@ -172,15 +177,45 @@ export async function resolveOllamaContext(
   return probeOllamaContext(name, resolved, signal)
 }
 
+/**
+ * One connection pool per `ollama.timeout` value, applied to both the wait
+ * for headers and the gap between streamed pieces. Node's fetch has the
+ * same 300 s limits built in, but invisibly: a 38k-token chunk on a 31B
+ * model failed at exactly 300.9 s with nothing but "fetch failed". Setting
+ * them here makes the limit explicit and configurable.
+ *
+ * `undici` is pinned to 7: Node 24's built-in fetch is undici 7 and rejects
+ * an undici 8 dispatcher outright (`UND_ERR_INVALID_ARG`).
+ */
+const dispatchers = new Map<number, Agent>()
+function dispatcherFor(timeout: number): Agent {
+  let dispatcher = dispatchers.get(timeout)
+  if (!dispatcher) {
+    dispatcher = new Agent({ headersTimeout: timeout, bodyTimeout: timeout })
+    dispatchers.set(timeout, dispatcher)
+  }
+  return dispatcher
+}
+
 /** `fetch` with transport failures and cancellation turned into cco errors. */
-async function ollamaFetch(url: string, init: RequestInit, host: string, signal?: AbortSignal): Promise<Response> {
+async function ollamaFetch(
+  url: string,
+  init: RequestInit,
+  target: { host: string; timeout: number },
+  signal?: AbortSignal
+): Promise<Response> {
   try {
-    return await fetch(url, { ...init, ...(signal ? { signal } : {}) })
+    // The cast bridges @types/node's undici-types and the undici 7 package's own Agent type.
+    return await fetch(url, {
+      ...init,
+      dispatcher: dispatcherFor(target.timeout),
+      ...(signal ? { signal } : {})
+    } as RequestInit)
   } catch (error) {
     if (signal?.aborted) {
       throw new ClaudeCommitError('Generation was cancelled.')
     }
-    throw new ClaudeCommitError(describeTransportFailure(error, host))
+    throw new ClaudeCommitError(describeTransportFailure(error, target))
   }
 }
 
@@ -285,9 +320,34 @@ async function describeHttpFailure(response: Response, host: string, model: stri
   }
 }
 
+/**
+ * The messages and codes along an error's `cause` chain, outermost first.
+ * Node's fetch reports every transport failure as "fetch failed"; what went
+ * wrong (`ECONNREFUSED`, `UND_ERR_HEADERS_TIMEOUT`, ...) is in the cause.
+ */
+function causeChain(error: unknown): string[] {
+  const parts: string[] = []
+  let current: unknown = error
+  for (let depth = 0; current !== null && typeof current === 'object' && depth < 5; depth++) {
+    const { message, code, cause } = current as { message?: unknown; code?: unknown; cause?: unknown }
+    if (typeof message === 'string' && message !== '') parts.push(message)
+    if (typeof code === 'string' && !parts.includes(code)) parts.push(code)
+    current = cause
+  }
+  return parts.length > 0 ? parts : [String(error)]
+}
+
 /** Turn a transport-level failure into a message that says what to do about it. */
-function describeTransportFailure(error: unknown, host: string): string {
-  const message = error instanceof Error ? error.message : String(error)
+function describeTransportFailure(error: unknown, target: { host: string; timeout: number }): string {
+  const { host, timeout } = target
+  const message = causeChain(error).join(': ')
+  if (/UND_ERR_(HEADERS|BODY)_TIMEOUT/.test(message)) {
+    return (
+      `Ollama at ${host} sent nothing for ${timeout / 1000} s, the "ollama.timeout" limit. ` +
+      `A large chunk on a big local model can take longer than that: raise "ollama.timeout" ` +
+      `(0 waits forever), or lower "maxChunkTokens" or "ollama.context".`
+    )
+  }
   if (/econnrefused|failed to fetch|unable to connect|connection refused/i.test(message)) {
     return (
       `Cannot reach the Ollama server at ${host}. Start it with ` +
@@ -381,6 +441,7 @@ export async function runOllamaPrompt(prompt: string, opts: RunPromptOptions): P
   const resolved: OllamaRequestSettings = {
     host: base.host,
     keepAlive: base.keepAlive,
+    timeout: base.timeout,
     contextTokens: await resolveOllamaContext(opts.model, opts.ollama, signal)
   }
   const request = buildChatRequest(prompt, opts, resolved)
@@ -392,7 +453,7 @@ export async function runOllamaPrompt(prompt: string, opts: RunPromptOptions): P
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request)
     },
-    resolved.host,
+    resolved,
     signal
   )
   if (!response.ok) {

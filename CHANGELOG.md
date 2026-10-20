@@ -27,6 +27,14 @@ carrying the same notes at greater length.
 
 ### [Unreleased] - Fixed
 
+- **Ollama requests on large diffs no longer fail with a bare "fetch
+  failed".** Node's fetch gave up after 300 s with no response headers,
+  and a non-streamed summary sends none until it is finished. The limit is
+  now the explicit, configurable `ollama.timeout` (milliseconds, default
+  300000, `0` to wait forever). When it fires, the error names the
+  setting. Other transport errors now include their underlying cause, and
+  a refused connection gets the "start `ollama serve`" hint, which Node's
+  real error shape had been hiding.
 - The picker types its states from Clack's own `State`, so the
   `validating` state that `@clack/core` added no longer breaks the build.
 - Ollama tests now await their rejection assertions, which Vitest 5

@@ -55,6 +55,14 @@ export interface OllamaConfig {
    * is itself 5 minutes unless `OLLAMA_KEEP_ALIVE` says otherwise).
    */
   keepAlive: string | number | null
+  /**
+   * Milliseconds to wait for Ollama to send anything - the response
+   * headers, or the next piece of a streamed reply - before giving up.
+   * Defaults to 300000 (5 minutes). A summary request is not streamed, so
+   * nothing arrives until the whole summary is written: a big chunk on a
+   * big local model can take longer than that. `0` waits forever.
+   */
+  timeout: number
 }
 
 /**

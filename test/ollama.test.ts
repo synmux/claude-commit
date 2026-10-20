@@ -1,3 +1,6 @@
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { Agent } from 'undici'
 import { afterEach, describe, expect, test } from 'vitest'
 import { ClaudeCommitError, isPromptTooLongError } from '../src/errors.ts'
 import {
@@ -14,7 +17,8 @@ import type { OllamaConfig, RunPromptOptions } from '../src/types.ts'
 const ollama: OllamaConfig = {
   host: 'http://ollama.test:11434',
   context: 8192,
-  keepAlive: null
+  keepAlive: null,
+  timeout: 300_000
 }
 
 const baseOpts = (over: Partial<RunPromptOptions> = {}): RunPromptOptions => ({
@@ -122,7 +126,8 @@ describe('resolveOllamaConfig', () => {
     expect(resolveOllamaConfig(undefined, {})).toEqual({
       host: 'http://localhost:11434',
       context: 'auto',
-      keepAlive: null
+      keepAlive: null,
+      timeout: 300_000
     })
   })
 
@@ -142,7 +147,7 @@ describe('resolveOllamaConfig', () => {
 })
 
 describe('buildChatRequest', () => {
-  const resolved = { host: ollama.host, contextTokens: 8192, keepAlive: null }
+  const resolved = { host: ollama.host, contextTokens: 8192, keepAlive: null, timeout: 300_000 }
 
   test("sends the model name without cco's prefix", () => {
     const body = buildChatRequest('diff', baseOpts(), resolved)
@@ -437,6 +442,34 @@ describe('runOllamaPrompt - failures', () => {
     )
   })
 
+  test("recognises a refused connection in Node's real error shape", async () => {
+    // Node's fetch says only "fetch failed"; the reason is in the cause.
+    globalThis.fetch = (async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+      })
+    }) as unknown as typeof fetch
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/Cannot reach the Ollama server.*ollama serve/s)
+  })
+
+  test('names the underlying cause of any other transport failure', async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' })
+      })
+    }) as unknown as typeof fetch
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
+      'Failed to call Ollama at http://ollama.test:11434: fetch failed: other side closed: UND_ERR_SOCKET'
+    )
+  })
+
+  test('sends every request through a dispatcher with no fetch timeouts', async () => {
+    const { calls } = stubFetch(() => jsonResponse({ model: 'gemma4', message: { content: 'ok' }, done: true }))
+    await runOllamaPrompt('d', baseOpts())
+    const dispatcher = (calls[0] as RequestInit & { dispatcher?: unknown }).dispatcher
+    expect(dispatcher).toBeInstanceOf(Agent)
+  })
+
   test('says how to pull a missing model, and does not pull it', async () => {
     stubFetch(() => jsonResponse({ error: 'model not found' }, 404))
     await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/ollama pull gemma4:e2b-it-qat/)
@@ -508,7 +541,7 @@ describe('probeOllamaContext', () => {
       }
     ])
     await probeOllamaContext('gemma4:e2b-it-qat', settings)
-    const preload = requests[0]!
+    const preload = requests[0] ?? expect.unreachable('no preload request')
     expect(preload.url).toBe('http://ollama.test:11434/api/chat')
     expect(preload.body).toMatchObject({
       model: 'gemma4:e2b-it-qat',
@@ -536,7 +569,7 @@ describe('probeOllamaContext', () => {
       ...settings,
       keepAlive: '10m'
     })
-    expect(requests[0]!.body).toMatchObject({ keep_alive: '10m' })
+    expect(requests[0]?.body).toMatchObject({ keep_alive: '10m' })
   })
 
   test('fails loudly when the model is not in ps afterwards', async () => {
@@ -588,7 +621,7 @@ describe('resolveOllamaContext', () => {
         context: 'auto'
       })
     ).toBe(131072)
-    expect(requests[0]!.body).toMatchObject({ model: 'gemma4:e2b-it-qat' })
+    expect(requests[0]?.body).toMatchObject({ model: 'gemma4:e2b-it-qat' })
   })
 })
 
@@ -602,7 +635,7 @@ describe('runOllamaPrompt - auto context', () => {
           models: [{ name: 'gemma4:e2b-it-qat', context_length: 131072 }]
         })
       }
-      const body = bodies[bodies.length - 1]!
+      const body = bodies.at(-1) ?? expect.unreachable('no request body')
       const isPreload = Array.isArray(body.messages) && body.messages.length === 0
       return jsonResponse(
         isPreload
@@ -618,7 +651,8 @@ describe('runOllamaPrompt - auto context', () => {
 
     const result = await runOllamaPrompt('diff', baseOpts({ ollama: { ...ollama, context: 'auto' } }))
     expect(result.text).toBe('Add a thing')
-    const real = bodies.find((b) => Array.isArray(b.messages) && b.messages.length > 0)!
+    const real =
+      bodies.find((b) => Array.isArray(b.messages) && b.messages.length > 0) ?? expect.unreachable('no chat request')
     expect((real.options as { num_ctx: number }).num_ctx).toBe(131072)
   })
 
@@ -644,5 +678,47 @@ describe('runOllamaPrompt - auto context', () => {
     const error = await runOllamaPrompt('diff', baseOpts({ ollama: { ...ollama, context: 'auto' } })).catch((e) => e)
     expect(isPromptTooLongError(error)).toBe(true)
     expect(error.message).toMatch(/4096-token/)
+  })
+})
+
+describe('ollama.timeout', () => {
+  /** A real local server that answers a chat request only after `delayMs`. */
+  async function slowServer(delayMs: number): Promise<{ host: string; close: () => void }> {
+    const server = createServer((_request, response) => {
+      setTimeout(() => {
+        response.setHeader('Content-Type', 'application/json')
+        response.end(
+          JSON.stringify({ model: 'gemma4', message: { content: 'Summary' }, done: true, prompt_eval_count: 10 })
+        )
+      }, delayMs)
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    return { host: `http://127.0.0.1:${port}`, close: () => server.close() }
+  }
+
+  test('gives up when Ollama sends nothing for longer than the limit', async () => {
+    const server = await slowServer(1_000)
+    try {
+      const opts = baseOpts({ ollama: { ...ollama, host: server.host, timeout: 200 } })
+      await expect(runOllamaPrompt('d', opts)).rejects.toThrow(/sent nothing for 0\.2 s, the "ollama\.timeout" limit/)
+    } finally {
+      server.close()
+    }
+  })
+
+  test('0 waits as long as Ollama takes', async () => {
+    const server = await slowServer(400)
+    try {
+      const opts = baseOpts({ ollama: { ...ollama, host: server.host, timeout: 0 } })
+      await expect(runOllamaPrompt('d', opts)).resolves.toMatchObject({ text: 'Summary' })
+    } finally {
+      server.close()
+    }
+  })
+
+  test('defaults to an explicit 300 s', () => {
+    expect(resolveOllamaConfig({}).timeout).toBe(300_000)
+    expect(resolveOllamaConfig({ timeout: 0 }).timeout).toBe(0)
   })
 })

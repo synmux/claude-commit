@@ -9,6 +9,7 @@ import { ClaudeCommitError } from './errors.ts'
 import {
   describeCandidateCheck,
   describeCheckNotices,
+  type GenerateResult,
   generateCommit,
   type IgnoreStats,
   type LowPriorityStats,
@@ -297,7 +298,7 @@ async function runNonInteractive(
   const spinner = new Spinner(useSpinner, config.spinner)
 
   spinner.start(config.filenamesOnly ? 'Reading filenames' : 'Reading diff')
-  let result
+  let result: GenerateResult
   try {
     result = await generateCommit(diff, config, {
       progress: { onPhase: (label) => spinner.update(label) },
@@ -335,7 +336,9 @@ async function runNonInteractive(
     }
   }
 
-  let message = result.messages[0]!
+  const chosen = result.messages[0]
+  if (chosen === undefined) throw new ClaudeCommitError('The model did not produce a commit message.')
+  let message = chosen
   // Warnings go to stderr so a dry run's stdout stays the bare message.
   for (const warning of [...describeCheckNotices(result.candidateCheck), ...(result.warnings[0] ?? [])]) {
     process.stderr.write(`${color('33', `⚠ ${warning}`)}\n`)
