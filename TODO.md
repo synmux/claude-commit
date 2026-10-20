@@ -146,7 +146,7 @@ cancelled.')` to match the rest of the CLI.
 
 ## 2. Fix the `claude-review` workflow
 
-### Problem
+### What fails and why
 
 The `claude-review` check (`.github/workflows/claude-code-review.yml`)
 fails on every pull request. It has failed on every run since at least
@@ -170,7 +170,7 @@ directory. The local checkout existed only to pin the marketplace to a
 commit; the workflow's own comment says the action accepts a marketplace
 only as a bare `.git` URL (no ref) or a local path.
 
-### Options
+### Ways to fix it
 
 1. **Use the GitHub source:** set `plugin_marketplaces` to
    `https://github.com/anthropics/claude-code.git` and drop the checkout
@@ -189,7 +189,7 @@ Option 1 is the smallest change. Decide whether losing the pin is
 acceptable: the other actions in the repo are pinned to commit SHAs on
 purpose (`9b2835e`, "pin claude actions to commit SHAs").
 
-### Done when
+### Fixed when
 
 `claude-review` passes on a pull request and posts review comments. The
 `@claude` workflow (`.github/workflows/claude.yml`) uses the same action
