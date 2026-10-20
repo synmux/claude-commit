@@ -232,8 +232,9 @@ function noulValue(answers: Record<string, unknown>, name: string): number {
 
 /**
  * The model's order with flagged messages moved last, each group keeping
- * its own order. Used directly when TypeSafe is off, so warnings found in
- * code (see `src/gitmoji.ts`) still sort the picker.
+ * its own order. Used directly when no Jev request runs (a single message,
+ * or a failed request), so warnings found in code (see `src/gitmoji.ts`)
+ * still sort the options.
  */
 export function orderFlaggedLast(
   messages: string[],

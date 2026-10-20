@@ -18,9 +18,10 @@ carrying the same notes at greater length.
   near-duplicates are dropped. With a `customPrompt` set, an option that
   ignores it is flagged too. The key comes from `$TYPESAFE_API_KEY`, or
   the variable `typesafe.env` names. The check is off by default.
-- **Gitmoji and type check.** With `gitmoji` and `conventionalCommits` on,
-  an option that pairs a gitmoji with a type it does not fit (such as
-  `🔧 feat:`) is flagged and moved down. This needs no TypeSafe key.
+- **Gitmoji and type check.** With TypeSafe on, plus `gitmoji` and
+  `conventionalCommits`, an option that pairs a gitmoji with a type it
+  does not fit (such as `🔧 feat:`) is flagged and moved down. It runs in
+  code without a request, so non-interactive runs get it too.
 
 ### [Unreleased] - Fixed
 

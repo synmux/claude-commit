@@ -2,7 +2,8 @@
  * The gitmoji cco offers, what each means and which Conventional Commit
  * types it fits. One table feeds both the guide in the final prompt and the
  * check that warns when an option pairs a gitmoji with a type it does not
- * fit, such as `🔧 feat(config): ...`.
+ * fit, such as `🔧 feat(config): ...`. The check runs only with
+ * `typesafe.enable` on (see `src/generate.ts`).
  *
  * The check is a lookup rather than a model judgment on purpose. On 251
  * generated options it found all 9 conflicts with no false flags, where a

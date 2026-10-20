@@ -41,8 +41,10 @@ Code makes every decision from constants in `src/typesafe.ts`:
   0.2, or an `edits_shown` answer below 0.45, adds a warning. The picker
   shows the warning under the candidate.
 - A gitmoji that clashes with its Conventional Commit type is flagged in
-  code (`src/gitmoji.ts`), with or without TypeSafe. Those warnings are
-  passed in as `priorWarnings`, so they sort the same way.
+  code (`src/gitmoji.ts`). It sits behind `typesafe.enable` like every
+  other check, but needs no request, so it also covers single
+  non-interactive messages. Those warnings are passed in as
+  `priorWarnings`, so they sort the same way.
 - Candidates without a warning keep the model's order, and flagged ones
   follow in the same order. An earlier version also sorted by a
   specificity score, but blind tests showed this demoted better options

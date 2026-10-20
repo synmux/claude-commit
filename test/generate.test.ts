@@ -772,17 +772,45 @@ describe('gitmoji format check', () => {
       ? { text: '', costUsd: 0, structured: { messages: clashing } }
       : { text: 'Summary: a default changed.', costUsd: 0 }
 
-  test('flags a clash and moves it last without TypeSafe', async () => {
-    const config: Config = { ...baseConfig, gitmoji: true, conventionalCommits: true }
-    const result = await generateCommit(textDiff, config, { runner, count: 2 })
+  const singleRunner: Runner = async (_prompt, opts): Promise<ModelResult> =>
+    opts.outputFormat
+      ? { text: '', costUsd: 0, structured: { messages: [clashing[0]] } }
+      : { text: 'Summary: a default changed.', costUsd: 0 }
+  const formats = { gitmoji: true, conventionalCommits: true }
+  const enabled = { ...baseConfig.typesafe, enable: true }
+  const env = { TYPESAFE_API_KEY: 'ts-key' }
+
+  test('with TypeSafe off, a clash changes nothing', async () => {
+    const result = await generateCommit(textDiff, { ...baseConfig, ...formats }, { runner, count: 2 })
+    expect(result.messages).toEqual(clashing)
+    expect(result.warnings).toEqual([[], []])
+  })
+
+  test('with TypeSafe on, flags a clash and moves it last', async () => {
+    const { fetch } = answeringJevFetch()
+    const config: Config = { ...baseConfig, ...formats, typesafe: enabled }
+    const result = await generateCommit(textDiff, config, { runner, count: 2, env, typesafeFetch: fetch })
     expect(result.messages).toEqual([clashing[1], clashing[0]])
     expect(result.warnings).toEqual([[], ['gitmoji does not match the commit type']])
+  })
+
+  test('with TypeSafe on, flags a single message without a Jev request', async () => {
+    const { fetch, requests } = answeringJevFetch()
+    const config: Config = { ...baseConfig, ...formats, typesafe: enabled }
+    const result = await generateCommit(textDiff, config, {
+      runner: singleRunner,
+      count: 1,
+      env: {},
+      typesafeFetch: fetch
+    })
+    expect(result.warnings).toEqual([['gitmoji does not match the commit type']])
+    expect(requests).toHaveLength(0)
     expect(result.candidateCheck).toBeNull()
   })
 
   test('stays quiet unless both gitmoji and conventional commits are on', async () => {
-    const result = await generateCommit(textDiff, { ...baseConfig, gitmoji: true }, { runner, count: 2 })
-    expect(result.messages).toEqual(clashing)
-    expect(result.warnings).toEqual([[], []])
+    const config: Config = { ...baseConfig, gitmoji: true, typesafe: enabled }
+    const result = await generateCommit(textDiff, config, { runner: singleRunner, count: 1, env: {} })
+    expect(result.warnings).toEqual([[]])
   })
 })

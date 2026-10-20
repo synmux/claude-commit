@@ -199,12 +199,13 @@ Otherwise the options keep the order the model wrote them in. Tests
 showed the model's first option beats any reordering, and a flagged
 option moves to the bottom.
 
-One check needs no TypeSafe at all. With both `gitmoji` and
-`conventionalCommits` on, an option whose gitmoji clashes with its type,
-such as `🔧 feat:` or `🎨 feat:`, gets a `⚠` line and moves down.
-Pairings the guide allows, such as `🔒️` with any type, pass. In a
-non-interactive run, the warnings for the chosen message print on stderr
-before you confirm.
+With TypeSafe on, plus `gitmoji` and `conventionalCommits`, cco also
+checks that each gitmoji fits its type. An option such as `🔧 feat:` or
+`🎨 feat:` gets a `⚠` line and moves down. Pairings the guide allows,
+such as `🔒️` with any type, pass. This check runs in code, without a
+request, so it also covers non-interactive runs: the warnings for the
+chosen message print on stderr before you confirm. With TypeSafe off,
+none of this runs.
 
 One check costs a fraction of a cent and takes under a second. If it
 fails, cco says why and shows the options in the model's order. A failed

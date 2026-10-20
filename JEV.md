@@ -309,7 +309,9 @@ Both halves were tested before building, and the data split them:
 - **Gitmoji vs type uses code.** A lookup table in `src/gitmoji.ts` beat
   the Jev question: it found all 9 clashes in 251 options with no false
   flags, where Jev found 4 and was inconsistent. The table also feeds the
-  prompt's gitmoji guide, and it works without a TypeSafe key.
+  prompt's gitmoji guide. Like everything else it runs only with
+  `typesafe.enable` on, but it needs no request, so it also covers
+  single non-interactive messages.
 
 Both warnings move an option to the bottom of the picker. In a
 non-interactive run, the warnings for the one message print on stderr.

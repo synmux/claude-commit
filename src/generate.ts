@@ -35,8 +35,10 @@
  * summaries or paths, then moves doubtful ones last with a warning and
  * drops near-duplicates (`src/typesafe.ts`). A failed check leaves the
  * candidates in the model's order and reports why; it never blocks a commit.
- * A gitmoji that does not fit its commit type is flagged in code, with or
- * without TypeSafe (`src/gitmoji.ts`).
+ * With TypeSafe on, a gitmoji that does not fit its commit type is also
+ * flagged, in code and without a request (`src/gitmoji.ts`), so it covers
+ * single non-interactive messages too. With TypeSafe off, nothing here
+ * changes what cco shows.
  */
 import type { Fetch } from '@typesafe-ai/sdk'
 import { runPrompt } from './agent.ts'
@@ -430,9 +432,10 @@ export async function generateCommit(
     throw new ClaudeCommitError('The model did not produce a commit message.')
   }
 
-  // Format checks need no model: they run whether or not TypeSafe is on.
+  // Format checks need no request, but they sit behind typesafe.enable like
+  // every other check: with TypeSafe off, cco shows what it always showed.
   const formatWarnings = deduped.map((message): string[] =>
-    config.gitmoji && config.conventionalCommits && gitmojiConflictsWithType(message)
+    config.typesafe.enable && config.gitmoji && config.conventionalCommits && gitmojiConflictsWithType(message)
       ? ['gitmoji does not match the commit type']
       : []
   )
