@@ -50,7 +50,11 @@ Four behaviours are load-bearing and easy to break:
   it. Do not "simplify" either half away. The number comes from
   `ollama.context`, which by default (`"auto"`) is read from `/api/ps` after
   a preload with _no_ `num_ctx` - sending one on the preload would defeat
-  the probe.
+  the probe. A separate Ollama final model is preloaded while summaries
+  run, but with an Ollama summariser only after the _last_ chunk's
+  streamed text arrives - earlier, two models that do not fit in VRAM
+  together evict each other between chunks. See
+  `docs/superpowers/specs/2026-10-20-ollama-final-warmup-design.md`.
 - **A readline prompt must settle when stdin closes.** In a terminal,
   readline owns Ctrl-C (raw mode, no SIGINT reaches the process) and closes
   itself, as it does on Ctrl-D. Ask through `askLine` in `src/ui/editor.ts`,

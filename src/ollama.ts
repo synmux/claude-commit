@@ -134,28 +134,8 @@ export async function probeOllamaContext(
   settings: { host: string; keepAlive: string | number | null },
   signal?: AbortSignal
 ): Promise<number> {
-  const { host, keepAlive } = settings
-  const preload = await ollamaFetch(
-    `${host}/api/chat`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [],
-        stream: false,
-        // Empty messages plus keep_alive 0 is Ollama's "unload" request,
-        // which would leave nothing in /api/ps; the real requests still
-        // send the configured value.
-        ...(keepAlive !== null && !isUnloadKeepAlive(keepAlive) ? { keep_alive: keepAlive } : {})
-      })
-    },
-    host,
-    signal
-  )
-  if (!preload.ok) {
-    throw new ClaudeCommitError(await describeHttpFailure(preload, host, model))
-  }
+  const { host } = settings
+  await preloadOllamaModel(model, settings, signal)
 
   const ps = await ollamaFetch(`${host}/api/ps`, { method: 'GET' }, host, signal)
   if (!ps.ok) {
@@ -177,6 +157,59 @@ export async function probeOllamaContext(
     )
   }
   return Math.floor(contextLength)
+}
+
+/**
+ * Load `model` without running a prompt: a chat request with no messages.
+ * With `contextTokens` it loads at that window, so a later request pinning
+ * the same `num_ctx` reuses the runner instead of reloading it; without,
+ * the server picks the window itself - the choice the probe reads back.
+ */
+async function preloadOllamaModel(
+  model: string,
+  settings: { host: string; keepAlive: string | number | null },
+  signal?: AbortSignal,
+  contextTokens?: number
+): Promise<void> {
+  const { host, keepAlive } = settings
+  const preload = await ollamaFetch(
+    `${host}/api/chat`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [],
+        stream: false,
+        // Empty messages plus keep_alive 0 is Ollama's "unload" request,
+        // which would leave nothing loaded; the real requests still send
+        // the configured value.
+        ...(keepAlive !== null && !isUnloadKeepAlive(keepAlive) ? { keep_alive: keepAlive } : {}),
+        ...(contextTokens !== undefined ? { options: { num_ctx: contextTokens } } : {})
+      })
+    },
+    host,
+    signal
+  )
+  if (!preload.ok) {
+    throw new ClaudeCommitError(await describeHttpFailure(preload, host, model))
+  }
+}
+
+/**
+ * Load an `ollama:` model ahead of its first request, so that request does
+ * not wait for a cold start. It loads at the window the request will pin: a
+ * configured number, or under `"auto"` the server's own choice, exactly as
+ * {@link probeOllamaContext} leaves it.
+ */
+export async function warmOllamaModel(
+  model: string,
+  config: Partial<OllamaConfig> | undefined,
+  signal?: AbortSignal
+): Promise<void> {
+  const resolved = resolveOllamaConfig(config)
+  const { name } = parseModelRef(model)
+  await preloadOllamaModel(name, resolved, signal, resolved.context === 'auto' ? undefined : resolved.context)
 }
 
 /**

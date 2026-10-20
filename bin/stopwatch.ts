@@ -8,8 +8,11 @@
  *
  * Each commit runs through the real pipeline (summary stage, then final
  * stage) with the given model in both stages. Every other setting - the
- * Ollama host and window, `maxChunkTokens`, `allowApiKey` - comes
- * from your claude-commit config, so the timings match what `cco` would do.
+ * Ollama host, window and `ollama.maxChunkTokens`, `maxChunkTokens`,
+ * `allowApiKey` - comes from your claude-commit config, so the timings
+ * match what `cco` would do. A `package.stopwatch.json` at the repo root,
+ * when present, is read in place of `package.json`, so its `claude-commit`
+ * key can hold experimental settings without touching the real config.
  * The commits are synthetic - no real changeset is read - and start with a
  * random token on every run, so a server's prompt cache cannot make a
  * repeat run look faster. Git is used only to find your config file.
@@ -17,12 +20,15 @@
  * Development only: excluded from the published package.
  */
 import { randomBytes } from 'node:crypto'
+import { stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import { runPrompt } from '../src/agent.ts'
 import { loadFileConfig, resolveConfig } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
 import { generateCommit } from '../src/generate.ts'
 import { getRepoRoot, isGitRepo } from '../src/git.ts'
-import { estimateDiffTokens } from '../src/tokens.ts'
+import { isOllamaModel } from '../src/models.ts'
+import { clampChunkTokens, estimateDiffTokens } from '../src/tokens.ts'
 
 /** How many files a synthetic commit touches, and how many changed lines each gets. */
 export interface CommitSize {
@@ -98,6 +104,18 @@ function randomHex(random: () => number): string {
     .padStart(7, '0')
 }
 
+/** The repo-root file the stopwatch reads in place of `package.json`, when it exists. */
+export const STOPWATCH_PACKAGE_FILE = 'package.stopwatch.json'
+
+/** `package.stopwatch.json` if `root` has one, else `package.json`. */
+export async function stopwatchPackageFile(root: string): Promise<string> {
+  const found = await stat(join(root, STOPWATCH_PACKAGE_FILE)).then(
+    (entry) => entry.isFile(),
+    () => false
+  )
+  return found ? STOPWATCH_PACKAGE_FILE : 'package.json'
+}
+
 /** Milliseconds as `4.3 s`, or `-` when nothing ran. */
 export function formatSeconds(milliseconds: number | undefined): string {
   return milliseconds === undefined ? '-' : `${(milliseconds / 1000).toFixed(1)} s`
@@ -125,7 +143,9 @@ async function main(argv: string[]): Promise<number> {
 
   const cwd = process.cwd()
   const root = (await isGitRepo()) ? await getRepoRoot() : cwd
-  const config = resolveConfig(await loadFileConfig(cwd, root), {
+  const packageFile = await stopwatchPackageFile(root)
+  process.stderr.write(`config: ${packageFile}\n`)
+  const config = resolveConfig(await loadFileConfig(cwd, root, undefined, process.env, packageFile), {
     models: { summary: model, final: model },
     // Time the model, not cco's optional extras or path filters.
     typesafe: { enable: false },
@@ -139,6 +159,7 @@ async function main(argv: string[]): Promise<number> {
 
   const timings: Timing[] = []
   let windowNote = ''
+  let windowTokens = typeof config.ollama.context === 'number' ? config.ollama.context : undefined
   for (const [size, shape] of Object.entries(COMMIT_SIZES)) {
     const diff = syntheticDiff(shape, randomBytes(6).toString('hex'))
     const tokens = estimateDiffTokens(diff, config.charsPerToken)
@@ -162,8 +183,10 @@ async function main(argv: string[]): Promise<number> {
         }
       })
       const window = result.ollamaContexts[0]
-      if (window)
+      if (window) {
+        windowTokens = window.tokens
         windowNote = `context window ${window.tokens} tokens (${window.source === 'auto' ? 'chosen by the server' : 'from config'})`
+      }
       timings.push({
         size,
         lines: diff.split('\n').length,
@@ -193,7 +216,12 @@ async function main(argv: string[]): Promise<number> {
     }
   }
 
-  process.stdout.write(`\nmodel ${model}${windowNote ? `, ${windowNote}` : ''}\n\n`)
+  // Report the cap the pipeline enforced, which the window can lower below the configured one.
+  const capNote =
+    isOllamaModel(model) && config.ollama.maxChunkTokens !== undefined && windowTokens !== undefined
+      ? `, chunks capped at ${clampChunkTokens(model, config.maxChunkTokens, windowTokens, config.ollama.maxChunkTokens)} tokens`
+      : ''
+  process.stdout.write(`\nmodel ${model}${windowNote ? `, ${windowNote}` : ''}${capNote}\n\n`)
   process.stdout.write('size     lines   ~tokens  chunks  summary   final     total     cost     result\n')
   for (const timing of timings) {
     process.stdout.write(

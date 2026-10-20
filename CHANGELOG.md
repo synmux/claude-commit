@@ -11,6 +11,14 @@ carrying the same notes at greater length.
 
 ### [Unreleased] - Added
 
+- **`ollama.maxChunkTokens`.** Caps the diff chunk sent to an Ollama
+  summary model, below the context window. A large `"auto"` window let one
+  request run past Node's 300 s fetch limit; a cap splits the diff into
+  more, shorter requests. Unset by default; Claude models ignore it.
+- **`package.stopwatch.json`.** `bin/stopwatch.ts` reads this file in place
+  of `package.json` when it exists, so settings can be tried without
+  changing the real config.
+
 - **TypeSafe candidate check.** With `"typesafe": { "enable": true }` or
   `--typesafe`, interactive options are checked by TypeSafe's Jev model
   before the picker opens. An option whose subject or edits the summaries

@@ -193,4 +193,18 @@ describe('Ollama context windows', () => {
     expect(clampChunkTokens('sonnet', 600_000)).toBe(600_000)
     expect(clampChunkTokens('haiku', 600_000)).toBe(200_000 - 32_000)
   })
+
+  test('ollama.maxChunkTokens caps a chunk the window would allow', () => {
+    // 262144 - 32000 reserve would be 230,144 tokens in one request.
+    expect(clampChunkTokens('ollama:gemma4', 600_000, 262_144, 24_000)).toBe(24_000)
+  })
+
+  test('ollama.maxChunkTokens never raises the window budget', () => {
+    expect(clampChunkTokens('ollama:gemma4', 600_000, 32_768, 100_000)).toBe(24_576)
+    expect(clampChunkTokens('ollama:gemma4', 1_000, 262_144, 24_000)).toBe(1_000)
+  })
+
+  test('ollama.maxChunkTokens does not touch a Claude model', () => {
+    expect(clampChunkTokens('sonnet', 600_000, undefined, 24_000)).toBe(600_000)
+  })
 })

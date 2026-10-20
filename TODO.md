@@ -6,79 +6,7 @@ Open work, most useful first. Finished and rejected work is recorded in
 methods and numbers they refer to. The bugs from the 2026-10-20 review
 (items 1a-1h) are fixed; see CHANGELOG.md under "Unreleased - Fixed".
 
-## 1. Cap Ollama chunk size
-
-### Problem
-
-On Ollama, the limit that matters is how long one request takes, not the
-context window. Node's fetch abandons a request that sends nothing for
-300 s, and a summary request sends nothing until the summary is written.
-cco sizes chunks from the window, which can be huge:
-
-- `"ollama.context": "auto"` let Ollama choose a 262,144-token window for
-  `gemma4:31b-mlx`.
-- `clampChunkTokens` (`src/tokens.ts`) sets the chunk budget to the window
-  minus `contextReserveTokens` (32k here): 230,144 tokens. It is called
-  from `summarizePartition` in `src/generate.ts`.
-- So a 6,000-line diff (`242f311`) went to the 31B model as one
-  ~166k-token prompt. It never finished: it was stopped after a long
-  wait, with the GPU pegged throughout.
-
-Measured on this machine (summary stage, `gemma4:31b-mlx`, window 262k):
-
-| Chunk                           | Model state | Time                 |
-| ------------------------------- | ----------- | -------------------- |
-| ~38.5k tokens (`33a914a`)       | cold        | over 300 s (aborted) |
-| same ~38.5k-token prompt, again | warm        | 96 s                 |
-| ~2.9k tokens                    | warm        | 31 s                 |
-| ~166k tokens (`242f311`)        | warm        | never finished       |
-
-The final stage is slow too: `muse-glimmer:30b-mlx` took 91 s on a
-~900-token prompt, so generation speed matters as well as prompt size.
-The warm 96 s may be flattered by Ollama's prompt cache, since the same
-prompt had just been sent.
-
-### Proposal
-
-1. Add an Ollama-only chunk cap, applied in `clampChunkTokens` after the
-   window clamp, so an `ollama:` summary model never gets a chunk larger
-   than the cap. Larger diffs then split into more, shorter requests,
-   which the existing chunk loop already handles.
-2. Pick the default from measurements, not guesswork. Run
-   `node bin/stopwatch.ts <model>` (synthetic commits of about 400, 8.5k
-   and 40k tokens) on a few local models, and choose a cap that keeps a
-   cold request well under 300 s on a typical machine. 16-32k tokens is
-   the starting guess.
-3. Make it configurable, for example `ollama.maxChunkTokens`, because a
-   fast GPU can take much more than a laptop. The global
-   `maxChunkTokens` (default 600,000) stays as the overall ceiling.
-
-### Decide while building
-
-- **Should `num_ctx` shrink too?** cco sends the whole resolved window as
-  `options.num_ctx` (`buildChatRequest`, `src/ollama.ts`), so Ollama
-  reserves memory for 262k tokens even for a 30k chunk. A cold load at
-  that size is part of the slowness. Pinning `num_ctx` to the cap plus
-  the reserve would cut it. But the `"auto"` probe preloads the model
-  with no `num_ctx`, so a smaller `num_ctx` on the next request makes
-  Ollama reload the model. The probe and the request must agree.
-- **Keep the truncation check consistent.** The check in
-  `runOllamaPrompt` compares `prompt_eval_count` with the `num_ctx` that
-  was sent. Whatever `num_ctx` becomes, the check must use that number.
-  AGENTS.md lists this as load-bearing.
-- **The final stage is not chunked.** Its input is the summaries, so the
-  cap does not help a slow final model. Say so in the docs rather than
-  pretend.
-
-### Done when
-
-- A ~166k-token diff completes on `gemma4:31b-mlx`, with every request
-  under 300 s, and the stopwatch table is recorded in a design record.
-- Tests cover the cap in `clampChunkTokens` (Ollama only, never above the
-  window budget, Claude unaffected) and the chosen `num_ctx` behaviour.
-- README's "Slow models" section explains the cap.
-
-## 2. Known gaps in the shipped TypeSafe checks
+## 1. Known gaps in the shipped TypeSafe checks
 
 Each is small. Fix or measure when touching the check.
 
@@ -106,7 +34,7 @@ Each is small. Fix or measure when touching the check.
   no real option was flagged in tuning, so there was nothing to
   regenerate. Revisit if a model starts producing flagged first options.
 
-## 3. Rejected TypeSafe ideas: what would reopen them
+## 2. Rejected TypeSafe ideas: what would reopen them
 
 Not active work. Each was tested and rejected; the evidence is in the
 design record under "Rejected features". Reopen only if the condition
@@ -132,7 +60,7 @@ holds.
   one Choice across all options, which beat a Score per option (60 of 60
   against 42 of 60 top-1).
 
-## 4. Open question
+## 3. Open question
 
 - **Per-feature toggles under `typesafe`?** Today `enable` turns
   everything on: the support checks, custom-instruction check, gitmoji

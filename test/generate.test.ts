@@ -680,6 +680,146 @@ describe('Ollama chunk sizing', () => {
   })
 })
 
+describe('Ollama final-model warm-up', () => {
+  /**
+   * Records summary calls (and whether each streams), final calls, probes
+   * and preloads in one timeline. A streamed summary emits its text through
+   * `onText`, as the real Ollama runner does.
+   */
+  function timeline() {
+    const events: string[] = []
+    const runner = (async (_prompt, opts) => {
+      if (opts.outputFormat) {
+        events.push('final')
+        return {
+          text: '',
+          costUsd: 0,
+          structured: { messages: ['fix: warmed'] }
+        }
+      }
+      events.push(opts.onText ? 'summary:streamed' : 'summary')
+      opts.onText?.('A summary')
+      opts.onText?.(' arrives')
+      return { text: 'A summary arrives', costUsd: 0 }
+    }) as Runner
+    const resolveOllamaContext = async (model: string, config?: { context?: number | 'auto' }) => {
+      events.push(`probe ${model}`)
+      return typeof config?.context === 'number' ? config.context : 8_192
+    }
+    const warmOllamaModel = async (model: string) => {
+      events.push(`preload ${model}`)
+    }
+    return {
+      events,
+      options: { runner, resolveOllamaContext, warmOllamaModel }
+    }
+  }
+
+  const twoModels = (context: number | 'auto', summary = 'ollama:small'): Config => ({
+    ...baseConfig,
+    models: { summary, final: 'ollama:big' },
+    ollama: { ...baseConfig.ollama, context }
+  })
+
+  test('loads the final model while the last chunk is written, not before', async () => {
+    const { events, options } = timeline()
+    const result = await generateCommit(armorFreeDiff(4_000), twoModels('auto'), options)
+    expect(result.chunkCount).toBeGreaterThan(2)
+    // Earlier chunks run alone: warming then could evict the summary model
+    // between chunks when the two do not fit together. Only the last chunk
+    // streams, and the probe that loads `big` starts once its text arrives.
+    const summaries = events.filter((event) => event.startsWith('summary'))
+    expect(summaries.slice(0, -1).every((event) => event === 'summary')).toBe(true)
+    expect(events.slice(-3)).toEqual(['summary:streamed', 'probe ollama:big', 'final'])
+    expect(events.filter((event) => event === 'probe ollama:big')).toHaveLength(1)
+  })
+
+  test('a configured window is preloaded rather than probed', async () => {
+    const { events, options } = timeline()
+    await generateCommit(armorFreeDiff(10), twoModels(16_384), options)
+    expect(events).toEqual([
+      'probe ollama:small',
+      'summary:streamed',
+      'preload ollama:big',
+      'probe ollama:big',
+      'final'
+    ])
+  })
+
+  test('warms during the low-priority partition when there is one', async () => {
+    const { events, options } = timeline()
+    await generateCommit(
+      `${textDiff}\n${skillDiff}`,
+      {
+        ...twoModels(8_192),
+        lowPriorityPaths: lowPriorityConfig.lowPriorityPaths
+      },
+      options
+    )
+    expect(events.filter((event) => event.startsWith('summary'))).toEqual(['summary', 'summary:streamed'])
+  })
+
+  test('with a Claude summariser, warms before the first chunk', async () => {
+    const { events, options } = timeline()
+    await generateCommit(armorFreeDiff(10), twoModels(16_384, 'sonnet'), options)
+    // No shared server to contend for, so there is nothing to wait for -
+    // and a Claude summary is never switched to streaming.
+    expect(events).toEqual(['preload ollama:big', 'summary', 'probe ollama:big', 'final'])
+  })
+
+  test('one model for both stages is already loaded: nothing to warm', async () => {
+    const { events, options } = timeline()
+    await generateCommit(
+      armorFreeDiff(10),
+      {
+        ...twoModels(16_384),
+        models: { summary: 'ollama:big', final: 'ollama:big' }
+      },
+      options
+    )
+    expect(events).toEqual(['probe ollama:big', 'summary', 'final'])
+  })
+
+  test('a Claude final model leaves the summary requests unstreamed', async () => {
+    const { events, options } = timeline()
+    await generateCommit(
+      armorFreeDiff(10),
+      {
+        ...twoModels(16_384),
+        models: { summary: 'ollama:small', final: 'sonnet' }
+      },
+      options
+    )
+    expect(events.filter((event) => event.startsWith('summary'))).toEqual(['summary'])
+  })
+
+  test('a failed preload is left to the final request to report', async () => {
+    const { events, options } = timeline()
+    const result = await generateCommit(armorFreeDiff(10), twoModels(16_384), {
+      ...options,
+      warmOllamaModel: async () => {
+        throw new ClaudeCommitError('Ollama has no model "big"')
+      }
+    })
+    expect(result.messages).toEqual(['fix: warmed'])
+    expect(events.at(-1)).toBe('final')
+  })
+
+  test('a failed auto probe still fails the run, once', async () => {
+    const { options } = timeline()
+    let probes = 0
+    const promise = generateCommit(armorFreeDiff(10), twoModels('auto', 'sonnet'), {
+      ...options,
+      resolveOllamaContext: async () => {
+        probes += 1
+        throw new ClaudeCommitError('Cannot reach the Ollama server')
+      }
+    })
+    await expect(promise).rejects.toThrow(/Cannot reach/)
+    expect(probes).toBe(1)
+  })
+})
+
 /** A plain (non-armored) diff of roughly `lines` changed lines. */
 function armorFreeDiff(lines: number): string {
   const body = Array.from({ length: lines }, (_, i) => `+  const value${i} = compute(${i}); // a line of ordinary code`)

@@ -39,3 +39,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .bandit/
 
 .claude/worktrees/
+
+# local experiments read by bin/stopwatch.ts in place of package.json
+package.stopwatch.json

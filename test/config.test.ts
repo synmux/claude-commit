@@ -245,6 +245,20 @@ describe('loadFileConfig', () => {
     expect(cfg.lowPriorityPaths).toEqual(['.agents/skills/*-skilld'])
   })
 
+  test('reads a named package file in place of package.json', async () => {
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ 'claude-commit': { gitmoji: true } }))
+    await writeFile(
+      join(dir, 'package.stopwatch.json'),
+      JSON.stringify({
+        'claude-commit': { ollama: { maxChunkTokens: 16_000 } }
+      })
+    )
+    const cfg = await loadFileConfig(dir, dir, undefined, { XDG_CONFIG_HOME: dir }, 'package.stopwatch.json')
+    expect(cfg.ollama).toEqual({ maxChunkTokens: 16_000 })
+    expect(cfg.gitmoji).toBeUndefined()
+    expect((await loadFileConfig(dir, dir, undefined, { XDG_CONFIG_HOME: dir })).gitmoji).toBe(true)
+  })
+
   test('config file overrides package.json', async () => {
     await writeFile(join(dir, 'package.json'), JSON.stringify({ 'claude-commit': { gitmoji: true, multiline: true } }))
     await writeFile(join(dir, '.claude-commit.json'), JSON.stringify({ multiline: false }))
@@ -420,6 +434,13 @@ describe('ollama settings', () => {
     expect(sanitizePartial({ ollama: { keepAlive: null } }).ollama).toEqual({
       keepAlive: null
     })
+  })
+
+  test('keeps a positive maxChunkTokens, floored, and drops anything else', () => {
+    expect(sanitizePartial({ ollama: { maxChunkTokens: 24_000.9 } }).ollama).toEqual({ maxChunkTokens: 24_000 })
+    expect(sanitizePartial({ ollama: { maxChunkTokens: 0 } }).ollama).toBeUndefined()
+    expect(sanitizePartial({ ollama: { maxChunkTokens: 0.5 } }).ollama).toBeUndefined()
+    expect(sanitizePartial({ ollama: { maxChunkTokens: '24k' } }).ollama).toBeUndefined()
   })
 
   test('floors a fractional context length', () => {
