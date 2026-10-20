@@ -17,11 +17,19 @@ permissions:
   actions: read # Required for Claude to read CI results on PRs
 jobs:
   claude:
+    # Only run for text written by someone with write access. The comment or
+    # review is checked before the issue, because comment events carry both.
+    # shortcut: OWNER/COLLABORATOR means write only on a personal-account repo;
+    # if the repo moves to an org, check the collaborator permission API instead.
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      contains(fromJSON('["OWNER", "COLLABORATOR"]'),
+        github.event.comment.author_association || github.event.review.author_association || github.event.issue.author_association) &&
+      (
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+        (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      )
     runs-on: ubuntu-latest
 
     steps:

@@ -15,11 +15,10 @@ permissions:
   id-token: write
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Only review pull requests opened by someone with write access.
+    # shortcut: OWNER/COLLABORATOR means write only on a personal-account repo;
+    # if the repo moves to an org, check the collaborator permission API instead.
+    if: contains(fromJSON('["OWNER", "COLLABORATOR"]'), github.event.pull_request.author_association)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
