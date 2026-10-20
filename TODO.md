@@ -34,7 +34,7 @@ Each is small. Fix or measure when touching the check.
   no real option was flagged in tuning, so there was nothing to
   regenerate. Revisit if a model starts producing flagged first options.
 
-## 3. Rejected TypeSafe ideas: what would reopen them
+## 2. Rejected TypeSafe ideas: what would reopen them
 
 Not active work. Each was tested and rejected; the evidence is in the
 design record under "Rejected features". Reopen only if the condition
@@ -60,7 +60,7 @@ holds.
   one Choice across all options, which beat a Score per option (60 of 60
   against 42 of 60 top-1).
 
-## 4. Open question
+## 3. Open question
 
 - **Per-feature toggles under `typesafe`?** Today `enable` turns
   everything on: the support checks, custom-instruction check, gitmoji
