@@ -47,7 +47,7 @@ For less model work at the cost of less useful messages, enable
 
 ## Install
 
-Requires [Node.js](https://nodejs.org) 24.21 or later.
+Requires [Node.js](https://nodejs.org) 26.11 or later.
 
 ```sh
 npm install -g @synmux/claude-commit   # `cco` and `claude-commit` on your PATH

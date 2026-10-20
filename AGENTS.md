@@ -48,7 +48,7 @@ Three behaviours are load-bearing and easy to break:
   a preload with _no_ `num_ctx` - sending one on the preload would defeat
   the probe.
 
-## Toolchain: Node 24 + pnpm
+## Toolchain: Node 26 + pnpm
 
 The sources are TypeScript and run on Node's native type stripping - there is
 no transpile step for development. That imposes two rules `tsc` enforces:
