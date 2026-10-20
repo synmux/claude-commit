@@ -81,11 +81,20 @@ export function contextReserveTokens(contextWindow: number): number {
  * Clamp a configured per-chunk token budget so that one chunk plus overhead
  * always fits the given model's context window. The configured
  * `maxChunkTokens` remains the user-facing cap; this only ever lowers it.
- * `ollamaContextTokens` supplies the window for an `ollama:` model.
+ * `ollamaContextTokens` supplies the window for an `ollama:` model, and
+ * `ollamaMaxChunkTokens` (`ollama.maxChunkTokens`) caps it further; both
+ * are ignored for a Claude model.
  */
-export function clampChunkTokens(model: string, maxChunkTokens: number, ollamaContextTokens?: number): number {
+export function clampChunkTokens(
+  model: string,
+  maxChunkTokens: number,
+  ollamaContextTokens?: number,
+  ollamaMaxChunkTokens?: number
+): number {
   const window = contextWindowTokens(model, ollamaContextTokens)
-  return Math.max(1, Math.min(maxChunkTokens, window - contextReserveTokens(window)))
+  const windowBudget = Math.min(maxChunkTokens, window - contextReserveTokens(window))
+  const ollamaCap = isOllamaModel(model) && ollamaMaxChunkTokens !== undefined ? ollamaMaxChunkTokens : Infinity
+  return Math.max(1, Math.min(windowBudget, ollamaCap))
 }
 
 /**

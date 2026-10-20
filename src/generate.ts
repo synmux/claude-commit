@@ -251,7 +251,8 @@ async function summarizePartition(
   // window so a single chunk (plus prompt scaffolding and response headroom)
   // can never overflow it, whatever `maxChunkTokens` says. For an Ollama
   // model that window is resolved here first - possibly by asking the
-  // server - so the chunks and the request agree on the same number.
+  // server - so the chunks and the request agree on the same number - and
+  // `ollama.maxChunkTokens` then keeps each request short enough to finish.
   // Chunks are sized by a content-classified token estimate: opaque content
   // (age/gpg armor, binary patches) measures near 1 char/token, so a plain
   // chars-based budget underestimates armor-heavy diffs more than threefold.
@@ -259,7 +260,8 @@ async function summarizePartition(
   const chunkTokens = clampChunkTokens(
     config.models.summary,
     config.maxChunkTokens,
-    typeof ollama?.context === 'number' ? ollama.context : undefined
+    typeof ollama?.context === 'number' ? ollama.context : undefined,
+    ollama?.maxChunkTokens
   )
   const chunks = splitDiffToFit(diff, chunkTokens, config.charsPerToken)
 

@@ -50,6 +50,14 @@ export interface OllamaConfig {
    */
   context: number | 'auto'
   /**
+   * Largest diff chunk, in tokens, sent to an `ollama:` summary model,
+   * applied after the window clamp. A large window lets a chunk grow past
+   * what a local model can summarise inside Node's 300 s fetch limit, so
+   * this splits big diffs into more, shorter requests. Unset means no cap
+   * beyond the window and the global `maxChunkTokens`.
+   */
+  maxChunkTokens?: number
+  /**
    * How long the server keeps the model loaded after a request: a duration
    * string (`"10m"`), seconds as a number, `0` to unload immediately, or a
    * negative value to pin it. `null` leaves the server's own default (which

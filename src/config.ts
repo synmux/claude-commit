@@ -191,6 +191,9 @@ export function sanitizePartial(raw: unknown): PartialConfig {
     } else if (o.context === 'auto') {
       ollama.context = 'auto'
     }
+    if (typeof o.maxChunkTokens === 'number' && o.maxChunkTokens >= 1) {
+      ollama.maxChunkTokens = Math.floor(o.maxChunkTokens)
+    }
     if (typeof o.keepAlive === 'string' || typeof o.keepAlive === 'number') {
       ollama.keepAlive = o.keepAlive
     } else if (o.keepAlive === null) {
@@ -264,13 +267,16 @@ async function findConfigFile(startDir: string, rootDir: string): Promise<string
  * to `repoRoot`). An explicit `configPath` short-circuits the project-file
  * discovery; the global and `package.json` layers still apply beneath it. `env`
  * supplies `XDG_CONFIG_HOME` for locating the global config (defaults to
- * `process.env`).
+ * `process.env`). `packageFile` names the repo-root file read in place of
+ * `package.json`, for tools such as `bin/stopwatch.ts` that keep an
+ * experimental copy.
  */
 export async function loadFileConfig(
   cwd: string,
   repoRoot: string,
   configPath?: string,
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
+  packageFile = 'package.json'
 ): Promise<PartialConfig> {
   let result: PartialConfig = {}
 
@@ -288,7 +294,7 @@ export async function loadFileConfig(
   // committing its fix).
   let pkg: unknown
   try {
-    pkg = await readJsonIfExists(join(repoRoot, 'package.json'))
+    pkg = await readJsonIfExists(join(repoRoot, packageFile))
   } catch {
     pkg = undefined
   }

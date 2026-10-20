@@ -49,9 +49,16 @@ prompt had just been sent.
    and 40k tokens) on a few local models, and choose a cap that keeps a
    cold request well under 300 s on a typical machine. 16-32k tokens is
    the starting guess.
-3. Make it configurable, for example `ollama.maxChunkTokens`, because a
-   fast GPU can take much more than a laptop. The global
-   `maxChunkTokens` (default 600,000) stays as the overall ceiling.
+3. Make it configurable, because a fast GPU can take much more than a
+   laptop. The global `maxChunkTokens` (default 600,000) stays as the
+   overall ceiling.
+
+**Built so far:** `ollama.maxChunkTokens` exists, is applied in
+`clampChunkTokens`, and has no default yet (unset means no cap). To
+measure, set it in a `package.stopwatch.json` (git-ignored), which
+`bin/stopwatch.ts` reads in place of `package.json`. Still open: the
+default from measurements, the `num_ctx` decision below, and the design
+record.
 
 ### Decide while building
 

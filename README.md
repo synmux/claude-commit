@@ -488,6 +488,12 @@ Where the number comes from is `ollama.context`:
   correctness problem - `cco` just splits the diff into more chunks.
 - `host` - defaults to `$OLLAMA_HOST`, then `http://localhost:11434`. A bare
   `box.local:11434` gains an `http://`, matching Ollama's own convention.
+- `maxChunkTokens` - the largest diff chunk, in tokens, sent to an Ollama
+  summary model in one request. Unset by default, so only the window and the
+  top-level `maxChunkTokens` limit it. A large `"auto"` window can let one
+  request grow past what the model can summarise before the 300 s limit
+  (see [Slow models](#slow-models)); a cap splits the diff into more,
+  shorter requests instead. Claude models ignore it.
 - `keepAlive` - how long the server keeps the model loaded after a request: a
   duration string (`"10m"`), seconds as a number, `0` to unload immediately,
   or negative to pin it. `null` leaves the server's own default. Pinning is
@@ -500,7 +506,9 @@ Summary requests are not streamed, so nothing arrives until the whole
 summary is written. A large chunk on a big local model can take longer
 than that. cco then stops with a message saying the model was too slow,
 instead of a bare "fetch failed". To fix it, use a smaller model, or send
-smaller chunks with a lower `maxChunkTokens` or `ollama.context`.
+smaller chunks with `ollama.maxChunkTokens`, which caps only Ollama
+requests. The cap does not help a slow final model: the final stage is not
+chunked, because its input is the summaries.
 `node bin/stopwatch.ts <model>` (see [Development](#development)) shows
 how long a model takes on this machine.
 
@@ -536,8 +544,15 @@ node bin/stopwatch.ts sonnet
 ```
 
 It runs the real pipeline with that model in both stages, using the rest
-of your config (Ollama host and window), and prints the
-summary, final and total time for each commit. The commits are generated
+of your config (Ollama host, window and `ollama.maxChunkTokens`), and prints
+the summary, final and total time for each commit. To try settings without
+touching your real config, put them under a `claude-commit` key in a
+`package.stopwatch.json` at the repo root. When that file exists, the
+stopwatch reads it in place of `package.json` (git ignores it):
+
+````json
+{ "claude-commit": { "ollama": { "context": "auto", "maxChunkTokens": 24000 } } }
+``` The commits are generated
 fresh each run, so a server's prompt cache cannot flatter a second run.
 
 The sources run directly on Node's native type stripping, so there is no build
@@ -557,3 +572,4 @@ If you just shout at a chat and hope for the best, that's vibe coding.
 This was AI-assisted development.
 
 Thanks for coming to my TED talk.
+````

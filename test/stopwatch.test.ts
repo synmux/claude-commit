@@ -1,5 +1,14 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { COMMIT_SIZES, formatSeconds, syntheticDiff } from '../bin/stopwatch.ts'
+import {
+  COMMIT_SIZES,
+  formatSeconds,
+  STOPWATCH_PACKAGE_FILE,
+  stopwatchPackageFile,
+  syntheticDiff
+} from '../bin/stopwatch.ts'
 import { diffPaths } from '../src/diff.ts'
 import { estimateDiffTokens } from '../src/tokens.ts'
 
@@ -33,5 +42,18 @@ describe('formatSeconds', () => {
     expect(formatSeconds(4321)).toBe('4.3 s')
     expect(formatSeconds(0)).toBe('0.0 s')
     expect(formatSeconds(undefined)).toBe('-')
+  })
+})
+
+describe('stopwatchPackageFile', () => {
+  test('prefers package.stopwatch.json, falling back to package.json', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cco-stopwatch-'))
+    try {
+      expect(await stopwatchPackageFile(root)).toBe('package.json')
+      await writeFile(join(root, STOPWATCH_PACKAGE_FILE), '{}')
+      expect(await stopwatchPackageFile(root)).toBe(STOPWATCH_PACKAGE_FILE)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })
