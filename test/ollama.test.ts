@@ -3,6 +3,7 @@ import { ClaudeCommitError, isPromptTooLongError } from '../src/errors.ts'
 import {
   buildChatRequest,
   normaliseOllamaHost,
+  type OllamaRequestSettings,
   probeOllamaContext,
   resolveOllamaConfig,
   resolveOllamaContext,
@@ -142,7 +143,11 @@ describe('resolveOllamaConfig', () => {
 })
 
 describe('buildChatRequest', () => {
-  const resolved = { host: ollama.host, contextTokens: 8192, keepAlive: null }
+  const resolved: OllamaRequestSettings = {
+    host: 'http://ollama.test:11434',
+    contextTokens: 8192,
+    keepAlive: null
+  }
 
   test("sends the model name without cco's prefix", () => {
     const body = buildChatRequest('diff', baseOpts(), resolved)
@@ -316,6 +321,22 @@ describe('runOllamaPrompt - silent truncation', () => {
     expect(isPromptTooLongError(await runOllamaPrompt('d', baseOpts()).catch((e) => e))).toBe(true)
   })
 
+  test('a cached prefix does not hide a truncation', async () => {
+    // prompt_eval_count is the whole prompt (cached tokens included), so a
+    // system prompt served from the cache cannot mask that the rest
+    // filled the window.
+    stubFetch(() =>
+      jsonResponse({
+        message: { content: 'summary' },
+        done: true,
+        done_reason: 'stop',
+        prompt_eval_count: 8192,
+        prompt_eval_cached_count: 3000
+      })
+    )
+    expect(isPromptTooLongError(await runOllamaPrompt('d', baseOpts()).catch((e) => e))).toBe(true)
+  })
+
   test('leaves a comfortably-sized prompt alone', async () => {
     stubFetch(() =>
       jsonResponse({
@@ -441,7 +462,9 @@ describe('runOllamaPrompt - failures', () => {
     // Node's fetch says only "fetch failed"; the reason is in the cause.
     globalThis.fetch = (async () => {
       throw new TypeError('fetch failed', {
-        cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+        cause: Object.assign(new Error('connect ECONNREFUSED'), {
+          code: 'ECONNREFUSED'
+        })
       })
     }) as unknown as typeof fetch
     await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/Cannot reach the Ollama server.*ollama serve/s)
@@ -450,7 +473,9 @@ describe('runOllamaPrompt - failures', () => {
   test('names the underlying cause of any other transport failure', async () => {
     globalThis.fetch = (async () => {
       throw new TypeError('fetch failed', {
-        cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' })
+        cause: Object.assign(new Error('other side closed'), {
+          code: 'UND_ERR_SOCKET'
+        })
       })
     }) as unknown as typeof fetch
     await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
@@ -558,6 +583,38 @@ describe('probeOllamaContext', () => {
       keepAlive: '10m'
     })
     expect(requests[0]?.body).toMatchObject({ keep_alive: '10m' })
+  })
+
+  test('matches a name without a tag against the :latest ps reports it as', async () => {
+    // Ollama treats a missing tag as `latest` on the way in, but reports
+    // the full `mistral:latest` on the way out of /api/ps.
+    stubProbeServer([
+      {
+        name: 'mistral:latest',
+        model: 'mistral:latest',
+        context_length: 32768
+      }
+    ])
+    expect(await probeOllamaContext('mistral', settings)).toBe(32768)
+    stubProbeServer([{ name: 'mistral', model: 'mistral', context_length: 4096 }])
+    expect(await probeOllamaContext('mistral:latest', settings)).toBe(4096)
+    stubProbeServer([{ name: 'registry.example/ns/model:latest', context_length: 2048 }])
+    expect(await probeOllamaContext('registry.example/ns/model', settings)).toBe(2048)
+  })
+
+  test('does not match a different tag of the same model', async () => {
+    stubProbeServer([{ name: 'mistral:7b', context_length: 4096 }])
+    await expect(probeOllamaContext('mistral', settings)).rejects.toThrow(/did not report its context window/)
+  })
+
+  test('leaves keep_alive off the preload when it would mean "unload"', async () => {
+    // Ollama defines empty messages + keep_alive 0 as "unload this model",
+    // after which /api/ps has nothing to report.
+    for (const keepAlive of [0, '0', '0s', '0m']) {
+      const { requests } = stubProbeServer([{ name: 'gemma4:e2b-it-qat', context_length: 32768 }])
+      await probeOllamaContext('gemma4:e2b-it-qat', { ...settings, keepAlive })
+      expect(requests[0]?.body, `keepAlive ${JSON.stringify(keepAlive)}`).not.toHaveProperty('keep_alive')
+    }
   })
 
   test('fails loudly when the model is not in ps afterwards', async () => {
@@ -674,7 +731,9 @@ describe("Node's fetch timeout", () => {
     'explains %s instead of "fetch failed"',
     async (code) => {
       globalThis.fetch = (async () => {
-        throw new TypeError('fetch failed', { cause: Object.assign(new Error('Timeout Error'), { code }) })
+        throw new TypeError('fetch failed', {
+          cause: Object.assign(new Error('Timeout Error'), { code })
+        })
       }) as unknown as typeof fetch
       await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
         /sent nothing for 300 s, Node's fetch limit.*smaller model.*maxChunkTokens.*bin\/stopwatch\.ts/s

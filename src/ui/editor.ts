@@ -7,7 +7,8 @@ import { randomUUID } from 'node:crypto'
 import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createInterface } from 'node:readline'
+import { createInterface, type Interface } from 'node:readline'
+import type { Readable, Writable } from 'node:stream'
 import { ClaudeCommitError } from '../errors.ts'
 
 /** Resolve the editor command, mirroring git's lookup order. */
@@ -51,8 +52,13 @@ function runEditor(editor: string, file: string): Promise<void> {
       shell: true
     })
     child.on('error', reject)
-    child.on('exit', (code) => {
-      if (code === 0 || code === null) resolvePromise()
+    child.on('exit', (code, signal) => {
+      // A signal means the user (or something) killed the editor rather
+      // than saving: git treats that as a failed edit, and so do we, or a
+      // Ctrl-C meant to back out would commit the unedited message.
+      if (signal !== null) {
+        reject(new ClaudeCommitError(`Editor (${editor}) was killed by ${signal}; nothing was committed.`))
+      } else if (code === 0) resolvePromise()
       else reject(new Error(`Editor exited with code ${code}`))
     })
   })
@@ -60,14 +66,39 @@ function runEditor(editor: string, file: string): Promise<void> {
 
 export type ConfirmChoice = 'yes' | 'no' | 'edit'
 
+/** The streams a readline prompt talks to; defaults to stdin and stderr. */
+export interface PromptIo {
+  input?: Readable
+  output?: Writable
+}
+
+/**
+ * Ask one question. Resolves `null` if the interface closes first: in a
+ * terminal readline owns Ctrl-C (it is in raw mode, so no SIGINT reaches
+ * the process) and closes itself, as it does on Ctrl-D; without this the
+ * question never settles and Node exits 0 with nothing printed.
+ */
+export function askLine(rl: Interface, query: string): Promise<string | null> {
+  return new Promise((resolvePromise) => {
+    const onClose = () => resolvePromise(null)
+    rl.once('close', onClose)
+    rl.question(query, (answer) => {
+      rl.off('close', onClose)
+      resolvePromise(answer)
+    })
+  })
+}
+
 /** Prompt for [Y]es / [n]o / [e]dit. Requires an interactive stdin. */
-export async function confirmCommit(): Promise<ConfirmChoice> {
-  const rl = createInterface({ input: process.stdin, output: process.stderr })
+export async function confirmCommit(io: PromptIo = {}): Promise<ConfirmChoice> {
+  const rl = createInterface({
+    input: io.input ?? process.stdin,
+    output: io.output ?? process.stderr
+  })
   try {
     for (;;) {
-      const answer = (await new Promise<string>((res) => rl.question('Commit this message? [Y/n/e] ', res)))
-        .trim()
-        .toLowerCase()
+      const answer = (await askLine(rl, 'Commit this message? [Y/n/e] '))?.trim().toLowerCase()
+      if (answer === undefined) return 'no'
       if (answer === '' || answer === 'y' || answer === 'yes') return 'yes'
       if (answer === 'n' || answer === 'no') return 'no'
       if (answer === 'e' || answer === 'edit') return 'edit'

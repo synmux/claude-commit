@@ -11,6 +11,7 @@ import {
   resolveConfig,
   sanitizePartial
 } from '../src/config.ts'
+import { resolveOllamaConfig } from '../src/ollama.ts'
 
 describe('sanitizePartial', () => {
   test('keeps known keys with correct types', () => {
@@ -443,18 +444,29 @@ describe('ollama settings', () => {
   test('resolveConfig fills the unset half from the defaults', () => {
     const config = resolveConfig({ ollama: { context: 16384 } }, {})
     expect(config.ollama).toEqual({
-      host: DEFAULT_CONFIG.ollama.host,
       context: 16384,
       keepAlive: null
     })
   })
 
-  test('ships a default host and asks the server for the window', () => {
+  test('ships no default host, so $OLLAMA_HOST can be the fallback, and asks the server for the window', () => {
     expect(DEFAULT_CONFIG.ollama).toEqual({
-      host: 'http://localhost:11434',
       context: 'auto',
       keepAlive: null
     })
+  })
+
+  test('$OLLAMA_HOST reaches the resolved config when no layer sets a host', () => {
+    const config = resolveConfig({}, {})
+    const env = { OLLAMA_HOST: 'http://remote-box:11434' }
+    expect(resolveOllamaConfig(config.ollama, env).host).toBe('http://remote-box:11434')
+    expect(resolveOllamaConfig(resolveConfig({}, {}).ollama, {}).host).toBe('http://localhost:11434')
+  })
+
+  test('a configured host still beats $OLLAMA_HOST', () => {
+    const config = resolveConfig({ ollama: { host: 'http://configured:1' } }, {})
+    const env = { OLLAMA_HOST: 'http://remote-box:11434' }
+    expect(resolveOllamaConfig(config.ollama, env).host).toBe('http://configured:1')
   })
 })
 
@@ -495,18 +507,34 @@ describe('typesafe settings', () => {
 
   test('sanitizePartial keeps a valid block and trims names', () => {
     const out = sanitizePartial({
-      typesafe: { enable: true, env: ' __TYPESAFE_API_KEY ', model: 'jev-latest', timeout: 2500.9 }
+      typesafe: {
+        enable: true,
+        env: ' __TYPESAFE_API_KEY ',
+        model: 'jev-latest',
+        timeout: 2500.9
+      }
     })
-    expect(out.typesafe).toEqual({ enable: true, env: '__TYPESAFE_API_KEY', model: 'jev-latest', timeout: 2500 })
+    expect(out.typesafe).toEqual({
+      enable: true,
+      env: '__TYPESAFE_API_KEY',
+      model: 'jev-latest',
+      timeout: 2500
+    })
   })
 
   test('drops values that cannot be used', () => {
-    const out = sanitizePartial({ typesafe: { enable: 'yes', env: '  ', model: '', timeout: 0 } })
+    const out = sanitizePartial({
+      typesafe: { enable: 'yes', env: '  ', model: '', timeout: 0 }
+    })
     expect(out.typesafe).toBeUndefined()
   })
 
   test('merges key by key, so turning it on keeps a configured variable', () => {
     const merged = resolveConfig({ typesafe: { env: '__TYPESAFE_API_KEY' } }, { typesafe: { enable: true } })
-    expect(merged.typesafe).toEqual({ ...DEFAULT_CONFIG.typesafe, enable: true, env: '__TYPESAFE_API_KEY' })
+    expect(merged.typesafe).toEqual({
+      ...DEFAULT_CONFIG.typesafe,
+      enable: true,
+      env: '__TYPESAFE_API_KEY'
+    })
   })
 })

@@ -143,12 +143,41 @@ describe('generateCommit', () => {
   })
 
   test('gives up re-splitting below the retry floor', async () => {
+    let calls = 0
     const { runner } = stubRunner(() => {
+      calls++
       throw promptTooLong()
     })
-    // Halving 15k lands below the 8k floor, so the rejection surfaces.
-    const config: Config = { ...baseConfig, maxChunkTokens: 15_000 }
+    // A 10k budget has a floor of 2.5k (a quarter of it): the ~7k-token
+    // diff is retried at 5k and again at 2.5k, and the third halving,
+    // 1.25k, is under the floor, so the third rejection surfaces.
+    const config: Config = { ...baseConfig, maxChunkTokens: 10_000 }
     await expect(generateCommit(armorDiff(100), config, { runner })).rejects.toThrow(/prompt is too long/i)
+    expect(calls).toBe(3)
+  })
+
+  test('the retry floor scales down with a small Ollama window', async () => {
+    // A 4k window gives a 3,072-token chunk budget; halving that is well
+    // under the 8k floor sized for Claude, which used to surface the
+    // truncation error instead of re-splitting.
+    let rejected = false
+    const { runner, summaryPrompts } = stubRunner((_prompt, index) => {
+      if (index === 0 && !rejected) {
+        rejected = true
+        throw new ClaudeCommitError(
+          'Ollama truncated the request: the prompt is too long for the 4096-token context window.'
+        )
+      }
+    })
+    const config: Config = {
+      ...baseConfig,
+      models: { summary: 'ollama:mistral', final: 'ollama:mistral' },
+      ollama: { ...baseConfig.ollama, context: 4_096 }
+    }
+    const result = await generateCommit(armorDiff(30), config, { runner })
+    expect(rejected).toBe(true)
+    expect(result.chunkCount).toBeGreaterThan(1)
+    expect(summaryPrompts.join('').includes(armorLine(0).slice(1))).toBe(true)
   })
 
   test('summaries are tagged primary when no low-priority paths are configured', async () => {
@@ -665,7 +694,10 @@ function armorFreeDiff(lines: number): string {
 
 describe('TypeSafe candidate check', () => {
   const candidates = ['fix(a): first option', 'fix(a): second option', 'fix(a): third option']
-  const typesafeConfig: Config = { ...baseConfig, typesafe: { ...baseConfig.typesafe, enable: true } }
+  const typesafeConfig: Config = {
+    ...baseConfig,
+    typesafe: { ...baseConfig.typesafe, enable: true }
+  }
   const env = { TYPESAFE_API_KEY: 'ts-key' }
 
   /** A runner whose final stage returns three candidates, counting every call. */
@@ -673,8 +705,16 @@ describe('TypeSafe candidate check', () => {
     const calls: string[] = []
     const runner: Runner = async (prompt, opts): Promise<ModelResult> => {
       calls.push(prompt)
-      if (opts.outputFormat) return { text: '', costUsd: 0.001, structured: { messages: candidates } }
-      return { text: 'Summary: a.txt replaces old line with new line.', costUsd: 0.002 }
+      if (opts.outputFormat)
+        return {
+          text: '',
+          costUsd: 0.001,
+          structured: { messages: candidates }
+        }
+      return {
+        text: 'Summary: a.txt replaces old line with new line.',
+        costUsd: 0.002
+      }
     }
     return { runner, calls }
   }
@@ -682,7 +722,12 @@ describe('TypeSafe candidate check', () => {
   test('flags, reorders and reports the candidates when enabled', async () => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch({ c0_subject_shown: 0.05 })
-    const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 3, env, typesafeFetch: fetch })
+    const result = await generateCommit(textDiff, typesafeConfig, {
+      runner,
+      count: 3,
+      env,
+      typesafeFetch: fetch
+    })
 
     expect(result.messages).toEqual([candidates[1], candidates[2], candidates[0]])
     expect(result.warnings).toEqual([[], [], ['subject names a change the summaries do not show']])
@@ -708,7 +753,10 @@ describe('TypeSafe candidate check', () => {
   test('reads the key from the variable "typesafe.env" names', async () => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch()
-    const config: Config = { ...typesafeConfig, typesafe: { ...typesafeConfig.typesafe, env: '__TYPESAFE_API_KEY' } }
+    const config: Config = {
+      ...typesafeConfig,
+      typesafe: { ...typesafeConfig.typesafe, env: '__TYPESAFE_API_KEY' }
+    }
     await generateCommit(textDiff, config, {
       runner,
       count: 3,
@@ -720,8 +768,16 @@ describe('TypeSafe candidate check', () => {
 
   test('a failed check keeps the model order and says why', async () => {
     const { runner } = threeOptionRunner()
-    const { fetch } = fakeJevFetch(() => ({ status: 401, json: { error: 'invalid key' } }))
-    const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 3, env, typesafeFetch: fetch })
+    const { fetch } = fakeJevFetch(() => ({
+      status: 401,
+      json: { error: 'invalid key' }
+    }))
+    const result = await generateCommit(textDiff, typesafeConfig, {
+      runner,
+      count: 3,
+      env,
+      typesafeFetch: fetch
+    })
 
     expect(result.messages).toEqual(candidates)
     expect(result.warnings).toEqual([[], [], []])
@@ -731,7 +787,12 @@ describe('TypeSafe candidate check', () => {
   test('checks a single non-interactive message too', async () => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch()
-    const single = await generateCommit(textDiff, typesafeConfig, { runner, count: 1, env, typesafeFetch: fetch })
+    const single = await generateCommit(textDiff, typesafeConfig, {
+      runner,
+      count: 1,
+      env,
+      typesafeFetch: fetch
+    })
 
     expect(requests).toHaveLength(1)
     expect(single.candidateCheck?.status).toBe('checked')
@@ -748,7 +809,12 @@ describe('TypeSafe candidate check', () => {
   test('does not run when disabled', async () => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch()
-    const disabled = await generateCommit(textDiff, baseConfig, { runner, count: 3, env: {}, typesafeFetch: fetch })
+    const disabled = await generateCommit(textDiff, baseConfig, {
+      runner,
+      count: 3,
+      env: {},
+      typesafeFetch: fetch
+    })
 
     expect(requests).toHaveLength(0)
     expect(disabled.candidateCheck).toBeNull()
@@ -758,10 +824,18 @@ describe('TypeSafe candidate check', () => {
   test('reports staged changes that look like more than one commit', async () => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch({ mixed_commit: 0.7 })
-    const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 1, env, typesafeFetch: fetch })
+    const result = await generateCommit(textDiff, typesafeConfig, {
+      runner,
+      count: 1,
+      env,
+      typesafeFetch: fetch
+    })
 
     expect(requests[0]?.body.questions.mixed_commit?.type).toBe('noul')
-    expect(result.candidateCheck).toMatchObject({ status: 'checked', mixedCommit: true })
+    expect(result.candidateCheck).toMatchObject({
+      status: 'checked',
+      mixedCommit: true
+    })
     expect(describeCheckNotices(result.candidateCheck)).toEqual([
       'These staged changes look like more than one commit. Consider splitting them.'
     ])
@@ -770,8 +844,16 @@ describe('TypeSafe candidate check', () => {
   test('sends the custom instructions and flags a candidate that ignores them', async () => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch({ c1_follows_custom: 0.05 })
-    const config: Config = { ...typesafeConfig, customPrompt: 'Mention the ticket.' }
-    const result = await generateCommit(textDiff, config, { runner, count: 3, env, typesafeFetch: fetch })
+    const config: Config = {
+      ...typesafeConfig,
+      customPrompt: 'Mention the ticket.'
+    }
+    const result = await generateCommit(textDiff, config, {
+      runner,
+      count: 3,
+      env,
+      typesafeFetch: fetch
+    })
 
     expect(requests[0]?.body.state.custom_instructions).toBe('Mention the ticket.')
     expect(result.messages.at(-1)).toBe(candidates[1])
@@ -787,7 +869,10 @@ describe('TypeSafe candidate check', () => {
       { runner, count: 3, env, typesafeFetch: fetch }
     )
 
-    const state = requests[0]?.body.state as { context: string; evidence: { primary: string } }
+    const state = requests[0]?.body.state as {
+      context: string
+      evidence: { primary: string }
+    }
     expect(state.context).toMatch(/paths of the changed files/)
     expect(state.evidence.primary).toBe('a.txt')
   })
@@ -817,7 +902,12 @@ describe('gitmoji format check', () => {
   test('with TypeSafe on, flags a clash and moves it last', async () => {
     const { fetch } = answeringJevFetch()
     const config: Config = { ...baseConfig, ...formats, typesafe: enabled }
-    const result = await generateCommit(textDiff, config, { runner, count: 2, env, typesafeFetch: fetch })
+    const result = await generateCommit(textDiff, config, {
+      runner,
+      count: 2,
+      env,
+      typesafeFetch: fetch
+    })
     expect(result.messages).toEqual([clashing[1], clashing[0]])
     expect(result.warnings).toEqual([[], ['gitmoji does not match the commit type']])
   })
@@ -825,14 +915,24 @@ describe('gitmoji format check', () => {
   test('with TypeSafe on, flags a single message', async () => {
     const { fetch } = answeringJevFetch()
     const config: Config = { ...baseConfig, ...formats, typesafe: enabled }
-    const result = await generateCommit(textDiff, config, { runner: singleRunner, count: 1, env, typesafeFetch: fetch })
+    const result = await generateCommit(textDiff, config, {
+      runner: singleRunner,
+      count: 1,
+      env,
+      typesafeFetch: fetch
+    })
     expect(result.warnings).toEqual([['gitmoji does not match the commit type']])
   })
 
   test('stays quiet unless both gitmoji and conventional commits are on', async () => {
     const config: Config = { ...baseConfig, gitmoji: true, typesafe: enabled }
     const { fetch } = answeringJevFetch()
-    const result = await generateCommit(textDiff, config, { runner: singleRunner, count: 1, env, typesafeFetch: fetch })
+    const result = await generateCommit(textDiff, config, {
+      runner: singleRunner,
+      count: 1,
+      env,
+      typesafeFetch: fetch
+    })
     expect(result.warnings).toEqual([[]])
   })
 })

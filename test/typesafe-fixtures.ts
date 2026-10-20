@@ -16,7 +16,13 @@ export function jevAnswers(questions: Questions, overrides: Record<string, numbe
   for (const [name, question] of Object.entries(questions)) {
     const value = overrides[name]
     if (question.type === 'score') {
-      answers[name] = { type: 'score', score: value ?? 2, confidence: 0.9, legend: {}, probabilities: {} }
+      answers[name] = {
+        type: 'score',
+        score: value ?? 2,
+        confidence: 0.9,
+        legend: {},
+        probabilities: {}
+      }
     } else {
       const yesIsBad = name.startsWith('dup_') || name === 'mixed_commit'
       answers[name] = { type: 'noul', noul: value ?? (yesIsBad ? 0.05 : 0.95) }
@@ -36,13 +42,21 @@ export interface RecordedJevRequest {
  * A `fetch` stand-in that records each request and replies with whatever
  * `reply` returns for its body.
  */
-export function fakeJevFetch(reply: (body: RecordedJevRequest['body']) => { status: number; json: unknown }) {
+export function fakeJevFetch(
+  reply: (body: RecordedJevRequest['body']) => {
+    status: number
+    json: unknown
+  }
+) {
   const requests: RecordedJevRequest[] = []
   const fetch = async (url: string, init?: RequestInit): Promise<Response> => {
     const body = JSON.parse(String(init?.body)) as RecordedJevRequest['body']
     requests.push({ url, headers: new Headers(init?.headers), body })
     const { status, json } = reply(body)
-    return new Response(JSON.stringify(json), { status, headers: { 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify(json), {
+      status,
+      headers: { 'Content-Type': 'application/json' }
+    })
   }
   return { fetch, requests }
 }

@@ -3,147 +3,10 @@
 Open work, most useful first. Finished and rejected work is recorded in
 `docs/superpowers/specs/` - the TypeSafe items below build on
 `2026-10-19-typesafe-candidate-check-design.md`, which holds the test
-methods and numbers they refer to.
+methods and numbers they refer to. The bugs from the 2026-10-20 review
+(items 1a-1h) are fixed; see CHANGELOG.md under "Unreleased - Fixed".
 
-## 1. Fix bugs found in review
-
-An independent review of the whole codebase (2026-10-20) found these.
-All predate the TypeSafe work: the code involved is the same on `main`.
-Each was checked against the code; "reproduced" means a script showed the
-failure. Line numbers are as of commit `bec0073` - search for the named
-function if they have moved. Every fix needs a test that fails first.
-
-### 1a. `$OLLAMA_HOST` is never used
-
-- **Where:** `DEFAULT_CONFIG.ollama.host` in `src/config.ts` (line 39) is
-  `DEFAULT_OLLAMA_HOST`. `resolveOllamaHost` in `src/ollama.ts` (line 71)
-  falls back to `$OLLAMA_HOST` only when the configured host is blank.
-- **Failure:** the merged config always carries
-  `http://localhost:11434`, so the environment variable is never reached.
-  With `export OLLAMA_HOST=http://remote-box:11434` and no `ollama.host`
-  in any config, every `ollama:` run goes to localhost and fails with
-  `Cannot reach the Ollama server at http://localhost:11434`.
-- **Contradicts:** README (Ollama section), `--help` for `--ollama-host`,
-  the `OllamaConfig.host` doc in `src/types.ts`, and the Ollama design
-  record, which all say `$OLLAMA_HOST` is the fallback.
-- **Reproduce:** `OLLAMA_HOST=http://remote-box:11434 node --input-type=module -e 'const {resolveConfig}=await import("./src/config.ts"); const {resolveOllamaConfig}=await import("./src/ollama.ts"); console.log(resolveOllamaConfig(resolveConfig({}, {}).ollama).host)'`
-  prints `http://localhost:11434`. Reproduced.
-- **Fix:** leave the default host unset, so `resolveOllamaHost` can fall
-  back to the environment and then to `DEFAULT_OLLAMA_HOST`. Keep the
-  precedence: config, then `$OLLAMA_HOST`, then localhost.
-- **Test gap:** the tests call `resolveOllamaHost` directly, never
-  through `resolveConfig`. Add one that goes through both.
-
-### 1b. Ctrl-C or Ctrl-D at the commit prompt exits with code 0
-
-- **Where:** `confirmCommit` in `src/ui/editor.ts` (line 64), and the same
-  pattern in `selectWithReadline` in `src/ui/interactive.ts` (line 243,
-  the picker's fallback).
-- **Failure:** at "Commit this message? [Y/n/e]", readline is in raw
-  mode, so Ctrl-C reaches readline, not the process, and the SIGINT
-  handler in `src/cli.ts` (line 224) never runs. With no `SIGINT` or
-  `close` listener on the interface, readline just closes. The pending
-  question never settles, the event loop empties and Node exits. `run()`
-  never returns, so the exit code stays 0 and "Aborted. Nothing was
-  committed." is never printed. Nothing is committed, but a script
-  wrapping `cco` sees success. Ctrl-D behaves the same; typing `n` works.
-- **Reproduce:** drive the prompt in a pseudo-terminal (for example with
-  Python's `pty`), send `\x03`, and read the exit code: 0. Reproduced.
-- **Fix:** in both prompts, listen for `SIGINT` and `close` on the
-  readline interface and settle the promise: treat it as "no" (exit 1
-  with "Aborted"), or reject with `ClaudeCommitError('Generation was cancelled.')` to match the rest of the CLI.
-
-### 1c. An editor killed by a signal still commits the unedited message
-
-- **Where:** `runEditor` in `src/ui/editor.ts`: the `exit` handler (line 54) resolves when `code === 0 || code === null`. Called from the "edit"
-  paths in `src/cli.ts` and `src/ui/interactive.ts`.
-- **Failure:** the user chooses `e`, then presses Ctrl-C while
-  `code --wait` (or any waiting editor) is open. The editor dies from the
-  signal, so `code` is `null` and the edit counts as successful. The
-  unchanged temp file is read back and `commit()` runs, so the user who
-  pressed Ctrl-C to back out gets a commit. git itself treats an editor
-  killed by a signal as an error.
-- **Reproduce:** set `GIT_EDITOR` to a script that runs `kill -TERM $$`
-  and call `editInEditor('original')`: it resolves with the original
-  text. Reproduced.
-- **Fix:** use the `(code, signal)` arguments of the `exit` event and
-  reject when `signal` is not null, for example "Editor was killed by
-  SIGTERM; nothing was committed."
-
-### 1d. The default `"auto"` context fails for Ollama model names without a tag
-
-- **Where:** `probeOllamaContext` in `src/ollama.ts`: the match at line
-  146 compares the configured name exactly with `/api/ps`'s `name` and
-  `model`.
-- **Failure:** with `ollama:mistral` (no `:tag`), the preload succeeds,
-  because Ollama treats a missing tag as `latest`. But `/api/ps` reports
-  `mistral:latest`, nothing matches, and the run stops with "Ollama
-  loaded "mistral" but did not report its context window in /api/ps".
-  Names with an explicit tag, such as `gemma4:31b-mlx`, are unaffected,
-  which is why it went unnoticed.
-- **Reproduce:** stub `fetch` to return the documented `/api/ps` body
-  (`"name": "mistral:latest"`) and call
-  `probeOllamaContext('mistral', ...)`: it throws. Confirmed against
-  Ollama's documented response shape, not a live server.
-- **Fix:** normalise before comparing: add `:latest` when the name has no
-  tag after its last `/`, or strip `:latest` from both sides.
-
-### 1e. `"ollama.keepAlive": 0` turns the context probe into an unload
-
-- **Where:** the preload in `probeOllamaContext` (`src/ollama.ts`, around
-  line 129) sends `messages: []` plus `keep_alive` whenever `keepAlive`
-  is set. `OllamaConfig.keepAlive` documents `0` as valid.
-- **Failure:** Ollama's API defines an empty `messages` array with
-  `keep_alive: 0` as "unload this model". The following `/api/ps` has no
-  entry for it, and the run fails with the same "did not report its
-  context window" error as 1d, which points the user at the wrong cause.
-- **Reproduce:** a stubbed probe with `keepAlive: 0` sends
-  `{"messages":[],"stream":false,"keep_alive":0}`. The server behaviour
-  comes from Ollama's docs; not run against a live server.
-- **Fix:** leave `keep_alive` out of the probe when it is 0 and send it
-  only on real requests, or reject `keepAlive: 0` with `"auto"` and say
-  why.
-
-### 1f. `--no-spinner` is ignored in interactive mode
-
-- **Where:** `src/cli.ts` (line 275) passes only `verbose` and the abort
-  controller to `runInteractive`. `src/ui/interactive.ts` (line 45) builds
-  its spinner from `process.stderr.isTTY` alone.
-- **Failure:** `cco -i --no-spinner` still animates. The README and
-  `--help` describe the flag without limiting it to non-interactive
-  runs. Cosmetic.
-- **Fix:** pass `opts.spinner !== false` through `InteractiveOptions` and
-  gate the spinner the way `runNonInteractive` does. Add a test; no test
-  covers the flag today.
-
-### 1g. Ollama's re-split retry never runs for small windows
-
-- **Where:** `MIN_RETRY_CHUNK_TOKENS = 8_000` in `src/generate.ts` (line 205) and the check that uses it (line 273), with `clampChunkTokens` in
-  `src/tokens.ts`, which keeps three quarters of a small window.
-- **Failure:** Ollama's 4k tier, or an 8k or 16k model, gives chunk
-  budgets of 3,072, 6,144 or 12,288 tokens. Halving gives 1,536, 3,072
-  or 6,144, all below the 8,000 floor. So the "prompt is too long" error
-  cco raises for a truncated Ollama prompt is thrown, instead of
-  re-splitting as the Ollama design record says it will. At a 32k window
-  the retry runs once. The floor was sized for Claude windows.
-- **Reproduce:** traced through the arithmetic, not run against a server.
-- **Fix:** scale the floor with the window (for example
-  `min(8_000, chunkTokens / 4)`), or skip it for Ollama, whose rejection
-  already means truncation. This fits naturally with item 3 (chunk cap).
-
-### 1h. Minor, to check while nearby
-
-- **Truncation check under prefix caching (unverified).** The check in
-  `runOllamaPrompt` hedges between `prompt_eval_count` and the cached
-  count with `max()`. In principle it could miss a truncation smaller than
-  a cached system-prompt prefix. The reviewer judged this too speculative
-  to list as a bug. Confirm or rule it out with a stubbed response.
-- **Types newer than `engines`.** `@types/node` is version 26 while
-  `engines` says Node 24.21, so the typecheck accepts Node 26-only APIs
-  that would fail for Node 24 users. Pin `@types/node` to 24, or run CI's
-  tests on Node 24 as well.
-
-## 2. Cap Ollama chunk size
+## 1. Cap Ollama chunk size
 
 ### Problem
 
@@ -215,7 +78,7 @@ prompt had just been sent.
   window budget, Claude unaffected) and the chosen `num_ctx` behaviour.
 - README's "Slow models" section explains the cap.
 
-## 3. Known gaps in the shipped TypeSafe checks
+## 2. Known gaps in the shipped TypeSafe checks
 
 Each is small. Fix or measure when touching the check.
 
@@ -243,7 +106,7 @@ Each is small. Fix or measure when touching the check.
   no real option was flagged in tuning, so there was nothing to
   regenerate. Revisit if a model starts producing flagged first options.
 
-## 4. Rejected TypeSafe ideas: what would reopen them
+## 3. Rejected TypeSafe ideas: what would reopen them
 
 Not active work. Each was tested and rejected; the evidence is in the
 design record under "Rejected features". Reopen only if the condition
@@ -269,7 +132,7 @@ holds.
   one Choice across all options, which beat a Score per option (60 of 60
   against 42 of 60 top-1).
 
-## 5. Open question
+## 4. Open question
 
 - **Per-feature toggles under `typesafe`?** Today `enable` turns
   everything on: the support checks, custom-instruction check, gitmoji

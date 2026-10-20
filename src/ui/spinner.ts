@@ -34,6 +34,15 @@ export function resolveSpinner(name: string): SpinnerAnimation {
   return known ?? spinners[DEFAULT_SPINNER]
 }
 
+/**
+ * Whether to animate: the `--no-spinner` flag (`false` when given) wins,
+ * else only a terminal gets one. Both CLI modes decide through this so the
+ * flag cannot be honoured in one and ignored in the other.
+ */
+export function spinnerEnabled(flag: boolean | undefined, stream: { isTTY?: boolean }): boolean {
+  return flag !== false && Boolean(stream.isTTY)
+}
+
 export class Spinner {
   private instance: Ora | null = null
   private readonly enabled: boolean

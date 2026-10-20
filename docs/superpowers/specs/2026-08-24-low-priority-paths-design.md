@@ -1,7 +1,10 @@
 # Design: `lowPriorityPaths` - deprioritising churn-heavy paths
 
 **Date:** 2026-08-24
-**Status:** Implemented
+**Status:** Implemented. The matcher described here was built on `Bun.Glob`;
+since the 2026-09-13 Node migration it is `picomatch`, with the differences
+recorded in `2026-09-13-node-pnpm-clack-migration-design.md`. The pattern
+semantics are unchanged.
 
 ## Problem
 

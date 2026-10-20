@@ -26,15 +26,15 @@ Note: the Claude Code Bash tool in this project runs **zsh** (chain with `&&`, n
 
 ## Committing from a Claude Code session (2026-08-24)
 
-`git commit` is SSH-signed through 1Password (`commit.gpgsign=true`, `gpg.format=ssh`, `gpg.ssh.program=.../op-ssh-sign`). From the Bash tool the signer dies with "1Password: failed to fill whole buffer" → "fatal: failed to write commit object"; the trunk pre-commit hook has already run and passed, and the index is untouched. Do NOT use `--no-gpg-sign`. Write the message to a file and ask the user to run `! git commit -F <file>`. Scratch repos for E2E runs inherit the global config: set `git config commit.gpgsign false` (and `tag.gpgsign false`) right after `git init`.
+`git commit` is SSH-signed through 1Password (`commit.gpgsign=true`, `gpg.format=ssh`, `gpg.ssh.program=.../op-ssh-sign`), which prompts for biometrics on every commit. Since 2026-10-19 the user's instruction is: agents commit with `git -c commit.gpgsign=false commit ...` (and `-c tag.gpgsign=false` for tags), one commit per fix or feature, and never change the git config. Scratch repos for E2E runs inherit the global config: set `git config commit.gpgsign false` (and `tag.gpgsign false`) right after `git init`.
 
 ## E2E scratch-repo recipe for lowPriorityPaths
 
 `scratchpad/e2e.sh` pattern: init repo (signing off, `diff.relative true` to prove `--no-relative`), `.claude-commit.json` with `lowPriorityPaths: ["generated/**", "pnpm-lock.yaml"]`, commit a baseline, then stage a ~20-line `src/parser.ts` fix plus regenerated `generated/docs/*.md` (3×400 lines) and a 300-line lockfile; run `cco --dry-run --no-spinner --verbose` from `src/` (subdir), then with `--no-low-priority-paths` (A/B), then with only the churn staged (promotion). Expected: `low-priority paths: matched 4 of 5 files`, subject about the parser fix, churn as a trailing "Also regenerates" paragraph; promotion case prints `matched all 4 files - nothing else changed, so treated as primary`.
 
-## `pnpm run format` dirties generated skill docs
+## Formatting: use `pnpm run format`, not Prettier alone
 
-`prettier --write .` in the `format` script reformats `.agents/skills/*-skilld/SKILL.md` (trunk ignores those paths, prettier does not). Revert with `git checkout -- .agents/skills/*-skilld .claude/skills/*-skilld` before committing unless the churn is intended; prefer `pnpm exec prettier --write <changed files>`.
+`pnpm run format` runs Prettier, then biome, then `trunk fmt`, deliberately in that order: Prettier formats what it can and trunk cleans up. Prettier and biome disagree on print width, so `pnpm exec prettier --write` on its own leaves files that `pnpm run lint` reports as unformatted. `.prettierignore` excludes the generated `*-skilld` skill docs and the lockfile, so the script no longer churns them (it did before 2026-09-13).
 
 ## User's install + test bed
 

@@ -90,6 +90,22 @@ export function resolveOllamaConfig(
   }
 }
 
+/**
+ * `mistral` as Ollama reports it: `mistral:latest`. A request may omit the
+ * tag, but `/api/ps` always states it, so names are compared with the
+ * default filled in. The tag is whatever follows the last `:` after the
+ * last `/`, so a registry port (`host:11434/ns/model`) is not mistaken for one.
+ */
+export function withDefaultTag(model: string): string {
+  const slash = model.lastIndexOf('/')
+  return model.indexOf(':', slash + 1) === -1 ? `${model}:latest` : model
+}
+
+/** Whether a `keep_alive` value means zero (`0`, `"0"`, `"0s"`, ...): unload at once. */
+function isUnloadKeepAlive(keepAlive: string | number): boolean {
+  return (typeof keepAlive === 'number' ? keepAlive : parseFloat(keepAlive)) === 0
+}
+
 /** The one field of a `/api/ps` entry cco reads, plus the names it matches on. */
 interface OllamaLoadedModel {
   name?: string
@@ -128,7 +144,10 @@ export async function probeOllamaContext(
         model,
         messages: [],
         stream: false,
-        ...(keepAlive !== null ? { keep_alive: keepAlive } : {})
+        // Empty messages plus keep_alive 0 is Ollama's "unload" request,
+        // which would leave nothing in /api/ps; the real requests still
+        // send the configured value.
+        ...(keepAlive !== null && !isUnloadKeepAlive(keepAlive) ? { keep_alive: keepAlive } : {})
       })
     },
     host,
@@ -143,7 +162,12 @@ export async function probeOllamaContext(
     throw new ClaudeCommitError(await describeHttpFailure(ps, host, model))
   }
   const body = (await ps.json()) as { models?: OllamaLoadedModel[] }
-  const loaded = (body.models ?? []).find((entry) => entry.name === model || entry.model === model)
+  const wanted = withDefaultTag(model)
+  const loaded = (body.models ?? []).find(
+    (entry) =>
+      (entry.name !== undefined && withDefaultTag(entry.name) === wanted) ||
+      (entry.model !== undefined && withDefaultTag(entry.model) === wanted)
+  )
   const contextLength = loaded?.context_length
   if (typeof contextLength !== 'number' || contextLength <= 0) {
     throw new ClaudeCommitError(
@@ -302,7 +326,11 @@ function causeChain(error: unknown): string[] {
   const parts: string[] = []
   let current: unknown = error
   for (let depth = 0; current !== null && typeof current === 'object' && depth < 5; depth++) {
-    const { message, code, cause } = current as { message?: unknown; code?: unknown; cause?: unknown }
+    const { message, code, cause } = current as {
+      message?: unknown
+      code?: unknown
+      cause?: unknown
+    }
     if (typeof message === 'string' && message !== '') parts.push(message)
     if (typeof code === 'string' && !parts.includes(code)) parts.push(code)
     current = cause
@@ -389,10 +417,12 @@ async function consumeStream(
 }
 
 /**
- * Tokens the server reported for the prompt. `prompt_eval_cached_count` is
- * documented as its own counter without saying whether cached tokens are
- * also inside `prompt_eval_count`, so take the larger: under either reading
- * that is the prompt's real size, and neither double-counts.
+ * Tokens the server reported for the prompt. Ollama's usage docs define
+ * `prompt_eval_count` as the whole prompt and `prompt_eval_cached_count` as
+ * the part of it read from the cache (`prompt_eval_duration` covers only
+ * the uncached rest), so the first is the prompt's real size and a cached
+ * system-prompt prefix cannot hide a truncation. Taking the larger costs
+ * nothing and also covers a server that reports only the cached count.
  */
 function promptTokensOf(final: OllamaChatChunk): number {
   return Math.max(final.prompt_eval_count ?? 0, final.prompt_eval_cached_count ?? 0)

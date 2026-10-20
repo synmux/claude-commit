@@ -29,11 +29,27 @@ const GITMOJI: readonly Gitmoji[] = [
   { emoji: '♻️', meaning: 'refactor', types: ['refactor'] },
   { emoji: '⚡️', meaning: 'performance', types: ['perf'] },
   { emoji: '✅', meaning: 'tests', types: ['test', 'fix'] },
-  { emoji: '🔧', meaning: 'configuration / tooling', types: ['chore', 'build', 'ci', 'fix'] },
-  { emoji: '🎨', meaning: 'structure / formatting', types: ['style', 'refactor'] },
+  {
+    emoji: '🔧',
+    meaning: 'configuration / tooling',
+    types: ['chore', 'build', 'ci', 'fix']
+  },
+  {
+    emoji: '🎨',
+    meaning: 'structure / formatting',
+    types: ['style', 'refactor']
+  },
   { emoji: '🚚', meaning: 'move / rename', types: ['refactor', 'chore'] },
-  { emoji: '🔥', meaning: 'remove code or files', types: ['refactor', 'chore', 'fix'] },
-  { emoji: '⬆️', meaning: 'upgrade dependencies', types: ['chore', 'build', 'ci', 'fix'] },
+  {
+    emoji: '🔥',
+    meaning: 'remove code or files',
+    types: ['refactor', 'chore', 'fix']
+  },
+  {
+    emoji: '⬆️',
+    meaning: 'upgrade dependencies',
+    types: ['chore', 'build', 'ci', 'fix']
+  },
   { emoji: '👷', meaning: 'CI build system', types: ['ci', 'build'] },
   { emoji: '🚑️', meaning: 'critical hotfix', types: ['fix'] },
   { emoji: '🔒️', meaning: 'security', types: 'any' }

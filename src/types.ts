@@ -22,11 +22,12 @@ export interface ModelConfig {
 /** Settings for the Ollama backend, used only by `ollama:`-prefixed models. */
 export interface OllamaConfig {
   /**
-   * Base URL of the Ollama server. Defaults to `$OLLAMA_HOST`, falling back
-   * to `http://localhost:11434`. A bare `host:port` (Ollama's own
-   * convention for that variable) is given an `http://` scheme.
+   * Base URL of the Ollama server. Unset by default, so that
+   * `$OLLAMA_HOST` applies, falling back to `http://localhost:11434`. A bare
+   * `host:port` (Ollama's own convention for that variable) is given an
+   * `http://` scheme.
    */
-  host: string
+  host?: string
   /**
    * Context window requested for every Ollama call (`options.num_ctx`) and
    * used to size diff chunks: a token count, or `"auto"` (the default) to

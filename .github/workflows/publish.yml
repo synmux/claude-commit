@@ -57,13 +57,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
-      # Node 24 bundles npm >= 11.5.1, the minimum for OIDC trusted publishing.
+      # Node 26 bundles npm >= 11.5.1, the minimum for OIDC trusted publishing.
       # Deliberately no `registry-url` here: it writes an .npmrc that expects a
       # NODE_AUTH_TOKEN env var, which breaks tokenless OIDC publishes.
       - name: Set up Node.js for npm publish
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
 
       # Reads the pinned version from package.json's `packageManager` field.
       - name: Set up pnpm

@@ -1,7 +1,8 @@
 # Node 24 + pnpm toolchain and the Clack picker
 
 **Date:** 2026-09-13
-**Status:** Implemented
+**Status:** Implemented. The Node floor moved to 26 afterwards (`engines`
+`^26.11.1`); the design below is otherwise current.
 
 ## Problem
 
