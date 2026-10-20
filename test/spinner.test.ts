@@ -1,6 +1,6 @@
 import spinners from 'cli-spinners'
 import { describe, expect, test, vi } from 'vitest'
-import { DEFAULT_SPINNER, isSpinnerName, resolveSpinner, Spinner } from '../src/ui/spinner.ts'
+import { DEFAULT_SPINNER, isSpinnerName, resolveSpinner, Spinner, spinnerEnabled } from '../src/ui/spinner.ts'
 
 describe('isSpinnerName', () => {
   test('recognises cli-spinners names', () => {
@@ -48,5 +48,15 @@ describe('Spinner when disabled (no TTY / --no-spinner)', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+})
+
+describe('spinnerEnabled', () => {
+  test('animates only on a TTY and only unless --no-spinner was given', () => {
+    expect(spinnerEnabled(undefined, { isTTY: true })).toBe(true)
+    expect(spinnerEnabled(true, { isTTY: true })).toBe(true)
+    expect(spinnerEnabled(false, { isTTY: true })).toBe(false)
+    expect(spinnerEnabled(undefined, {})).toBe(false)
+    expect(spinnerEnabled(undefined, { isTTY: false })).toBe(false)
   })
 })

@@ -20,7 +20,7 @@ import type { ModelConfig, OllamaConfig, PartialConfig } from './types.ts'
 import { color } from './ui/colors.ts'
 import { confirmCommit, editInEditor } from './ui/editor.ts'
 import { playParty } from './ui/party.ts'
-import { Spinner } from './ui/spinner.ts'
+import { Spinner, spinnerEnabled } from './ui/spinner.ts'
 import { getVersion } from './utils.ts'
 
 export const VERSION = getVersion()
@@ -205,6 +205,7 @@ export async function run(argv: string[]): Promise<number> {
   program.parse(argv, { from: 'user' })
   const opts = program.opts<CliOptions>()
   const verbose = Boolean(opts.verbose)
+  const useSpinner = spinnerEnabled(opts.spinner, process.stderr)
 
   const abortController = new AbortController()
   // Two-stage Ctrl-C: the first interrupt asks the in-flight generation to
@@ -272,10 +273,14 @@ export async function run(argv: string[]): Promise<number> {
     }
     if (interactiveMode === 'interactive') {
       const { runInteractive } = await import('./ui/interactive.ts')
-      return await runInteractive(diff, config, { verbose, abortController })
+      return await runInteractive(diff, config, {
+        verbose,
+        spinner: useSpinner,
+        abortController
+      })
     }
 
-    return await runNonInteractive(diff, config, opts, verbose, abortController)
+    return await runNonInteractive(diff, config, opts, verbose, useSpinner, abortController)
   } catch (err) {
     if (err instanceof ClaudeCommitError) {
       process.stderr.write(`${color('31', 'error:')} ${err.message}\n`)
@@ -292,9 +297,9 @@ async function runNonInteractive(
   config: ReturnType<typeof resolveConfig>,
   opts: CliOptions,
   verbose: boolean,
+  useSpinner: boolean,
   abortController: AbortController
 ): Promise<number> {
-  const useSpinner = opts.spinner !== false && process.stderr.isTTY
   const spinner = new Spinner(useSpinner, config.spinner)
 
   spinner.start(config.filenamesOnly ? 'Reading filenames' : 'Reading diff')

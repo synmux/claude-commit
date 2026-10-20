@@ -33,6 +33,8 @@ import { Spinner } from './spinner.ts'
 
 export interface InteractiveOptions {
   verbose: boolean
+  /** Whether to animate progress; the CLI decides from `--no-spinner` and the TTY. */
+  spinner: boolean
   abortController: AbortController
 }
 
@@ -42,7 +44,7 @@ export type Selection = { action: 'commit' | 'edit'; index: number } | { action:
 /** Run the full interactive flow. Returns a process exit code. */
 export async function runInteractive(diff: string, config: Config, opts: InteractiveOptions): Promise<number> {
   const count = Math.max(1, config.interactiveCount)
-  const spinner = new Spinner(process.stderr.isTTY, config.spinner)
+  const spinner = new Spinner(opts.spinner, config.spinner)
   spinner.start(`Generating ${count} option${count === 1 ? '' : 's'}`)
   let result: GenerateResult
   try {
