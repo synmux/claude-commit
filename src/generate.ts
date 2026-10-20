@@ -99,7 +99,13 @@ export interface GenerateOptions {
 
 /** What the TypeSafe candidate check did on this run. */
 export type CandidateCheckReport =
-  | { status: 'checked'; model: string; inputTokens: number; droppedDuplicates: number; mixedCommit: boolean }
+  | {
+      status: 'checked'
+      model: string
+      inputTokens: number
+      droppedDuplicates: number
+      mixedCommit: boolean
+    }
   | { status: 'failed'; error: string }
 
 /** The context window one Ollama model ran with during this run. */
@@ -201,8 +207,16 @@ class OllamaContextResolver {
  * Floor for overflow-retry halving. Below this a chunk is essentially
  * prompt-sized already, so a "prompt is too long" rejection indicates
  * something other than chunk sizing and is surfaced instead of retried.
+ * Sized for Claude's windows: a small Ollama window (4k gives a 3,072
+ * budget) scales it down instead, see {@link retryFloorTokens}, or the
+ * retry could never run there at all.
  */
 const MIN_RETRY_CHUNK_TOKENS = 8_000
+
+/** The retry floor for a partition whose chunks were budgeted at `chunkTokens`: two halvings, at least. */
+function retryFloorTokens(chunkTokens: number): number {
+  return Math.min(MIN_RETRY_CHUNK_TOKENS, Math.floor(chunkTokens / 4))
+}
 
 interface PartitionSummaryOptions {
   config: Config
@@ -270,7 +284,7 @@ async function summarizePartition(
       costUsd += result.costUsd
     } catch (error) {
       const halvedBudget = Math.floor(task.tokenBudget / 2)
-      if (!isPromptTooLongError(error) || halvedBudget < MIN_RETRY_CHUNK_TOKENS) {
+      if (!isPromptTooLongError(error) || halvedBudget < retryFloorTokens(chunkTokens)) {
         throw error
       }
       const pieces = splitDiffToFit(task.chunk, halvedBudget, config.charsPerToken)
@@ -464,7 +478,10 @@ export async function generateCommit(
       }
     } catch (error) {
       if (abortController?.signal.aborted) throw new ClaudeCommitError('Generation was cancelled.')
-      candidateCheck = { status: 'failed', error: error instanceof Error ? error.message : String(error) }
+      candidateCheck = {
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error)
+      }
     }
   }
 
@@ -525,8 +542,16 @@ function filenameEvidence(
 ): CandidateEvidence {
   const list = (paths: string[]) => paths.join('\n')
   return hasLowPriority
-    ? { kind: 'filenames', primary: list(filenames.primary), lowPriority: list(filenames.lowPriority) }
-    : { kind: 'filenames', primary: list([...filenames.primary, ...filenames.lowPriority]), lowPriority: null }
+    ? {
+        kind: 'filenames',
+        primary: list(filenames.primary),
+        lowPriority: list(filenames.lowPriority)
+      }
+    : {
+        kind: 'filenames',
+        primary: list([...filenames.primary, ...filenames.lowPriority]),
+        lowPriority: null
+      }
 }
 
 /**
