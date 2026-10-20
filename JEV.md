@@ -20,7 +20,7 @@ Jev has three question types:
 | A. Autopick (non-interactive)    | Rejected after testing (see A)          |
 | B. Mixed-commit warning          | Shipped (see B)                         |
 | C. Scope and breaking change     | Rejected after testing (see C)          |
-| D. Picker search                 | Planned                                 |
+| D. Picker search                 | Rejected after testing (see D)          |
 | E. Instruction and format checks | Shipped (see E)                         |
 
 All of it ships in one PR from `synmux/jev`, one commit per feature.
@@ -56,8 +56,8 @@ These apply to every feature below.
 - **Code decides.** Thresholds are named constants with the evidence that
   set them in a comment, and are tuned on real `cco` output before they
   ship.
-- **No new data leaves the machine.** Jev sees the summaries, the options and,
-  for D, the user's typed search. It never sees diff content.
+- **No new data leaves the machine.** Jev sees the summaries and the
+  options. It never sees diff content.
 
 ## A. Autopick for non-interactive runs (rejected)
 
@@ -69,7 +69,7 @@ model wrote first.
 
 ### Test
 
-The tuning harness ran on the same 20 commits with two model setups:
+The real pipeline wrote options for the same 20 commits with two model setups:
 
 - the repository config: opus for both stages
 - your global config: `ollama:gemma4:31b-mlx` for summaries and
@@ -101,8 +101,9 @@ keeps the model's order, and the specificity question is gone.
 
 ### What would reopen it
 
-A model whose first option often carries a warning. Re-run the harness
-(`tune/autopick.ts <generated-dir> guard`) on that model. If the guard
+A model whose first option often carries a warning. Repeat the test
+above with that model: generate 3 options per commit, skip flagged
+options in model order, and judge blind against option 0. If the guard
 fires on 10% or more of commits and wins the blind comparison, build
 the guard version of autopick only.
 
@@ -182,58 +183,43 @@ Neither half was built.
   past scopes, most used first, in the final prompt, and let the model
   apply the conventions. Test it with the same replay.
 
-## D. Picker search
+## D. Picker search (rejected)
 
-### Problem
+### Idea
 
-With 10 options, the right one is often there but buried. The only way
-to steer today is to cancel and regenerate with a new prompt, which costs
-tens of seconds and a model call.
+In the picker, `/` would open a line for a typed request ("the one
+mentioning tests"), and Jev would re-rank the options by it.
 
-### Behaviour
+### Test
 
-In the picker, `/` opens a one-line input at the top. Typing what you
-want ("mention the tests", "shorter", "about the spinner") and pressing
-Enter re-ranks the options by that request. The cursor moves to the
-best match. `Esc` clears the search and restores the original order.
-`/` and its hint appear only with `typesafe.enable` on.
+A retrieval benchmark on the 200 real opus options (10 per commit). For
+3 target options per commit, sonnet wrote the short request a developer
+would type to find that option, in two styles: natural, and reworded so
+it reuses no distinctive word from the target. Each request ranked all 10
+options three ways.
 
-### Question
+| Request style | Jev Choice, top 1 | Word overlap, top 1 | Jev Score per option, top 1 |
+| ------------- | ----------------- | ------------------- | --------------------------- |
+| Natural       | 60 / 60           | 60 / 60             | 42 / 60                     |
+| Reworded      | 50 / 60           | 41 / 60             | 27 / 60                     |
 
-One Score per option, in one request:
+### Decision
 
-```json
-{
-  "c0_match": {
-    "type": "score",
-    "instructions": "How well does `candidates[0]` match what the user asked for in `request.wanted`?",
-    "criteria": [
-      "It does not do what `request.wanted` asks",
-      "It partly does what `request.wanted` asks",
-      "It does what `request.wanted` asks",
-      "It does exactly what `request.wanted` asks, better than a typical option would"
-    ]
-  }
-}
-```
+Not built. People search a visible list with the words they can see,
+and for those requests a plain word-overlap filter is already perfect.
+Jev only pulls ahead when the request avoids the option's own words,
+which is not how anyone searches. Without Jev, a text filter over 10
+options that are already on screen does not repay the picker work.
 
-The options' warnings and order from the candidate check still break
-ties.
+The test did confirm a pattern worth keeping: for ranking a list, one
+Choice across all options beat a Score per option (60 against 42 on
+natural requests), as the TypeSafe docs suggest.
 
-### Risks
+### What would reopen it
 
-- Requests about length ("shorter") or counting ask Jev for something it
-  is documented to be weak at. Code should measure length itself: when
-  the request mentions length, sort by subject length in code instead.
-  This needs a small keyword rule.
-- The picker is a `SelectPrompt` from the Clack terminal UI library, and
-  it has no text input. The search line needs
-  custom key handling and its own render state, tested through the
-  existing fake-stream picker tests.
-
-### Effort
-
-About 2 hours, most of it in the picker.
+A much longer list of options, or requests about qualities the words do
+not show (tone, length, emphasis). Measure those first. Length and
+counts belong in code, not in Jev.
 
 ## E. Instruction and format checks (shipped)
 
@@ -260,7 +246,10 @@ gitmoji".
 
 ## Order of work
 
-1. **D, picker search.** The most UI work, and only useful with `-i`.
+Every item is now decided: the candidate check, B and E shipped, and A,
+C and D were rejected after testing. The one-off test scripts were not
+kept. Each section above, and the design record, describes its method
+in enough detail to repeat it.
 
 After each feature: run tests, typecheck and lint, run a live
 end-to-end check, update the design record and README, and commit with
