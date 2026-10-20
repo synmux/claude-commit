@@ -502,8 +502,8 @@ Where the number comes from is `ollama.context`:
 ### Slow models
 
 Node's fetch waits at most 300 seconds for Ollama to send anything.
-Summary requests are not streamed, so nothing arrives until the whole
-summary is written. A large chunk on a big local model can take longer
+Summary requests are generally not streamed, so nothing arrives until the
+whole summary is written. A large chunk on a big local model can take longer
 than that. cco then stops with a message saying the model was too slow,
 instead of a bare "fetch failed". To fix it, use a smaller model, or send
 smaller chunks with `ollama.maxChunkTokens`, which caps only Ollama
@@ -519,6 +519,13 @@ how long a model takes on this machine.
 - **Structured output** is requested through Ollama's `format` field. A model
   or server that cannot honour it (Ollama Cloud does not support it at all)
   falls back to plain-text parsing automatically.
+- **The final model is loaded early.** When the final stage uses a
+  different Ollama model, `cco` starts loading it while the summaries are
+  written, so the final stage does not start with a cold load. With an
+  Ollama summary model it waits for the last chunk, because two models
+  that do not fit in memory together would otherwise push each other out
+  between chunks. That last chunk is streamed, so `cco` can see when the
+  server has started on it.
 - **A missing model is an error, not a download.** `cco` tells you to run
   `ollama pull <model>` rather than pulling tens of gigabytes on your behalf.
 - **Reasoning is never requested**, and any the model volunteers is

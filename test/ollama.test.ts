@@ -8,7 +8,8 @@ import {
   resolveOllamaConfig,
   resolveOllamaContext,
   resolveOllamaHost,
-  runOllamaPrompt
+  runOllamaPrompt,
+  warmOllamaModel
 } from '../src/ollama.ts'
 import type { OllamaConfig, RunPromptOptions } from '../src/types.ts'
 
@@ -667,6 +668,47 @@ describe('resolveOllamaContext', () => {
       })
     ).toBe(131072)
     expect(requests[0]?.body).toMatchObject({ model: 'gemma4:e2b-it-qat' })
+  })
+})
+
+describe('warmOllamaModel', () => {
+  test('loads a configured window, so the real request reuses the runner', async () => {
+    const { requests } = stubProbeServer([])
+    await warmOllamaModel('ollama:gemma4', {
+      ...ollama,
+      context: 16384,
+      keepAlive: '10m'
+    })
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.url).toBe('http://ollama.test:11434/api/chat')
+    expect(requests[0]?.body).toEqual({
+      model: 'gemma4',
+      messages: [],
+      stream: false,
+      keep_alive: '10m',
+      options: { num_ctx: 16384 }
+    })
+  })
+
+  test('leaves the window to the server under auto, as the probe does', async () => {
+    const { requests } = stubProbeServer([])
+    await warmOllamaModel('ollama:gemma4', { ...ollama, context: 'auto' })
+    expect(requests[0]?.body).not.toHaveProperty('options')
+  })
+
+  test('never sends the keep_alive that would unload instead', async () => {
+    const { requests } = stubProbeServer([])
+    await warmOllamaModel('ollama:gemma4', {
+      ...ollama,
+      context: 8192,
+      keepAlive: 0
+    })
+    expect(requests[0]?.body).not.toHaveProperty('keep_alive')
+  })
+
+  test('surfaces a failed load', async () => {
+    stubProbeServer([], 404)
+    await expect(warmOllamaModel('ollama:gemma4', { ...ollama, context: 8192 })).rejects.toThrow(/ollama pull gemma4/)
   })
 })
 

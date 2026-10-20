@@ -45,7 +45,7 @@ import { applyIgnorePatterns, diffPaths, partitionDiff, redactOpaqueRuns, splitD
 import { ClaudeCommitError, isPromptTooLongError } from './errors.ts'
 import { gitmojiConflictsWithType } from './gitmoji.ts'
 import { isOllamaModel } from './models.ts'
-import { resolveOllamaContext } from './ollama.ts'
+import { resolveOllamaContext, warmOllamaModel } from './ollama.ts'
 import { createPathMatcher } from './paths.ts'
 import {
   buildFilenamesUser,
@@ -88,6 +88,12 @@ export interface GenerateOptions {
    * {@link resolveOllamaContext}.
    */
   resolveOllamaContext?: typeof resolveOllamaContext
+  /**
+   * Loads an `ollama:` final model with a configured window while the
+   * summaries are written; injectable so tests can watch when it happens.
+   * Defaults to {@link warmOllamaModel}.
+   */
+  warmOllamaModel?: typeof warmOllamaModel
   /**
    * HTTP transport for the TypeSafe check; injectable so tests can exercise
    * the real SDK client without a network. Defaults to the global `fetch`.
@@ -167,15 +173,23 @@ export interface GenerateResult {
  */
 class OllamaContextResolver {
   private readonly windows = new Map<string, Promise<number>>()
+  private readonly warmed = new Set<string>()
   readonly resolved: OllamaContextWindow[] = []
 
   private readonly config: OllamaConfig
   private readonly resolve: typeof resolveOllamaContext
+  private readonly preload: typeof warmOllamaModel
   private readonly signal: AbortSignal | undefined
 
-  constructor(config: OllamaConfig, resolve: typeof resolveOllamaContext, signal?: AbortSignal) {
+  constructor(
+    config: OllamaConfig,
+    resolve: typeof resolveOllamaContext,
+    preload: typeof warmOllamaModel,
+    signal?: AbortSignal
+  ) {
     this.config = config
     this.resolve = resolve
+    this.preload = preload
     this.signal = signal
   }
 
@@ -184,6 +198,21 @@ class OllamaContextResolver {
     if (!isOllamaModel(model)) return undefined
     const tokens = await this.windowFor(model)
     return { ...this.config, context: tokens }
+  }
+
+  /**
+   * Start loading `model` without waiting for it; repeat calls do nothing.
+   * Under `"auto"` the probe is the load, and its result is the one
+   * {@link settingsFor} later awaits, so a failure surfaces there. A failed
+   * preload of a configured window is dropped: the real request makes the
+   * same call and reports the same error.
+   */
+  warm(model: string): void {
+    if (!isOllamaModel(model) || this.warmed.has(model)) return
+    this.warmed.add(model)
+    const loading =
+      this.config.context === 'auto' ? this.windowFor(model) : this.preload(model, this.config, this.signal)
+    loading.catch(() => {})
   }
 
   private windowFor(model: string): Promise<number> {
@@ -224,6 +253,12 @@ interface PartitionSummaryOptions {
   progress: GenerateProgress
   contexts: OllamaContextResolver
   abortController?: AbortController
+  /**
+   * Called as the partition's last chunk streams its summary back. By then
+   * the server is running that request, so a model load it causes cannot
+   * evict the summary model before the request is done.
+   */
+  onLastChunkStreaming?: () => void
 }
 
 /** Spinner label for one chunk of a partition. */
@@ -245,7 +280,7 @@ async function summarizePartition(
   priority: ChangePriority,
   options: PartitionSummaryOptions
 ): Promise<{ summaries: DiffSummary[]; costUsd: number }> {
-  const { config, runner, progress, contexts, abortController } = options
+  const { config, runner, progress, contexts, abortController, onLastChunkStreaming } = options
 
   // The configured chunk budget is clamped to the summary model's context
   // window so a single chunk (plus prompt scaffolding and response headroom)
@@ -280,7 +315,9 @@ async function summarizePartition(
         system: summarySystem,
         allowApiKey: config.allowApiKey,
         ...(ollama ? { ollama } : {}),
-        ...(abortController ? { abortController } : {})
+        ...(abortController ? { abortController } : {}),
+        // Streaming only so the first text can say the request is running.
+        ...(onLastChunkStreaming && queue.length === 0 ? { onText: onLastChunkStreaming } : {})
       })
       summaries.push({ priority, text: result.text })
       costUsd += result.costUsd
@@ -314,13 +351,14 @@ export async function generateCommit(
     abortController,
     runner = runPrompt,
     resolveOllamaContext: resolveContext = resolveOllamaContext,
+    warmOllamaModel: preload = warmOllamaModel,
     typesafeFetch,
     env = process.env
   } = options
   // Resolve the key before any model is paid for: a check the user turned on
   // but cannot run is a configuration error, found best before the work.
   const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
-  const contexts = new OllamaContextResolver(config.ollama, resolveContext, abortController?.signal)
+  const contexts = new OllamaContextResolver(config.ollama, resolveContext, preload, abortController?.signal)
 
   // Ignore first: dropped sections cost nothing downstream. Unlike a
   // low-priority partition, an ignored one has nowhere to be promoted to,
@@ -363,11 +401,29 @@ export async function generateCommit(
       contexts,
       ...(abortController ? { abortController } : {})
     }
-    const primaryStage = await summarizePartition(partition.primary, 'primary', partitionOptions)
-    const lowPriorityStage =
-      partition.lowPriority.trim() === ''
-        ? { summaries: [], costUsd: 0 }
-        : await summarizePartition(partition.lowPriority, 'low', partitionOptions)
+    // Load a separate Ollama final model while the summaries are written,
+    // so the final stage does not open with a cold start. Sharing a server
+    // with the summary model, it waits for the last chunk: one that does
+    // not fit beside the summary model would otherwise evict it between
+    // chunks, and both would reload. Beside a Claude summariser it can start now.
+    const warmFinal =
+      isOllamaModel(config.models.final) && config.models.final !== config.models.summary
+        ? () => contexts.warm(config.models.final)
+        : undefined
+    const summaryOnOllama = isOllamaModel(config.models.summary)
+    if (warmFinal && !summaryOnOllama) warmFinal()
+    const lastChunkOptions: PartitionSummaryOptions =
+      warmFinal && summaryOnOllama ? { ...partitionOptions, onLastChunkStreaming: warmFinal } : partitionOptions
+    const hasLowPartition = partition.lowPriority.trim() !== ''
+
+    const primaryStage = await summarizePartition(
+      partition.primary,
+      'primary',
+      hasLowPartition ? partitionOptions : lastChunkOptions
+    )
+    const lowPriorityStage = hasLowPartition
+      ? await summarizePartition(partition.lowPriority, 'low', lastChunkOptions)
+      : { summaries: [], costUsd: 0 }
     summaries.push(...primaryStage.summaries, ...lowPriorityStage.summaries)
     if (summaries.length === 0) {
       throw new ClaudeCommitError('There are no staged changes to summarize.')
