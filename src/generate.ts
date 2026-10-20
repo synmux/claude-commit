@@ -30,15 +30,14 @@
  * With filenamesOnly, the summary stage is skipped entirely and the final
  * model receives only paths from the filtered, priority-grouped diff.
  *
- * When several candidates are requested and `typesafe.enable` is on, a last
- * step asks TypeSafe's Jev model to check each candidate against the same
- * summaries or paths, then moves doubtful ones last with a warning and
- * drops near-duplicates (`src/typesafe.ts`). A failed check leaves the
- * candidates in the model's order and reports why; it never blocks a commit.
- * With TypeSafe on, a gitmoji that does not fit its commit type is also
- * flagged, in code and without a request (`src/gitmoji.ts`), so it covers
- * single non-interactive messages too. With TypeSafe off, nothing here
- * changes what cco shows.
+ * When `typesafe.enable` is on, a last step asks TypeSafe's Jev model to
+ * check every candidate - one or several - against the same summaries or
+ * paths, and whether the summaries describe more than one commit. Doubtful
+ * candidates move last with a warning, and near-duplicates are dropped
+ * (`src/typesafe.ts`). A gitmoji that does not fit its commit type is
+ * flagged in code (`src/gitmoji.ts`). A failed check leaves the candidates
+ * in the model's order and reports why; it never blocks a commit. With
+ * TypeSafe off, nothing here changes what cco shows.
  */
 import type { Fetch } from '@typesafe-ai/sdk'
 import { runPrompt } from './agent.ts'
@@ -100,7 +99,7 @@ export interface GenerateOptions {
 
 /** What the TypeSafe candidate check did on this run. */
 export type CandidateCheckReport =
-  | { status: 'checked'; model: string; inputTokens: number; droppedDuplicates: number }
+  | { status: 'checked'; model: string; inputTokens: number; droppedDuplicates: number; mixedCommit: boolean }
   | { status: 'failed'; error: string }
 
 /** The context window one Ollama model ran with during this run. */
@@ -304,7 +303,7 @@ export async function generateCommit(
   } = options
   // Resolve the key before any model is paid for: a check the user turned on
   // but cannot run is a configuration error, found best before the work.
-  const typesafeKey = count > 1 && config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
+  const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
   const contexts = new OllamaContextResolver(config.ollama, resolveContext, abortController?.signal)
 
   // Ignore first: dropped sections cost nothing downstream. Unlike a
@@ -442,7 +441,7 @@ export async function generateCommit(
   let shown = orderFlaggedLast(deduped, formatWarnings)
   let candidateCheck: CandidateCheckReport | null = null
   if (typesafeKey) {
-    progress.onPhase?.('Checking options')
+    progress.onPhase?.(count > 1 ? 'Checking options' : 'Checking message')
     const evidence = filenames
       ? filenameEvidence(filenames, hasLowPriority)
       : summaryEvidence(summaries, hasLowPriority)
@@ -460,7 +459,8 @@ export async function generateCommit(
         status: 'checked',
         model: checked.model,
         inputTokens: checked.inputTokens,
-        droppedDuplicates: checked.droppedDuplicates
+        droppedDuplicates: checked.droppedDuplicates,
+        mixedCommit: checked.mixedCommit
       }
     } catch (error) {
       if (abortController?.signal.aborted) throw new ClaudeCommitError('Generation was cancelled.')
@@ -527,6 +527,31 @@ function filenameEvidence(
   return hasLowPriority
     ? { kind: 'filenames', primary: list(filenames.primary), lowPriority: list(filenames.lowPriority) }
     : { kind: 'filenames', primary: list([...filenames.primary, ...filenames.lowPriority]), lowPriority: null }
+}
+
+/**
+ * What to tell the user about the TypeSafe check, one line each: that it
+ * failed, or that the staged changes look like more than one commit.
+ * Shared by the picker and the non-interactive flow.
+ */
+export function describeCheckNotices(check: CandidateCheckReport | null): string[] {
+  if (check?.status === 'failed') {
+    return [`TypeSafe check failed (${check.error}); nothing was flagged or reordered.`]
+  }
+  if (check?.mixedCommit) {
+    return ['These staged changes look like more than one commit. Consider splitting them.']
+  }
+  return []
+}
+
+/** One `--verbose` line for a completed TypeSafe check. */
+export function describeCandidateCheck(check: {
+  model: string
+  inputTokens: number
+  droppedDuplicates: number
+}): string {
+  const dropped = `${check.droppedDuplicates} near-duplicate${check.droppedDuplicates === 1 ? '' : 's'} dropped`
+  return `TypeSafe check (${check.model}): ${check.inputTokens} input tokens, ${dropped}`
 }
 
 function dedupe(items: string[]): string[] {

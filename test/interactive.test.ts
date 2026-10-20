@@ -2,7 +2,8 @@ import { PassThrough, Writable } from 'node:stream'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { S_RADIO_ACTIVE, S_RADIO_INACTIVE, S_STEP_ACTIVE, S_STEP_CANCEL, S_STEP_SUBMIT } from '@clack/prompts'
 import { describe, expect, test } from 'vitest'
-import { describeCandidateCheck, renderPicker, selectWithPrompt } from '../src/ui/interactive.ts'
+import { describeCandidateCheck } from '../src/generate.ts'
+import { renderPicker, selectWithPrompt } from '../src/ui/interactive.ts'
 
 const messages = [
   'feat(alpha): first candidate subject line\n\nBody one preview.',

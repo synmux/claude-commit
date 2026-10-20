@@ -6,9 +6,10 @@
 import type { Questions } from '@typesafe-ai/sdk'
 
 /**
- * A plausible answer for every question: support questions pass, near-
- * duplicate questions say "different", scores sit at 2. `overrides` sets a
- * Noul probability or a Score position by question name.
+ * A plausible answer for every question: support questions pass, while the
+ * near-duplicate and mixed-commit questions (where yes is bad) say no.
+ * Scores sit at 2. `overrides` sets a Noul probability or a Score position
+ * by question name.
  */
 export function jevAnswers(questions: Questions, overrides: Record<string, number> = {}): Record<string, unknown> {
   const answers: Record<string, unknown> = {}
@@ -17,7 +18,8 @@ export function jevAnswers(questions: Questions, overrides: Record<string, numbe
     if (question.type === 'score') {
       answers[name] = { type: 'score', score: value ?? 2, confidence: 0.9, legend: {}, probabilities: {} }
     } else {
-      answers[name] = { type: 'noul', noul: value ?? (name.startsWith('dup_') ? 0.05 : 0.95) }
+      const yesIsBad = name.startsWith('dup_') || name === 'mixed_commit'
+      answers[name] = { type: 'noul', noul: value ?? (yesIsBad ? 0.05 : 0.95) }
     }
   }
   return answers

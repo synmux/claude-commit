@@ -6,7 +6,14 @@ import { Command } from 'commander'
 import { presentCredentialVars } from './agent.ts'
 import { loadFileConfig, resolveConfig } from './config.ts'
 import { ClaudeCommitError } from './errors.ts'
-import { generateCommit, type IgnoreStats, type LowPriorityStats, type OllamaContextWindow } from './generate.ts'
+import {
+  describeCandidateCheck,
+  describeCheckNotices,
+  generateCommit,
+  type IgnoreStats,
+  type LowPriorityStats,
+  type OllamaContextWindow
+} from './generate.ts'
 import { commit, getRepoRoot, getStagedDiff, getStagedStat, isGitRepo, stageAll } from './git.ts'
 import type { ModelConfig, OllamaConfig, PartialConfig } from './types.ts'
 import { color } from './ui/colors.ts'
@@ -312,6 +319,9 @@ async function runNonInteractive(
     for (const window of result.ollamaContexts) {
       process.stderr.write(color('90', describeOllamaContext(window)) + '\n')
     }
+    if (result.candidateCheck?.status === 'checked') {
+      process.stderr.write(color('90', describeCandidateCheck(result.candidateCheck)) + '\n')
+    }
     if (config.ignore.length > 0) {
       process.stderr.write(color('90', describeIgnoreStats(result.ignored)) + '\n')
     }
@@ -327,7 +337,7 @@ async function runNonInteractive(
 
   let message = result.messages[0]!
   // Warnings go to stderr so a dry run's stdout stays the bare message.
-  for (const warning of result.warnings[0] ?? []) {
+  for (const warning of [...describeCheckNotices(result.candidateCheck), ...(result.warnings[0] ?? [])]) {
     process.stderr.write(`${color('33', `⚠ ${warning}`)}\n`)
   }
 

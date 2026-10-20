@@ -33,6 +33,12 @@ Per candidate:
 Per pair: `dup_i_j` (yes/no): do the two say the same thing with the same
 emphasis?
 
+Once per request, with summary evidence only: `mixed_commit` (yes/no):
+does `evidence.primary` describe two or more unrelated changes that would
+each make sense as their own commit? An answer of 0.6 or more prints a
+suggestion to split the commit. File-list evidence skips the question,
+because it was never tested.
+
 ## Composition
 
 Code makes every decision from constants in `src/typesafe.ts`:
@@ -166,6 +172,26 @@ options. The table found all 9 clashes with no false flags. Jev, at 0.2,
 caught 4, falsely flagged `🔒️ feat` (the guide allows security with any
 type), and gave two identical `🔧 feat(config)` patterns 0.08 and 0.51.
 The table shipped, and the Jev question did not.
+
+### Mixed commits (2026-10-20)
+
+Cases: 37 clean (each commit's own primary summaries from the opus and
+Ollama runs), and 37 mixed, made by interleaving the paragraphs of two
+unrelated commits' summaries. Pairs about the same topic were skipped.
+AUC was 0.92. Four "clean" cases scored high, and on reading, all four were
+really mixed:
+
+- `700705b`: DevSkim scanning plus an unrelated action bump, in both runs
+- `242f311`: the opus summary opens "This change does two separate things"
+- `295b35a`: a README note plus an accidental table reformat
+
+After relabelling, at 0.6 the warning caught 32 of 37 synthetic mixes and
+4 of 5 real ones, and warned on none of 33 truly clean commits (highest
+0.41).
+
+So the check runs for a single non-interactive message too: that is where
+most commits are made, and the mixed-commit question rides in the same
+request.
 
 ## Approaches considered
 

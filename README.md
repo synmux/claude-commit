@@ -184,8 +184,9 @@ non-interactive flow rather than failing.
 ### TypeSafe candidate check
 
 With `"typesafe": { "enable": true }` in your config (or `--typesafe`), cco
-asks [TypeSafe](https://typesafe.ai)'s Jev model to check every option
-before the picker opens. The check compares each option with the summaries
+asks [TypeSafe](https://typesafe.ai)'s Jev model to check its messages:
+every option before the picker opens, or the single message of a
+non-interactive run. The check compares each message with the summaries
 it was written from, then:
 
 - shows a `⚠` line under an option whose subject names a change the
@@ -194,6 +195,8 @@ it was written from, then:
   elsewhere
 - flags an option that ignores your `customPrompt`, when one is set
 - drops an option that says the same thing as one above it
+- warns when the staged changes look like more than one commit, so you
+  can split them before committing
 
 Otherwise the options keep the order the model wrote them in. Tests
 showed the model's first option beats any reordering, and a flagged
@@ -203,9 +206,8 @@ With TypeSafe on, plus `gitmoji` and `conventionalCommits`, cco also
 checks that each gitmoji fits its type. An option such as `🔧 feat:` or
 `🎨 feat:` gets a `⚠` line and moves down. Pairings the guide allows,
 such as `🔒️` with any type, pass. This check runs in code, without a
-request, so it also covers non-interactive runs: the warnings for the
-chosen message print on stderr before you confirm. With TypeSafe off,
-none of this runs.
+request. In a non-interactive run, every warning prints on stderr before
+you confirm. With TypeSafe off, none of this runs.
 
 One check costs a fraction of a cent and takes under a second. If it
 fails, cco says why and shows the options in the model's order. A failed
@@ -218,8 +220,8 @@ cco stops before it calls any model.
 
 When on, cco sends the summaries (or file paths) and the candidate
 messages to TypeSafe. It never sends diff content. The check is off by
-default for that reason. It runs only when cco writes more than one
-option, so a non-interactive run is unchanged.
+default for that reason. It adds one request to every run, interactive
+or not.
 
 ## Configuration
 

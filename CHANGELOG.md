@@ -16,8 +16,10 @@ carrying the same notes at greater length.
   before the picker opens. An option whose subject or edits the summaries
   do not show gets a `⚠` warning and moves to the bottom, and
   near-duplicates are dropped. With a `customPrompt` set, an option that
-  ignores it is flagged too. The key comes from `$TYPESAFE_API_KEY`, or
-  the variable `typesafe.env` names. The check is off by default.
+  ignores it is flagged too. Non-interactive runs check their single
+  message, and both flows warn when the staged changes look like more
+  than one commit. The key comes from `$TYPESAFE_API_KEY`, or the variable
+  `typesafe.env` names. The check is off by default.
 - **Gitmoji and type check.** With TypeSafe on, plus `gitmoji` and
   `conventionalCommits`, an option that pairs a gitmoji with a type it
   does not fit (such as `🔧 feat:`) is flagged and moved down. It runs in

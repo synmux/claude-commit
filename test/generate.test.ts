@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import type { runPrompt } from '../src/agent.ts'
 import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
-import { generateCommit } from '../src/generate.ts'
+import { describeCheckNotices, generateCommit } from '../src/generate.ts'
 import type { Config, ModelResult } from '../src/types.ts'
 import { answeringJevFetch, fakeJevFetch } from './typesafe-fixtures.ts'
 
@@ -690,7 +690,8 @@ describe('TypeSafe candidate check', () => {
       status: 'checked',
       model: 'jev-1.13.0',
       inputTokens: 1500,
-      droppedDuplicates: 0
+      droppedDuplicates: 0,
+      mixedCommit: false
     })
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests[0]?.body.state)).toContain('a.txt replaces old line')
@@ -727,16 +728,43 @@ describe('TypeSafe candidate check', () => {
     expect(result.candidateCheck?.status).toBe('failed')
   })
 
-  test('does not run for a single message or when disabled', async () => {
+  test('checks a single non-interactive message too', async () => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch()
-    const single = await generateCommit(textDiff, typesafeConfig, { runner, count: 1, env: {}, typesafeFetch: fetch })
+    const single = await generateCommit(textDiff, typesafeConfig, { runner, count: 1, env, typesafeFetch: fetch })
+
+    expect(requests).toHaveLength(1)
+    expect(single.candidateCheck?.status).toBe('checked')
+  })
+
+  test('a missing key fails a single-message run before any model is called', async () => {
+    const { runner, calls } = threeOptionRunner()
+    await expect(generateCommit(textDiff, typesafeConfig, { runner, count: 1, env: {} })).rejects.toThrow(
+      /TYPESAFE_API_KEY/
+    )
+    expect(calls).toHaveLength(0)
+  })
+
+  test('does not run when disabled', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch()
     const disabled = await generateCommit(textDiff, baseConfig, { runner, count: 3, env: {}, typesafeFetch: fetch })
 
     expect(requests).toHaveLength(0)
-    expect(single.candidateCheck).toBeNull()
     expect(disabled.candidateCheck).toBeNull()
     expect(disabled.messages).toEqual(candidates)
+  })
+
+  test('reports staged changes that look like more than one commit', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch({ mixed_commit: 0.7 })
+    const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 1, env, typesafeFetch: fetch })
+
+    expect(requests[0]?.body.questions.mixed_commit?.type).toBe('noul')
+    expect(result.candidateCheck).toMatchObject({ status: 'checked', mixedCommit: true })
+    expect(describeCheckNotices(result.candidateCheck)).toEqual([
+      'These staged changes look like more than one commit. Consider splitting them.'
+    ])
   })
 
   test('sends the custom instructions and flags a candidate that ignores them', async () => {
@@ -794,23 +822,38 @@ describe('gitmoji format check', () => {
     expect(result.warnings).toEqual([[], ['gitmoji does not match the commit type']])
   })
 
-  test('with TypeSafe on, flags a single message without a Jev request', async () => {
-    const { fetch, requests } = answeringJevFetch()
+  test('with TypeSafe on, flags a single message', async () => {
+    const { fetch } = answeringJevFetch()
     const config: Config = { ...baseConfig, ...formats, typesafe: enabled }
-    const result = await generateCommit(textDiff, config, {
-      runner: singleRunner,
-      count: 1,
-      env: {},
-      typesafeFetch: fetch
-    })
+    const result = await generateCommit(textDiff, config, { runner: singleRunner, count: 1, env, typesafeFetch: fetch })
     expect(result.warnings).toEqual([['gitmoji does not match the commit type']])
-    expect(requests).toHaveLength(0)
-    expect(result.candidateCheck).toBeNull()
   })
 
   test('stays quiet unless both gitmoji and conventional commits are on', async () => {
     const config: Config = { ...baseConfig, gitmoji: true, typesafe: enabled }
-    const result = await generateCommit(textDiff, config, { runner: singleRunner, count: 1, env: {} })
+    const { fetch } = answeringJevFetch()
+    const result = await generateCommit(textDiff, config, { runner: singleRunner, count: 1, env, typesafeFetch: fetch })
     expect(result.warnings).toEqual([[]])
+  })
+})
+
+describe('describeCheckNotices', () => {
+  test('says nothing when the check passed or did not run', () => {
+    expect(describeCheckNotices(null)).toEqual([])
+    expect(
+      describeCheckNotices({
+        status: 'checked',
+        model: 'jev',
+        inputTokens: 1,
+        droppedDuplicates: 0,
+        mixedCommit: false
+      })
+    ).toEqual([])
+  })
+
+  test('names the error when the check failed', () => {
+    expect(describeCheckNotices({ status: 'failed', error: '401 bad key' })).toEqual([
+      'TypeSafe check failed (401 bad key); nothing was flagged or reordered.'
+    ])
   })
 })

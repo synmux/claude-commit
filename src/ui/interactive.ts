@@ -24,7 +24,7 @@ import {
   S_STEP_CANCEL,
   S_STEP_SUBMIT
 } from '@clack/prompts'
-import { type GenerateResult, generateCommit } from '../generate.ts'
+import { describeCandidateCheck, describeCheckNotices, type GenerateResult, generateCommit } from '../generate.ts'
 import { commit } from '../git.ts'
 import type { Config } from '../types.ts'
 import { color } from './colors.ts'
@@ -58,10 +58,8 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
   spinner.stop()
 
   const { messages, warnings, candidateCheck } = result
-  if (candidateCheck?.status === 'failed') {
-    process.stderr.write(
-      color('33', `TypeSafe check failed (${candidateCheck.error}); options are in the model's order.`) + '\n'
-    )
+  for (const notice of describeCheckNotices(candidateCheck)) {
+    process.stderr.write(`${color('33', `⚠ ${notice}`)}\n`)
   }
 
   let selection: Selection
@@ -97,16 +95,6 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
     }
   }
   return 0
-}
-
-/** One `--verbose` line for a completed TypeSafe check. */
-export function describeCandidateCheck(check: {
-  model: string
-  inputTokens: number
-  droppedDuplicates: number
-}): string {
-  const dropped = `${check.droppedDuplicates} near-duplicate${check.droppedDuplicates === 1 ? '' : 's'} dropped`
-  return `TypeSafe check (${check.model}): ${check.inputTokens} input tokens, ${dropped}`
 }
 
 /**

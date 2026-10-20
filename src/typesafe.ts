@@ -58,6 +58,14 @@ const DUPLICATE_FROM = 0.85
  */
 const FOLLOWS_CUSTOM_BELOW = 0.2
 
+/**
+ * A "describes unrelated changes" answer at or above this marks the commit
+ * as mixed. On 37 clean and 37 synthetic mixed summaries (two commits
+ * joined), 0.6 caught 32 mixed and 4 of 5 commits that were really mixed,
+ * and warned on none of 33 truly clean ones (highest 0.41).
+ */
+const MIXED_FROM = 0.6
+
 /** Retries after a failed attempt. The user is waiting at the picker, so keep it short. */
 const RETRIES = 1
 
@@ -94,6 +102,8 @@ export interface RankedCandidates {
   warnings: string[][]
   /** How many candidates were dropped as near-duplicates of a better one. */
   droppedDuplicates: number
+  /** The primary changes look like more than one commit. Always false for file-list evidence. */
+  mixedCommit: boolean
 }
 
 /** The ranked candidates plus what the request cost. */
@@ -190,6 +200,19 @@ export function buildCandidateRequest(
       }
     }
   })
+  // Paths alone were never tested for this, so only summaries are judged.
+  if (evidence.kind === 'summaries') {
+    questions.mixed_commit = {
+      type: 'noul',
+      instructions:
+        'Does `evidence.primary` describe two or more changes that are unrelated to each other, so that each would make sense as its own commit?',
+      criteria: {
+        true: 'The changes serve different purposes, for example a bug fix and an unrelated feature, or a dependency bump and an unrelated documentation edit',
+        false:
+          'All changes serve one purpose, including supporting edits such as tests, documentation or configuration for that same change'
+      }
+    }
+  }
   for (const [first, second] of pairs(messages.length)) {
     questions[`dup_${first}_${second}`] = {
       type: 'noul',
@@ -314,7 +337,8 @@ export function rankCandidates(
   return {
     messages: kept.map((candidate) => candidate.message),
     warnings: kept.map((candidate) => candidate.warnings),
-    droppedDuplicates: messages.length - kept.length
+    droppedDuplicates: messages.length - kept.length,
+    mixedCommit: evidence.kind === 'summaries' && noulValue(answers, 'mixed_commit') >= MIXED_FROM
   }
 }
 

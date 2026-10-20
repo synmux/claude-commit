@@ -18,7 +18,7 @@ Jev has three question types:
 | -------------------------------- | --------------------------------------- |
 | Candidate check (interactive)    | Shipped and tuned: `79eade2`, `596ee5e` |
 | A. Autopick (non-interactive)    | Rejected after testing (see A)          |
-| B. Mixed-commit warning          | Planned                                 |
+| B. Mixed-commit warning          | Shipped (see B)                         |
 | C. Scope and breaking change     | Planned                                 |
 | D. Picker search                 | Planned                                 |
 | E. Instruction and format checks | Shipped (see E)                         |
@@ -45,11 +45,12 @@ These apply to every feature below.
 
 - **Off unless enabled.** Everything sits behind `typesafe.enable`. With
   the check off, `cco` behaves exactly as it does today.
-- **One request where possible.** In interactive runs, B and E join the
-  candidate check's request, which already holds the summaries and the
-  options. A non-interactive run sends B on its own. C needs its answer
-  before the final model runs, so it is a separate, earlier request. D
-  runs only when the user asks for it.
+- **One request where possible.** B and E join the candidate check's
+  request, which already holds the summaries and the options. With
+  TypeSafe on, that check runs on every run, including the single
+  message of a non-interactive one. C needs its answer before the final
+  model runs, so it is a separate, earlier request. D runs only when the
+  user asks for it.
 - **Jev never blocks a commit.** A failed request leaves today's
   behaviour in place and says why. A missing key with the check on is an
   error before any model call, as now.
@@ -106,60 +107,28 @@ A model whose first option often carries a warning. Re-run the harness
 fires on 10% or more of commits and wins the blind comparison, build
 the guard version of autopick only.
 
-## B. Mixed-commit warning
+## B. Mixed-commit warning (shipped)
 
-### Problem
+### Result
 
-A staged change sometimes contains two unrelated changes. Any message
-written for it describes one change and buries the other, and the
-history loses an atomic commit. Nothing in `cco` notices this today.
-
-### Behaviour
-
-`cco` prints this warning before the picker opens, or before
-confirmation in a non-interactive run:
+A `mixed_commit` Noul on `evidence.primary` joins the candidate check's
+request. At 0.6 or above, both flows print:
 
 ```plaintext
 ⚠ These staged changes look like more than one commit. Consider splitting them.
 ```
 
-The warning never blocks a commit, and `--yes` runs print it too.
+Test: 37 clean and 37 synthetic mixed cases gave an AUC of 0.92. Every
+high-scoring "clean" case turned out to be a real mixed commit, such as
+`700705b` (DevSkim plus an unrelated action bump). After relabelling, the
+warning caught 32 of 37 synthetic mixes and 4 of 5 real ones, with no
+false warnings on 33 truly clean commits.
 
-### Question
-
-Added to the shared request:
-
-```json
-{
-  "mixed_commit": {
-    "type": "noul",
-    "instructions": "Does `evidence.primary` describe two or more changes that are unrelated to each other, so that each would make sense as its own commit?",
-    "criteria": {
-      "true": "The changes serve different purposes, for example a bug fix and an unrelated feature, or a dependency bump and an unrelated documentation edit",
-      "false": "All changes serve one purpose, including supporting edits such as tests, documentation or configuration for that same change"
-    }
-  }
-}
-```
-
-Only `evidence.primary` is judged. Low-priority churn such as a lockfile
-next to a code change is expected, and is not a second commit.
-
-### Validation before it ships
-
-The tuning harness already holds summaries for 20 commits. Use them as
-40 labelled cases:
-
-- 20 clean cases: each commit's own summaries
-- 20 mixed cases: the summaries of two unrelated commits joined together
-
-Pick the threshold for zero warnings on clean cases. Then review by hand
-the 3 real commits with the highest scores, because some real commits are
-mixed.
-
-### Effort
-
-About 1 hour, with the experiment taking a few minutes.
+To reach non-interactive runs inside the same request, the candidate
+check now runs whenever TypeSafe is on, including on a single message.
+That also brought the code in line with the documented rule that a
+missing key with `typesafe.enable` on is an error before any model call.
+File-list evidence skips the question, because it was never tested.
 
 ## C. Scope and breaking change from history
 
@@ -320,11 +289,9 @@ gitmoji".
 
 ## Order of work
 
-1. **B, mixed-commit warning.** A cheap experiment first. It covers
-   non-interactive runs too.
-2. **C, scope and breaking change.** Its own request, and a history
+1. **C, scope and breaking change.** Its own request, and a history
    replay to validate.
-3. **D, picker search.** The most UI work, and only useful with `-i`.
+2. **D, picker search.** The most UI work, and only useful with `-i`.
 
 After each feature: run tests, typecheck and lint, run a live
 end-to-end check, update the design record and README, and commit with

@@ -201,6 +201,26 @@ describe('prior warnings', () => {
   })
 })
 
+describe('mixed commits', () => {
+  test('asks once, about the summaries only', () => {
+    expect(buildCandidateRequest(messages, summaries).questions.mixed_commit?.type).toBe('noul')
+    const files = { kind: 'filenames' as const, primary: 'a.ts', lowPriority: null }
+    expect(buildCandidateRequest(messages, files).questions.mixed_commit).toBeUndefined()
+  })
+
+  test('reports a mixed commit from 0.6 up', () => {
+    const request = buildCandidateRequest(messages, summaries)
+    expect(rankCandidates(messages, summaries, answersFor(request, { mixed_commit: 0.6 })).mixedCommit).toBe(true)
+    expect(rankCandidates(messages, summaries, answersFor(request, { mixed_commit: 0.41 })).mixedCommit).toBe(false)
+  })
+
+  test('is never reported for file-list evidence', () => {
+    const files = { kind: 'filenames' as const, primary: 'a.ts', lowPriority: null }
+    const request = buildCandidateRequest(messages, files)
+    expect(rankCandidates(messages, files, answersFor(request)).mixedCommit).toBe(false)
+  })
+})
+
 describe('checkCandidates', () => {
   test('sends one request through the SDK and returns the ranked candidates', async () => {
     const { fetch, requests } = answeringJevFetch({ c0_subject_shown: 0.1 })
