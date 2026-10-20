@@ -28,7 +28,7 @@ import { ClaudeCommitError } from '../src/errors.ts'
 import { generateCommit } from '../src/generate.ts'
 import { getRepoRoot, isGitRepo } from '../src/git.ts'
 import { isOllamaModel } from '../src/models.ts'
-import { estimateDiffTokens } from '../src/tokens.ts'
+import { clampChunkTokens, estimateDiffTokens } from '../src/tokens.ts'
 
 /** How many files a synthetic commit touches, and how many changed lines each gets. */
 export interface CommitSize {
@@ -159,6 +159,7 @@ async function main(argv: string[]): Promise<number> {
 
   const timings: Timing[] = []
   let windowNote = ''
+  let windowTokens = typeof config.ollama.context === 'number' ? config.ollama.context : undefined
   for (const [size, shape] of Object.entries(COMMIT_SIZES)) {
     const diff = syntheticDiff(shape, randomBytes(6).toString('hex'))
     const tokens = estimateDiffTokens(diff, config.charsPerToken)
@@ -182,8 +183,10 @@ async function main(argv: string[]): Promise<number> {
         }
       })
       const window = result.ollamaContexts[0]
-      if (window)
+      if (window) {
+        windowTokens = window.tokens
         windowNote = `context window ${window.tokens} tokens (${window.source === 'auto' ? 'chosen by the server' : 'from config'})`
+      }
       timings.push({
         size,
         lines: diff.split('\n').length,
@@ -213,9 +216,10 @@ async function main(argv: string[]): Promise<number> {
     }
   }
 
+  // Report the cap the pipeline enforced, which the window can lower below the configured one.
   const capNote =
-    isOllamaModel(model) && config.ollama.maxChunkTokens !== undefined
-      ? `, chunks capped at ${config.ollama.maxChunkTokens} tokens`
+    isOllamaModel(model) && config.ollama.maxChunkTokens !== undefined && windowTokens !== undefined
+      ? `, chunks capped at ${clampChunkTokens(model, config.maxChunkTokens, windowTokens, config.ollama.maxChunkTokens)} tokens`
       : ''
   process.stdout.write(`\nmodel ${model}${windowNote ? `, ${windowNote}` : ''}${capNote}\n\n`)
   process.stdout.write('size     lines   ~tokens  chunks  summary   final     total     cost     result\n')
