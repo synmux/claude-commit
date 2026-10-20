@@ -857,22 +857,3 @@ describe('describeCheckNotices', () => {
     ])
   })
 })
-
-describe('Ollama on an incompatible Node', () => {
-  test('stops before any model call, Claude included', async () => {
-    const calls: string[] = []
-    const runner: Runner = async (prompt) => {
-      calls.push(prompt)
-      return { text: 'summary', costUsd: 0 }
-    }
-    const original = Object.getOwnPropertyDescriptor(process.versions, 'undici')
-    Object.defineProperty(process.versions, 'undici', { value: '7.29.1', configurable: true })
-    try {
-      const config: Config = { ...baseConfig, models: { summary: 'sonnet', final: 'ollama:gemma4' } }
-      await expect(generateCommit(textDiff, config, { runner })).rejects.toThrow(/Ollama models need Node\.js 26/)
-    } finally {
-      if (original) Object.defineProperty(process.versions, 'undici', original)
-    }
-    expect(calls).toHaveLength(0)
-  })
-})

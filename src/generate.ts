@@ -45,7 +45,7 @@ import { applyIgnorePatterns, diffPaths, partitionDiff, redactOpaqueRuns, splitD
 import { ClaudeCommitError, isPromptTooLongError } from './errors.ts'
 import { gitmojiConflictsWithType } from './gitmoji.ts'
 import { isOllamaModel } from './models.ts'
-import { assertOllamaSupported, resolveOllamaContext } from './ollama.ts'
+import { resolveOllamaContext } from './ollama.ts'
 import { createPathMatcher } from './paths.ts'
 import {
   buildFilenamesUser,
@@ -304,9 +304,6 @@ export async function generateCommit(
   // Resolve the key before any model is paid for: a check the user turned on
   // but cannot run is a configuration error, found best before the work.
   const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
-  // Likewise, an Ollama model this Node cannot reach fails here, not after
-  // a Claude summary stage has already been paid for.
-  if (isOllamaModel(config.models.summary) || isOllamaModel(config.models.final)) assertOllamaSupported()
   const contexts = new OllamaContextResolver(config.ollama, resolveContext, abortController?.signal)
 
   // Ignore first: dropped sections cost nothing downstream. Unlike a

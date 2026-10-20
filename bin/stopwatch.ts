@@ -8,7 +8,7 @@
  *
  * Each commit runs through the real pipeline (summary stage, then final
  * stage) with the given model in both stages. Every other setting - the
- * Ollama host, window and timeout, `maxChunkTokens`, `allowApiKey` - comes
+ * Ollama host and window, `maxChunkTokens`, `allowApiKey` - comes
  * from your claude-commit config, so the timings match what `cco` would do.
  * The commits are synthetic - no real changeset is read - and start with a
  * random token on every run, so a server's prompt cache cannot make a

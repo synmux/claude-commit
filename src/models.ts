@@ -48,14 +48,6 @@ export const DEFAULT_OLLAMA_HOST = 'http://localhost:11434'
 export const DEFAULT_OLLAMA_CONTEXT = 'auto' as const
 
 /**
- * Default `ollama.timeout`: how long, in milliseconds, cco waits for Ollama
- * to send anything - the response headers, or the next piece of a streamed
- * body - before giving up. 300 s matches Node's own fetch default, but is
- * set here explicitly so it can be seen and changed.
- */
-export const DEFAULT_OLLAMA_TIMEOUT_MS = 300_000
-
-/**
  * The window assumed for an `ollama:` model when nothing better is known:
  * the synchronous fallback in `contextWindowTokens` for callers that size
  * chunks without first resolving the context. The pipeline never relies on

@@ -25,23 +25,14 @@ carrying the same notes at greater length.
   does not fit (such as `🔧 feat:`) is flagged and moved down. It runs in
   code without a request, so non-interactive runs get it too.
 
-### [Unreleased] - Changed
-
-- **Requires Node.js 26** (26.10 or later), up from 24. The Ollama timeout
-  uses undici's `Agent` with Node's built-in fetch, which only accepts one
-  from the same undici major as the fetch: Node 26 ships undici 8. On an
-  older Node, `engines` only warns at install, so cco checks for itself: an
-  `ollama:` model stops at once with a message saying Node 26 is needed,
-  before any model is called. Claude models still work there.
-
 ### [Unreleased] - Fixed
 
 - **Ollama requests on large diffs no longer fail with a bare "fetch
   failed".** Node's fetch gave up after 300 s with no response headers,
-  and a non-streamed summary sends none until it is finished. The limit is
-  now the explicit, configurable `ollama.timeout` (milliseconds, default
-  300000, `0` to wait forever). When it fires, the error names the
-  setting. Other transport errors now include their underlying cause, and
+  and a non-streamed summary sends none until it is finished. That limit
+  stays, but when it fires, cco now says the model was too slow for the
+  chunk and what to change. Other transport errors now include their
+  underlying cause, and
   a refused connection gets the "start `ollama serve`" hint, which Node's
   real error shape had been hiding.
 - The picker types its states from Clack's own `State`, so the

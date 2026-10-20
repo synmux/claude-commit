@@ -32,7 +32,7 @@ Design records for each non-obvious feature live in
 `docs/superpowers/specs/`. Read the relevant one before changing that
 feature - they record what was rejected and why.
 
-Four behaviours are load-bearing and easy to break:
+Three behaviours are load-bearing and easy to break:
 
 - **Claude credentials are gated.** `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`
   are stripped from the SDK subprocess unless `allowApiKey` is set. Never
@@ -41,11 +41,6 @@ Four behaviours are load-bearing and easy to break:
   with `typesafe.enable` on is an error before any model call. A missing
   answer throws, and an API failure is reported to the user. Jev returns
   typed answers, not text, so it does not go through `runPrompt`.
-- **undici's major version follows Node's.** Ollama requests pass an
-  undici `Agent` to Node's built-in fetch, and fetch rejects a dispatcher
-  from a different undici major (every request fails). Node 26 bundles
-  undici 8, so `undici` is `^8` and `engines` is `^26.10.0`. Move them
-  together; Dependabot ignores undici majors for this reason.
 - **Ollama truncates an oversized prompt silently.** Every Ollama request
   pins `options.num_ctx` and the response's token counts are checked against
   it. Do not "simplify" either half away. The number comes from
@@ -53,7 +48,7 @@ Four behaviours are load-bearing and easy to break:
   a preload with _no_ `num_ctx` - sending one on the preload would defeat
   the probe.
 
-## Toolchain: Node 26 + pnpm
+## Toolchain: Node 24 + pnpm
 
 The sources are TypeScript and run on Node's native type stripping - there is
 no transpile step for development. That imposes two rules `tsc` enforces:

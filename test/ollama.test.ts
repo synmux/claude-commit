@@ -1,6 +1,3 @@
-import { createServer } from 'node:http'
-import type { AddressInfo } from 'node:net'
-import { Agent } from 'undici'
 import { afterEach, describe, expect, test } from 'vitest'
 import { ClaudeCommitError, isPromptTooLongError } from '../src/errors.ts'
 import {
@@ -10,16 +7,14 @@ import {
   resolveOllamaConfig,
   resolveOllamaContext,
   resolveOllamaHost,
-  runOllamaPrompt,
-  undiciMismatch
+  runOllamaPrompt
 } from '../src/ollama.ts'
 import type { OllamaConfig, RunPromptOptions } from '../src/types.ts'
 
 const ollama: OllamaConfig = {
   host: 'http://ollama.test:11434',
   context: 8192,
-  keepAlive: null,
-  timeout: 300_000
+  keepAlive: null
 }
 
 const baseOpts = (over: Partial<RunPromptOptions> = {}): RunPromptOptions => ({
@@ -127,8 +122,7 @@ describe('resolveOllamaConfig', () => {
     expect(resolveOllamaConfig(undefined, {})).toEqual({
       host: 'http://localhost:11434',
       context: 'auto',
-      keepAlive: null,
-      timeout: 300_000
+      keepAlive: null
     })
   })
 
@@ -148,7 +142,7 @@ describe('resolveOllamaConfig', () => {
 })
 
 describe('buildChatRequest', () => {
-  const resolved = { host: ollama.host, contextTokens: 8192, keepAlive: null, timeout: 300_000 }
+  const resolved = { host: ollama.host, contextTokens: 8192, keepAlive: null }
 
   test("sends the model name without cco's prefix", () => {
     const body = buildChatRequest('diff', baseOpts(), resolved)
@@ -464,13 +458,6 @@ describe('runOllamaPrompt - failures', () => {
     )
   })
 
-  test('sends every request through a dispatcher with no fetch timeouts', async () => {
-    const { calls } = stubFetch(() => jsonResponse({ model: 'gemma4', message: { content: 'ok' }, done: true }))
-    await runOllamaPrompt('d', baseOpts())
-    const dispatcher = (calls[0] as RequestInit & { dispatcher?: unknown }).dispatcher
-    expect(dispatcher).toBeInstanceOf(Agent)
-  })
-
   test('says how to pull a missing model, and does not pull it', async () => {
     stubFetch(() => jsonResponse({ error: 'model not found' }, 404))
     await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/ollama pull gemma4:e2b-it-qat/)
@@ -682,76 +669,16 @@ describe('runOllamaPrompt - auto context', () => {
   })
 })
 
-describe('ollama.timeout', () => {
-  /** A real local server that answers a chat request only after `delayMs`. */
-  async function slowServer(delayMs: number): Promise<{ host: string; close: () => void }> {
-    const server = createServer((_request, response) => {
-      setTimeout(() => {
-        response.setHeader('Content-Type', 'application/json')
-        response.end(
-          JSON.stringify({ model: 'gemma4', message: { content: 'Summary' }, done: true, prompt_eval_count: 10 })
-        )
-      }, delayMs)
-    })
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    const { port } = server.address() as AddressInfo
-    return { host: `http://127.0.0.1:${port}`, close: () => server.close() }
-  }
-
-  test('gives up when Ollama sends nothing for longer than the limit', async () => {
-    const server = await slowServer(1_000)
-    try {
-      const opts = baseOpts({ ollama: { ...ollama, host: server.host, timeout: 200 } })
-      await expect(runOllamaPrompt('d', opts)).rejects.toThrow(/sent nothing for 0\.2 s, the "ollama\.timeout" limit/)
-    } finally {
-      server.close()
+describe("Node's fetch timeout", () => {
+  test.each(['UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT'])(
+    'explains %s instead of "fetch failed"',
+    async (code) => {
+      globalThis.fetch = (async () => {
+        throw new TypeError('fetch failed', { cause: Object.assign(new Error('Timeout Error'), { code }) })
+      }) as unknown as typeof fetch
+      await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
+        /sent nothing for 300 s, Node's fetch limit.*smaller model.*maxChunkTokens.*bin\/stopwatch\.ts/s
+      )
     }
-  })
-
-  test('0 waits as long as Ollama takes', async () => {
-    const server = await slowServer(400)
-    try {
-      const opts = baseOpts({ ollama: { ...ollama, host: server.host, timeout: 0 } })
-      await expect(runOllamaPrompt('d', opts)).resolves.toMatchObject({ text: 'Summary' })
-    } finally {
-      server.close()
-    }
-  })
-
-  test('defaults to an explicit 300 s', () => {
-    expect(resolveOllamaConfig({}).timeout).toBe(300_000)
-    expect(resolveOllamaConfig({ timeout: 0 }).timeout).toBe(0)
-  })
-})
-
-describe('undici compatibility', () => {
-  /** Pretend Node bundles a different undici, for the length of one test. */
-  function withBundledUndici(version: string, body: () => Promise<void>): Promise<void> {
-    const original = Object.getOwnPropertyDescriptor(process.versions, 'undici')
-    Object.defineProperty(process.versions, 'undici', { value: version, configurable: true })
-    return body().finally(() => {
-      if (original) Object.defineProperty(process.versions, 'undici', original)
-    })
-  }
-
-  test('is fine when the majors match, or when Node does not say', () => {
-    expect(undiciMismatch('8.10.2', '8.11.2', '26.10.0')).toBeNull()
-    expect(undiciMismatch(undefined, '8.11.2', '26.10.0')).toBeNull()
-  })
-
-  test('explains a mismatch: which Node, which versions, what to do', () => {
-    const message = undiciMismatch('7.29.1', '8.11.2', '24.21.0')
-    expect(message).toMatch(/Ollama models need Node\.js 26/)
-    expect(message).toMatch(/Node 24\.21\.0/)
-    expect(message).toMatch(/undici 7\.29\.1/)
-    expect(message).toMatch(/Claude model/)
-  })
-
-  test('stops before sending anything to Ollama', async () => {
-    const { calls } = stubFetch(() => jsonResponse({ message: { content: 'ok' }, done: true }))
-    await withBundledUndici('7.29.1', async () => {
-      await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/Ollama models need Node\.js 26/)
-    })
-    expect(calls).toHaveLength(0)
-  })
+  )
 })

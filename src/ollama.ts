@@ -35,10 +35,8 @@
  * status line said everything was fine, so every parsed line is checked for
  * it rather than trusting the status code.
  */
-import { createRequire } from 'node:module'
-import { Agent } from 'undici'
 import { ClaudeCommitError } from './errors.ts'
-import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_TIMEOUT_MS, parseModelRef } from './models.ts'
+import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST, parseModelRef } from './models.ts'
 import type { ModelResult, OllamaConfig, RunPromptOptions } from './types.ts'
 
 /** Ollama settings with every default filled in; the context may still be `"auto"`. */
@@ -46,8 +44,6 @@ export interface ResolvedOllama {
   host: string
   context: number | 'auto'
   keepAlive: string | number | null
-  /** Milliseconds to wait for Ollama to send anything; `0` waits forever. */
-  timeout: number
 }
 
 /** {@link ResolvedOllama} after `"auto"` has been turned into a number. */
@@ -55,7 +51,6 @@ export interface OllamaRequestSettings {
   host: string
   contextTokens: number
   keepAlive: string | number | null
-  timeout: number
 }
 
 /**
@@ -91,8 +86,7 @@ export function resolveOllamaConfig(
   return {
     host: resolveOllamaHost(config?.host, env),
     context: typeof context === 'number' && context > 0 ? Math.floor(context) : DEFAULT_OLLAMA_CONTEXT,
-    keepAlive: config?.keepAlive ?? null,
-    timeout: typeof config?.timeout === 'number' && config.timeout >= 0 ? config.timeout : DEFAULT_OLLAMA_TIMEOUT_MS
+    keepAlive: config?.keepAlive ?? null
   }
 }
 
@@ -121,10 +115,10 @@ interface OllamaLoadedModel {
  */
 export async function probeOllamaContext(
   model: string,
-  settings: { host: string; keepAlive: string | number | null; timeout?: number },
+  settings: { host: string; keepAlive: string | number | null },
   signal?: AbortSignal
 ): Promise<number> {
-  const { host, keepAlive, timeout = DEFAULT_OLLAMA_TIMEOUT_MS } = settings
+  const { host, keepAlive } = settings
   const preload = await ollamaFetch(
     `${host}/api/chat`,
     {
@@ -137,14 +131,14 @@ export async function probeOllamaContext(
         ...(keepAlive !== null ? { keep_alive: keepAlive } : {})
       })
     },
-    { host, timeout },
+    host,
     signal
   )
   if (!preload.ok) {
     throw new ClaudeCommitError(await describeHttpFailure(preload, host, model))
   }
 
-  const ps = await ollamaFetch(`${host}/api/ps`, { method: 'GET' }, { host, timeout }, signal)
+  const ps = await ollamaFetch(`${host}/api/ps`, { method: 'GET' }, host, signal)
   if (!ps.ok) {
     throw new ClaudeCommitError(await describeHttpFailure(ps, host, model))
   }
@@ -179,76 +173,22 @@ export async function resolveOllamaContext(
 }
 
 /**
- * One connection pool per `ollama.timeout` value, applied to both the wait
- * for headers and the gap between streamed pieces. Node's fetch has the
- * same 300 s limits built in, but invisibly: a 38k-token chunk on a 31B
- * model failed at exactly 300.9 s with nothing but "fetch failed". Setting
- * them here makes the limit explicit and configurable.
- *
- * `undici`'s major version must match the one inside the supported Node:
- * Node 26 bundles undici 8, and a fetch rejects a dispatcher from another
- * major outright (`UND_ERR_INVALID_ARG`, seen with undici 8 on Node 24).
- * `engines` and Dependabot's ignore rule keep the two together.
+ * How long Node's built-in fetch waits for Ollama to send anything - the
+ * response headers, or the next piece of a streamed reply - before it gives
+ * up. It is fetch's own fixed limit (undici's `headersTimeout` and
+ * `bodyTimeout`); cco does not change it, only explains it when it fires.
  */
-const dispatchers = new Map<number, Agent>()
-
-/** The undici cco installs; its major must match the undici inside Node. */
-const UNDICI_VERSION: string = createRequire(import.meta.url)('undici/package.json').version
-
-/**
- * Why Ollama cannot work on this Node, or `null` when it can. Node's
- * built-in fetch rejects an undici dispatcher from another major, so every
- * Ollama request would fail with a cryptic `UND_ERR_INVALID_ARG` - and
- * `engines` only warns at install. When Node does not report its undici,
- * there is nothing to compare, and the request decides.
- */
-export function undiciMismatch(
-  bundled: string | undefined = process.versions.undici,
-  installed: string = UNDICI_VERSION,
-  node: string = process.versions.node
-): string | null {
-  const major = (version: string) => version.split('.', 1)[0]
-  if (bundled === undefined || major(bundled) === major(installed)) return null
-  return (
-    `Ollama models need Node.js 26 or later. This is Node ${node}, whose built-in fetch ` +
-    `(undici ${bundled}) cannot use cco's undici ${installed}, so every Ollama request ` +
-    `would fail. Upgrade Node, or use a Claude model.`
-  )
-}
-
-/** Stop with {@link undiciMismatch}'s explanation before any Ollama request is made. */
-export function assertOllamaSupported(): void {
-  const mismatch = undiciMismatch()
-  if (mismatch) throw new ClaudeCommitError(mismatch)
-}
-function dispatcherFor(timeout: number): Agent {
-  let dispatcher = dispatchers.get(timeout)
-  if (!dispatcher) {
-    dispatcher = new Agent({ headersTimeout: timeout, bodyTimeout: timeout })
-    dispatchers.set(timeout, dispatcher)
-  }
-  return dispatcher
-}
+const NODE_FETCH_TIMEOUT_SECONDS = 300
 
 /** `fetch` with transport failures and cancellation turned into cco errors. */
-async function ollamaFetch(
-  url: string,
-  init: RequestInit,
-  target: { host: string; timeout: number },
-  signal?: AbortSignal
-): Promise<Response> {
-  assertOllamaSupported()
+async function ollamaFetch(url: string, init: RequestInit, host: string, signal?: AbortSignal): Promise<Response> {
   try {
-    return await fetch(url, {
-      ...init,
-      dispatcher: dispatcherFor(target.timeout),
-      ...(signal ? { signal } : {})
-    })
+    return await fetch(url, { ...init, ...(signal ? { signal } : {}) })
   } catch (error) {
     if (signal?.aborted) {
       throw new ClaudeCommitError('Generation was cancelled.')
     }
-    throw new ClaudeCommitError(describeTransportFailure(error, target))
+    throw new ClaudeCommitError(describeTransportFailure(error, host))
   }
 }
 
@@ -371,14 +311,16 @@ function causeChain(error: unknown): string[] {
 }
 
 /** Turn a transport-level failure into a message that says what to do about it. */
-function describeTransportFailure(error: unknown, target: { host: string; timeout: number }): string {
-  const { host, timeout } = target
+function describeTransportFailure(error: unknown, host: string): string {
   const message = causeChain(error).join(': ')
+  // A summary is not streamed, so Ollama sends nothing until it is written:
+  // a 38k-token chunk on a 31B model hit this at exactly 300.9 s.
   if (/UND_ERR_(HEADERS|BODY)_TIMEOUT/.test(message)) {
     return (
-      `Ollama at ${host} sent nothing for ${timeout / 1000} s, the "ollama.timeout" limit. ` +
-      `A large chunk on a big local model can take longer than that: raise "ollama.timeout" ` +
-      `(0 waits forever), or lower "maxChunkTokens" or "ollama.context".`
+      `Ollama at ${host} sent nothing for ${NODE_FETCH_TIMEOUT_SECONDS} s, Node's fetch limit, so the request ` +
+      `was abandoned. The model is too slow for this chunk on this machine: use a smaller model, ` +
+      `lower "maxChunkTokens" or "ollama.context" to send smaller chunks, or time models with ` +
+      `bin/stopwatch.ts (in a checkout of claude-commit).`
     )
   }
   if (/econnrefused|failed to fetch|unable to connect|connection refused/i.test(message)) {
@@ -474,7 +416,6 @@ export async function runOllamaPrompt(prompt: string, opts: RunPromptOptions): P
   const resolved: OllamaRequestSettings = {
     host: base.host,
     keepAlive: base.keepAlive,
-    timeout: base.timeout,
     contextTokens: await resolveOllamaContext(opts.model, opts.ollama, signal)
   }
   const request = buildChatRequest(prompt, opts, resolved)
@@ -486,7 +427,7 @@ export async function runOllamaPrompt(prompt: string, opts: RunPromptOptions): P
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request)
     },
-    resolved,
+    resolved.host,
     signal
   )
   if (!response.ok) {

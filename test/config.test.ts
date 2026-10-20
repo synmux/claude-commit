@@ -432,17 +432,6 @@ describe('ollama settings', () => {
     expect(sanitizePartial({ ollama: { context: '256k' } }).ollama).toBeUndefined()
   })
 
-  test('keeps a timeout of 0 (wait forever), floors fractions, drops negatives', () => {
-    expect(sanitizePartial({ ollama: { timeout: 0 } }).ollama).toEqual({ timeout: 0 })
-    expect(sanitizePartial({ ollama: { timeout: 1500.7 } }).ollama).toEqual({ timeout: 1500 })
-    expect(sanitizePartial({ ollama: { timeout: -1 } }).ollama).toBeUndefined()
-    expect(sanitizePartial({ ollama: { timeout: '5m' } }).ollama).toBeUndefined()
-  })
-
-  test('defaults the timeout to an explicit 300 s', () => {
-    expect(DEFAULT_CONFIG.ollama.timeout).toBe(300_000)
-  })
-
   test('merges key by key, like models', () => {
     const merged = mergePartial({ ollama: { host: 'http://global:1', context: 4096 } }, { ollama: { context: 32768 } })
     expect(merged.ollama).toEqual({
@@ -456,8 +445,7 @@ describe('ollama settings', () => {
     expect(config.ollama).toEqual({
       host: DEFAULT_CONFIG.ollama.host,
       context: 16384,
-      keepAlive: null,
-      timeout: 300_000
+      keepAlive: null
     })
   })
 
@@ -465,8 +453,7 @@ describe('ollama settings', () => {
     expect(DEFAULT_CONFIG.ollama).toEqual({
       host: 'http://localhost:11434',
       context: 'auto',
-      keepAlive: null,
-      timeout: 300_000
+      keepAlive: null
     })
   })
 })

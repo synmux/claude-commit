@@ -47,9 +47,7 @@ For less model work at the cost of less useful messages, enable
 
 ## Install
 
-Requires [Node.js](https://nodejs.org) 26 (26.10 or later). On an older
-Node, Claude models still work, but `ollama:` models stop with a message
-that says so.
+Requires [Node.js](https://nodejs.org) 24.21 or later.
 
 ```sh
 npm install -g @synmux/claude-commit   # `cco` and `claude-commit` on your PATH
@@ -266,8 +264,7 @@ keys are valid at every level:
   "ollama": {
     "host": "http://localhost:11434",
     "context": "auto",
-    "keepAlive": null,
-    "timeout": 300000
+    "keepAlive": null
   },
   "typesafe": {
     "enable": false,
@@ -488,19 +485,16 @@ Where the number comes from is `ollama.context`:
   or negative to pin it. `null` leaves the server's own default. Pinning is
   worth it if you commit often; a 35b model takes a while to load.
 
-### Timeout
+### Slow models
 
-`ollama.timeout` is how long, in milliseconds, cco waits for Ollama to
-send anything before giving up. The default is 300000 (5 minutes).
+Node's fetch waits at most 300 seconds for Ollama to send anything.
 Summary requests are not streamed, so nothing arrives until the whole
 summary is written. A large chunk on a big local model can take longer
-than that, and then cco stops with a message naming the setting. Raise it,
-set it to `0` to wait as long as Ollama takes (Ctrl-C still cancels), or
-send smaller chunks with `maxChunkTokens` or a smaller `ollama.context`.
-
-```json
-{ "ollama": { "timeout": 900000 } }
-```
+than that. cco then stops with a message saying the model was too slow,
+instead of a bare "fetch failed". To fix it, use a smaller model, or send
+smaller chunks with a lower `maxChunkTokens` or `ollama.context`.
+`node bin/stopwatch.ts <model>` (see [Development](#development)) shows
+how long a model takes on this machine.
 
 ### What differs from a Claude model
 
@@ -532,7 +526,7 @@ node bin/stopwatch.ts sonnet
 ```
 
 It runs the real pipeline with that model in both stages, using the rest
-of your config (Ollama host, window and `ollama.timeout`), and prints the
+of your config (Ollama host and window), and prints the
 summary, final and total time for each commit. The commits are generated
 fresh each run, so a server's prompt cache cannot flatter a second run.
 
