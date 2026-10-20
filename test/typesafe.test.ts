@@ -19,7 +19,10 @@ const summaries: CandidateEvidence = {
   lowPriority: null
 }
 
-const split: CandidateEvidence = { ...summaries, lowPriority: 'pnpm-lock.yaml regenerated.' }
+const split: CandidateEvidence = {
+  ...summaries,
+  lowPriority: 'pnpm-lock.yaml regenerated.'
+}
 
 const messages = [
   'fix(generate): retry without temperature\n\n- Retry once without it.',
@@ -75,11 +78,18 @@ describe('buildCandidateRequest', () => {
       subject: 'fix(generate): retry without temperature',
       body: '- Retry once without it.'
     })
-    expect(state.candidates[1]).toEqual({ subject: 'chore(deps): bump vitest', body: '' })
+    expect(state.candidates[1]).toEqual({
+      subject: 'chore(deps): bump vitest',
+      body: ''
+    })
   })
 
   test('labels file-list evidence so it is not read as summaries', () => {
-    const { state } = buildCandidateRequest(messages, { kind: 'filenames', primary: '- "src/a.ts"', lowPriority: null })
+    const { state } = buildCandidateRequest(messages, {
+      kind: 'filenames',
+      primary: '- "src/a.ts"',
+      lowPriority: null
+    })
     expect(state.context).toMatch(/paths/)
     expect(state.evidence).toEqual({ primary: '- "src/a.ts"' })
   })
@@ -204,7 +214,11 @@ describe('prior warnings', () => {
 describe('mixed commits', () => {
   test('asks once, about the summaries only', () => {
     expect(buildCandidateRequest(messages, summaries).questions.mixed_commit?.type).toBe('noul')
-    const files = { kind: 'filenames' as const, primary: 'a.ts', lowPriority: null }
+    const files = {
+      kind: 'filenames' as const,
+      primary: 'a.ts',
+      lowPriority: null
+    }
     expect(buildCandidateRequest(messages, files).questions.mixed_commit).toBeUndefined()
   })
 
@@ -215,7 +229,11 @@ describe('mixed commits', () => {
   })
 
   test('is never reported for file-list evidence', () => {
-    const files = { kind: 'filenames' as const, primary: 'a.ts', lowPriority: null }
+    const files = {
+      kind: 'filenames' as const,
+      primary: 'a.ts',
+      lowPriority: null
+    }
     const request = buildCandidateRequest(messages, files)
     expect(rankCandidates(messages, files, answersFor(request)).mixedCommit).toBe(false)
   })
@@ -224,7 +242,11 @@ describe('mixed commits', () => {
 describe('checkCandidates', () => {
   test('sends one request through the SDK and returns the ranked candidates', async () => {
     const { fetch, requests } = answeringJevFetch({ c0_subject_shown: 0.1 })
-    const checked = await checkCandidates(messages, summaries, { apiKey: 'ts-key', settings, fetch })
+    const checked = await checkCandidates(messages, summaries, {
+      apiKey: 'ts-key',
+      settings,
+      fetch
+    })
 
     expect(requests).toHaveLength(1)
     const [request] = requests
@@ -237,7 +259,10 @@ describe('checkCandidates', () => {
   })
 
   test('an API failure rejects rather than passing every candidate', async () => {
-    const { fetch } = fakeJevFetch(() => ({ status: 401, json: { error: 'bad key' } }))
+    const { fetch } = fakeJevFetch(() => ({
+      status: 401,
+      json: { error: 'bad key' }
+    }))
     await expect(checkCandidates(messages, summaries, { apiKey: 'bad', settings, fetch })).rejects.toThrow()
   })
 })
