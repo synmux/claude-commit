@@ -39,6 +39,31 @@ carrying the same notes at greater length.
   `validating` state that `@clack/core` added no longer breaks the build.
 - Ollama tests now await their rejection assertions, which Vitest 5
   requires. Those tests previously passed without checking anything.
+- **`$OLLAMA_HOST` is honoured.** The built-in default host shadowed the
+  variable, so every `ollama:` run went to localhost unless `ollama.host`
+  was set. Precedence is as documented: config, then `$OLLAMA_HOST`, then
+  `http://localhost:11434`.
+- **Ctrl-C or Ctrl-D at "Commit this message?"** (and at the picker's
+  plain-prompt fallback) now prints "Aborted. Nothing was committed." and
+  exits 1. Before, the process quietly exited 0, so a wrapping script saw
+  success.
+- **An editor killed by a signal no longer commits.** Pressing Ctrl-C
+  while `code --wait` (or any waiting editor) was open counted as a
+  successful edit and committed the unedited message. It is now an error,
+  as it is for git itself.
+- **`"ollama.context": "auto"` works for untagged model names** such as
+  `ollama:mistral`: `/api/ps` reports `mistral:latest`, which no longer
+  fails to match.
+- **`"ollama.keepAlive": 0` no longer breaks the `"auto"` probe.** The
+  preload sent `keep_alive: 0` with no messages, which Ollama defines as
+  "unload the model", so the window could not be read back.
+- `cco -i --no-spinner` now disables the spinner in interactive mode too.
+- **Oversized Ollama prompts are re-split on small windows.** The retry
+  floor (8,000 tokens) was sized for Claude; a 4k, 8k or 16k Ollama window
+  could never halve above it, so the truncation error surfaced instead of
+  the re-split. The floor now scales down with the chunk budget.
+- README, AGENTS.md and the CI workflows say Node 26, which `engines` has
+  required since the undici bump; they had drifted back to 24.
 
 ## [1.1.0] - 2026-09-13
 
