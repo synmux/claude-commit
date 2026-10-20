@@ -30,7 +30,7 @@ describe('editInEditor', () => {
   test('an editor killed by a signal is an error, not a successful edit', async () => {
     // The user pressed Ctrl-C while `code --wait` (or any waiting editor)
     // was open: the editor dies from the signal with the file untouched.
-    process.env.GIT_EDITOR = `sh -c 'kill -TERM $$'`
+    process.env.GIT_EDITOR = `exec sh -c 'kill -TERM $$'`
     await expect(editInEditor('original')).rejects.toThrow(/SIGTERM.*nothing was committed/i)
   })
 })
