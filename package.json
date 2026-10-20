@@ -27,8 +27,8 @@
     ],
     "maxChunkTokens": 750000,
     "models": {
-      "final": "opus",
-      "summary": "opus"
+      "final": "ollama:muse-glimmer:30b-mlx",
+      "summary": "ollama:bonsai-2:4b"
     },
     "multiline": true,
     "ollama": {

@@ -51,8 +51,7 @@ function if they have moved. Every fix needs a test that fails first.
   Python's `pty`), send `\x03`, and read the exit code: 0. Reproduced.
 - **Fix:** in both prompts, listen for `SIGINT` and `close` on the
   readline interface and settle the promise: treat it as "no" (exit 1
-  with "Aborted"), or reject with `ClaudeCommitError('Generation was
-cancelled.')` to match the rest of the CLI.
+  with "Aborted"), or reject with `ClaudeCommitError('Generation was cancelled.')` to match the rest of the CLI.
 
 ### 1c. An editor killed by a signal still commits the unedited message
 
@@ -144,58 +143,7 @@ cancelled.')` to match the rest of the CLI.
   that would fail for Node 24 users. Pin `@types/node` to 24, or run CI's
   tests on Node 24 as well.
 
-## 2. Fix the `claude-review` workflow
-
-### What fails and why
-
-The `claude-review` check (`.github/workflows/claude-code-review.yml`)
-fails on every pull request. It has failed on every run since at least
-2026-10-15: PR #32, the dependabot PRs and `factory/party-time`. So PRs
-get no Claude code review, and the check is always red.
-
-The workflow checks out `anthropics/claude-code` at a pinned commit
-(`2301018b1f61073c501a8e7a4813ef48c239163b`) into
-`.claude-code-marketplace`. It then passes that local path to
-`anthropics/claude-code-action` (pinned to v1.0.248) as
-`plugin_marketplaces` and installs `code-review@claude-code-plugins`.
-The action stops while adding the marketplace:
-
-```plaintext
-✘ Failed to add marketplace: The name 'claude-code-plugins' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.
-##[error]Action failed with error: Failed to add marketplace '/home/runner/work/claude-commit/claude-commit/.claude-code-marketplace' (exit code: 1)
-```
-
-Claude Code now refuses that reserved marketplace name from a local
-directory. The local checkout existed only to pin the marketplace to a
-commit; the workflow's own comment says the action accepts a marketplace
-only as a bare `.git` URL (no ref) or a local path.
-
-### Ways to fix it
-
-1. **Use the GitHub source:** set `plugin_marketplaces` to
-   `https://github.com/anthropics/claude-code.git` and drop the checkout
-   step. This satisfies the name rule, but the plugin is no longer pinned
-   and follows the marketplace's default branch.
-2. **Keep it pinned under another name:** only possible if the action or
-   Claude Code allows renaming a local marketplace. Check the current
-   `claude-code-action` docs. Renaming the checkout's
-   `.claude-plugin/marketplace.json` in the workflow before the action runs
-   may work, but it is fragile.
-3. **Drop the plugin:** give the action a plain review prompt without
-   `plugins`. This needs no marketplace, at the cost of the
-   `code-review` plugin's behaviour.
-
-Option 1 is the smallest change. Decide whether losing the pin is
-acceptable: the other actions in the repo are pinned to commit SHAs on
-purpose (`9b2835e`, "pin claude actions to commit SHAs").
-
-### Fixed when
-
-`claude-review` passes on a pull request and posts review comments. The
-`@claude` workflow (`.github/workflows/claude.yml`) uses the same action
-version but no plugin marketplace, so it is not affected.
-
-## 3. Cap Ollama chunk size
+## 2. Cap Ollama chunk size
 
 ### Problem
 
@@ -267,7 +215,7 @@ prompt had just been sent.
   window budget, Claude unaffected) and the chosen `num_ctx` behaviour.
 - README's "Slow models" section explains the cap.
 
-## 4. Known gaps in the shipped TypeSafe checks
+## 3. Known gaps in the shipped TypeSafe checks
 
 Each is small. Fix or measure when touching the check.
 
@@ -295,7 +243,7 @@ Each is small. Fix or measure when touching the check.
   no real option was flagged in tuning, so there was nothing to
   regenerate. Revisit if a model starts producing flagged first options.
 
-## 5. Rejected TypeSafe ideas: what would reopen them
+## 4. Rejected TypeSafe ideas: what would reopen them
 
 Not active work. Each was tested and rejected; the evidence is in the
 design record under "Rejected features". Reopen only if the condition
@@ -321,7 +269,7 @@ holds.
   one Choice across all options, which beat a Score per option (60 of 60
   against 42 of 60 top-1).
 
-## 6. Open question
+## 5. Open question
 
 - **Per-feature toggles under `typesafe`?** Today `enable` turns
   everything on: the support checks, custom-instruction check, gitmoji
