@@ -29,7 +29,10 @@ carrying the same notes at greater length.
 
 - **Requires Node.js 26** (26.10 or later), up from 24. The Ollama timeout
   uses undici's `Agent` with Node's built-in fetch, which only accepts one
-  from the same undici major as the fetch: Node 26 ships undici 8.
+  from the same undici major as the fetch: Node 26 ships undici 8. On an
+  older Node, `engines` only warns at install, so cco checks for itself: an
+  `ollama:` model stops at once with a message saying Node 26 is needed,
+  before any model is called. Claude models still work there.
 
 ### [Unreleased] - Fixed
 

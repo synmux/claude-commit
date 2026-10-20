@@ -10,7 +10,8 @@ import {
   resolveOllamaConfig,
   resolveOllamaContext,
   resolveOllamaHost,
-  runOllamaPrompt
+  runOllamaPrompt,
+  undiciMismatch
 } from '../src/ollama.ts'
 import type { OllamaConfig, RunPromptOptions } from '../src/types.ts'
 
@@ -720,5 +721,37 @@ describe('ollama.timeout', () => {
   test('defaults to an explicit 300 s', () => {
     expect(resolveOllamaConfig({}).timeout).toBe(300_000)
     expect(resolveOllamaConfig({ timeout: 0 }).timeout).toBe(0)
+  })
+})
+
+describe('undici compatibility', () => {
+  /** Pretend Node bundles a different undici, for the length of one test. */
+  function withBundledUndici(version: string, body: () => Promise<void>): Promise<void> {
+    const original = Object.getOwnPropertyDescriptor(process.versions, 'undici')
+    Object.defineProperty(process.versions, 'undici', { value: version, configurable: true })
+    return body().finally(() => {
+      if (original) Object.defineProperty(process.versions, 'undici', original)
+    })
+  }
+
+  test('is fine when the majors match, or when Node does not say', () => {
+    expect(undiciMismatch('8.10.2', '8.11.2', '26.10.0')).toBeNull()
+    expect(undiciMismatch(undefined, '8.11.2', '26.10.0')).toBeNull()
+  })
+
+  test('explains a mismatch: which Node, which versions, what to do', () => {
+    const message = undiciMismatch('7.29.1', '8.11.2', '24.21.0')
+    expect(message).toMatch(/Ollama models need Node\.js 26/)
+    expect(message).toMatch(/Node 24\.21\.0/)
+    expect(message).toMatch(/undici 7\.29\.1/)
+    expect(message).toMatch(/Claude model/)
+  })
+
+  test('stops before sending anything to Ollama', async () => {
+    const { calls } = stubFetch(() => jsonResponse({ message: { content: 'ok' }, done: true }))
+    await withBundledUndici('7.29.1', async () => {
+      await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/Ollama models need Node\.js 26/)
+    })
+    expect(calls).toHaveLength(0)
   })
 })

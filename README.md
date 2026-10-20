@@ -47,7 +47,9 @@ For less model work at the cost of less useful messages, enable
 
 ## Install
 
-Requires [Node.js](https://nodejs.org) 26 (26.10 or later).
+Requires [Node.js](https://nodejs.org) 26 (26.10 or later). On an older
+Node, Claude models still work, but `ollama:` models stop with a message
+that says so.
 
 ```sh
 npm install -g @synmux/claude-commit   # `cco` and `claude-commit` on your PATH

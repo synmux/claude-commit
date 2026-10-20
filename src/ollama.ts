@@ -35,6 +35,7 @@
  * status line said everything was fine, so every parsed line is checked for
  * it rather than trusting the status code.
  */
+import { createRequire } from 'node:module'
 import { Agent } from 'undici'
 import { ClaudeCommitError } from './errors.ts'
 import { DEFAULT_OLLAMA_CONTEXT, DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_TIMEOUT_MS, parseModelRef } from './models.ts'
@@ -190,6 +191,36 @@ export async function resolveOllamaContext(
  * `engines` and Dependabot's ignore rule keep the two together.
  */
 const dispatchers = new Map<number, Agent>()
+
+/** The undici cco installs; its major must match the undici inside Node. */
+const UNDICI_VERSION: string = createRequire(import.meta.url)('undici/package.json').version
+
+/**
+ * Why Ollama cannot work on this Node, or `null` when it can. Node's
+ * built-in fetch rejects an undici dispatcher from another major, so every
+ * Ollama request would fail with a cryptic `UND_ERR_INVALID_ARG` - and
+ * `engines` only warns at install. When Node does not report its undici,
+ * there is nothing to compare, and the request decides.
+ */
+export function undiciMismatch(
+  bundled: string | undefined = process.versions.undici,
+  installed: string = UNDICI_VERSION,
+  node: string = process.versions.node
+): string | null {
+  const major = (version: string) => version.split('.', 1)[0]
+  if (bundled === undefined || major(bundled) === major(installed)) return null
+  return (
+    `Ollama models need Node.js 26 or later. This is Node ${node}, whose built-in fetch ` +
+    `(undici ${bundled}) cannot use cco's undici ${installed}, so every Ollama request ` +
+    `would fail. Upgrade Node, or use a Claude model.`
+  )
+}
+
+/** Stop with {@link undiciMismatch}'s explanation before any Ollama request is made. */
+export function assertOllamaSupported(): void {
+  const mismatch = undiciMismatch()
+  if (mismatch) throw new ClaudeCommitError(mismatch)
+}
 function dispatcherFor(timeout: number): Agent {
   let dispatcher = dispatchers.get(timeout)
   if (!dispatcher) {
@@ -206,6 +237,7 @@ async function ollamaFetch(
   target: { host: string; timeout: number },
   signal?: AbortSignal
 ): Promise<Response> {
+  assertOllamaSupported()
   try {
     return await fetch(url, {
       ...init,
