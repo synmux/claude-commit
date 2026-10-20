@@ -25,10 +25,10 @@
       "pnpm-lock.yaml",
       ".serena"
     ],
-    "maxChunkTokens": 750000,
+    "maxChunkTokens": 11,
     "models": {
-      "final": "ollama:muse-glimmer:30b-mlx",
-      "summary": "ollama:bonsai-2:4b"
+      "final": "haiku",
+      "summary": "haiku"
     },
     "multiline": true,
     "ollama": {
@@ -37,7 +37,7 @@
       "keepAlive": "10m"
     },
     "skipArmored": true,
-    "spinner": "pong",
+    "spinner": "toggle10",
     "template": null
   },
   "dependencies": {
@@ -98,6 +98,7 @@
     "prepare": "skilld prepare || true",
     "prepublishOnly": "pnpm run build",
     "start": "node bin/cco.js",
+    "stopwatch": "node bin/stopwatch.ts",
     "test": "vitest run"
   },
   "type": "module",
