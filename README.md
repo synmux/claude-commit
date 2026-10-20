@@ -552,8 +552,9 @@ stopwatch reads it in place of `package.json` (git ignores it):
 
 ````json
 { "claude-commit": { "ollama": { "context": "auto", "maxChunkTokens": 24000 } } }
-``` The commits are generated
-fresh each run, so a server's prompt cache cannot flatter a second run.
+```
+
+The commits are generated fresh each run, so a server's prompt cache cannot flatter a second run.
 
 The sources run directly on Node's native type stripping, so there is no build
 step during development: `node bin/cco.js` picks up `dist/` when it exists and
