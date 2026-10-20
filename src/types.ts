@@ -57,6 +57,35 @@ export interface OllamaConfig {
   keepAlive: string | number | null
 }
 
+/**
+ * Settings for the TypeSafe candidate check: on every run, interactive or
+ * not, TypeSafe's Jev model checks each candidate message against the
+ * evidence it was written from and asks whether the staged changes look
+ * like more than one commit. Doubtful candidates move last with a warning
+ * and near-duplicates are dropped. See `src/typesafe.ts`.
+ */
+export interface TypeSafeConfig {
+  /** Run the check. Off by default: it sends summaries and candidates to TypeSafe. */
+  enable: boolean
+  /**
+   * Name of the environment variable that holds the API key. Defaults to
+   * `TYPESAFE_API_KEY`; set it when the key lives under another name.
+   */
+  env: string
+  /**
+   * Jev model to ask. Pinned to `jev-1.13.0` by default because the
+   * thresholds in `src/typesafe.ts` were tested against it; an alias such as
+   * `jev-latest` can move underneath them.
+   */
+  model: string
+  /**
+   * Milliseconds to wait for each attempt (one retry follows a timeout).
+   * Every run waits for the check, so this bounds the delay a slow service
+   * adds.
+   */
+  timeout: number
+}
+
 /** Fully-resolved configuration after merging defaults, file config and CLI flags. */
 export interface Config {
   /** Format the subject line as a Conventional Commit (`type(scope): description`). */
@@ -146,6 +175,8 @@ export interface Config {
   ignore: string[]
   /** Settings for the Ollama backend (`ollama:`-prefixed models). */
   ollama: OllamaConfig
+  /** Settings for the TypeSafe candidate check. */
+  typesafe: TypeSafeConfig
   /**
    * Allow API credentials from the environment (`ANTHROPIC_API_KEY` /
    * `ANTHROPIC_AUTH_TOKEN`) to be used, billing pay-as-you-go instead of the
@@ -162,7 +193,9 @@ export type PartialConfig = {
     ? Partial<ModelConfig>
     : K extends 'ollama'
       ? Partial<OllamaConfig>
-      : Config[K]
+      : K extends 'typesafe'
+        ? Partial<TypeSafeConfig>
+        : Config[K]
 }
 
 /**

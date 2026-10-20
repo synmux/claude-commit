@@ -482,3 +482,31 @@ describe('model names', () => {
     })
   })
 })
+
+describe('typesafe settings', () => {
+  test('defaults to off, the standard variable and a pinned model', () => {
+    expect(DEFAULT_CONFIG.typesafe).toEqual({
+      enable: false,
+      env: 'TYPESAFE_API_KEY',
+      model: 'jev-1.13.0',
+      timeout: 5_000
+    })
+  })
+
+  test('sanitizePartial keeps a valid block and trims names', () => {
+    const out = sanitizePartial({
+      typesafe: { enable: true, env: ' __TYPESAFE_API_KEY ', model: 'jev-latest', timeout: 2500.9 }
+    })
+    expect(out.typesafe).toEqual({ enable: true, env: '__TYPESAFE_API_KEY', model: 'jev-latest', timeout: 2500 })
+  })
+
+  test('drops values that cannot be used', () => {
+    const out = sanitizePartial({ typesafe: { enable: 'yes', env: '  ', model: '', timeout: 0 } })
+    expect(out.typesafe).toBeUndefined()
+  })
+
+  test('merges key by key, so turning it on keeps a configured variable', () => {
+    const merged = resolveConfig({ typesafe: { env: '__TYPESAFE_API_KEY' } }, { typesafe: { enable: true } })
+    expect(merged.typesafe).toEqual({ ...DEFAULT_CONFIG.typesafe, enable: true, env: '__TYPESAFE_API_KEY' })
+  })
+})

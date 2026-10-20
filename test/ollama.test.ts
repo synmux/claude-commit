@@ -271,7 +271,7 @@ describe('runOllamaPrompt - non-streaming', () => {
         done_reason: 'stop'
       })
     )
-    expect(runOllamaPrompt('diff', baseOpts())).rejects.toThrow(/returned no text/)
+    await expect(runOllamaPrompt('diff', baseOpts())).rejects.toThrow(/returned no text/)
   })
 
   test('discards any thinking the model volunteered', async () => {
@@ -348,7 +348,7 @@ describe('runOllamaPrompt - silent truncation', () => {
         prompt_eval_count: 100
       })
     )
-    expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/cut off/)
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/cut off/)
   })
 })
 
@@ -397,17 +397,19 @@ describe('runOllamaPrompt - streaming', () => {
         JSON.stringify({ error: 'model runner has crashed' }) + '\n'
       ])
     )
-    expect(runOllamaPrompt('d', baseOpts({ onText: () => {} }))).rejects.toThrow(/model runner has crashed/)
+    await expect(runOllamaPrompt('d', baseOpts({ onText: () => {} }))).rejects.toThrow(/model runner has crashed/)
   })
 
   test('refuses a stream that stopped before the model finished', async () => {
     stubFetch(() => ndjsonResponse([JSON.stringify({ message: { content: 'Add ' }, done: false }) + '\n']))
-    expect(runOllamaPrompt('d', baseOpts({ onText: () => {} }))).rejects.toThrow(/ended before the model finished/)
+    await expect(runOllamaPrompt('d', baseOpts({ onText: () => {} }))).rejects.toThrow(
+      /ended before the model finished/
+    )
   })
 
   test('refuses a malformed line rather than skipping it', async () => {
     stubFetch(() => ndjsonResponse(['{not json at all}\n', doneLine()]))
-    expect(runOllamaPrompt('d', baseOpts({ onText: () => {} }))).rejects.toThrow(/malformed response line/)
+    await expect(runOllamaPrompt('d', baseOpts({ onText: () => {} }))).rejects.toThrow(/malformed response line/)
   })
 
   test('still detects truncation on a streamed run', async () => {
@@ -430,29 +432,50 @@ describe('runOllamaPrompt - failures', () => {
     globalThis.fetch = (async () => {
       throw new Error('Unable to connect. ECONNREFUSED')
     }) as unknown as typeof fetch
-    expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
       /Cannot reach the Ollama server at http:\/\/ollama\.test:11434.*ollama serve/s
+    )
+  })
+
+  test("recognises a refused connection in Node's real error shape", async () => {
+    // Node's fetch says only "fetch failed"; the reason is in the cause.
+    globalThis.fetch = (async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+      })
+    }) as unknown as typeof fetch
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/Cannot reach the Ollama server.*ollama serve/s)
+  })
+
+  test('names the underlying cause of any other transport failure', async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' })
+      })
+    }) as unknown as typeof fetch
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
+      'Failed to call Ollama at http://ollama.test:11434: fetch failed: other side closed: UND_ERR_SOCKET'
     )
   })
 
   test('says how to pull a missing model, and does not pull it', async () => {
     stubFetch(() => jsonResponse({ error: 'model not found' }, 404))
-    expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/ollama pull gemma4:e2b-it-qat/)
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/ollama pull gemma4:e2b-it-qat/)
   })
 
   test("passes a 400's detail through", async () => {
     stubFetch(() => jsonResponse({ error: 'registry.ollama.ai/library/x does not support tools' }, 400))
-    expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/does not support tools/)
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/does not support tools/)
   })
 
   test('points a 500 at the memory knob that usually causes it', async () => {
     stubFetch(() => jsonResponse({ error: 'llama runner terminated' }, 500))
-    expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/ollama\.context/)
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/ollama\.context/)
   })
 
   test('reports an unexpected status rather than hiding it', async () => {
     stubFetch(() => jsonResponse({}, 418))
-    expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/returned 418/)
+    await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(/returned 418/)
   })
 
   test('reports a cancelled run as a cancellation', async () => {
@@ -461,11 +484,11 @@ describe('runOllamaPrompt - failures', () => {
       abortController.abort()
       throw new Error('The operation was aborted.')
     }) as unknown as typeof fetch
-    expect(runOllamaPrompt('d', baseOpts({ abortController }))).rejects.toThrow(/cancelled/)
+    await expect(runOllamaPrompt('d', baseOpts({ abortController }))).rejects.toThrow(/cancelled/)
   })
 
   test('rejects a model name with nothing after the prefix', async () => {
-    expect(runOllamaPrompt('d', baseOpts({ model: 'ollama:' }))).rejects.toThrow(/names no Ollama model/)
+    await expect(runOllamaPrompt('d', baseOpts({ model: 'ollama:' }))).rejects.toThrow(/names no Ollama model/)
   })
 })
 
@@ -506,7 +529,7 @@ describe('probeOllamaContext', () => {
       }
     ])
     await probeOllamaContext('gemma4:e2b-it-qat', settings)
-    const preload = requests[0]!
+    const preload = requests[0] ?? expect.unreachable('no preload request')
     expect(preload.url).toBe('http://ollama.test:11434/api/chat')
     expect(preload.body).toMatchObject({
       model: 'gemma4:e2b-it-qat',
@@ -534,31 +557,31 @@ describe('probeOllamaContext', () => {
       ...settings,
       keepAlive: '10m'
     })
-    expect(requests[0]!.body).toMatchObject({ keep_alive: '10m' })
+    expect(requests[0]?.body).toMatchObject({ keep_alive: '10m' })
   })
 
   test('fails loudly when the model is not in ps afterwards', async () => {
     stubProbeServer([{ name: 'something-else:7b', context_length: 4096 }])
-    expect(probeOllamaContext('gemma4:e2b-it-qat', settings)).rejects.toThrow(
+    await expect(probeOllamaContext('gemma4:e2b-it-qat', settings)).rejects.toThrow(
       /did not report its context window.*ollama\.context/s
     )
   })
 
   test('fails loudly when ps has no context_length for it', async () => {
     stubProbeServer([{ name: 'gemma4:e2b-it-qat' }])
-    expect(probeOllamaContext('gemma4:e2b-it-qat', settings)).rejects.toThrow(/did not report its context window/)
+    await expect(probeOllamaContext('gemma4:e2b-it-qat', settings)).rejects.toThrow(/did not report its context window/)
   })
 
   test('surfaces a missing model from the preload as the pull hint', async () => {
     stubProbeServer([], 404)
-    expect(probeOllamaContext('gemma4:e2b-it-qat', settings)).rejects.toThrow(/ollama pull gemma4:e2b-it-qat/)
+    await expect(probeOllamaContext('gemma4:e2b-it-qat', settings)).rejects.toThrow(/ollama pull gemma4:e2b-it-qat/)
   })
 
   test('surfaces an unreachable server', async () => {
     globalThis.fetch = (async () => {
       throw new Error('ECONNREFUSED')
     }) as unknown as typeof fetch
-    expect(probeOllamaContext('gemma4:e2b-it-qat', settings)).rejects.toThrow(/Cannot reach the Ollama server/)
+    await expect(probeOllamaContext('gemma4:e2b-it-qat', settings)).rejects.toThrow(/Cannot reach the Ollama server/)
   })
 })
 
@@ -586,7 +609,7 @@ describe('resolveOllamaContext', () => {
         context: 'auto'
       })
     ).toBe(131072)
-    expect(requests[0]!.body).toMatchObject({ model: 'gemma4:e2b-it-qat' })
+    expect(requests[0]?.body).toMatchObject({ model: 'gemma4:e2b-it-qat' })
   })
 })
 
@@ -600,7 +623,7 @@ describe('runOllamaPrompt - auto context', () => {
           models: [{ name: 'gemma4:e2b-it-qat', context_length: 131072 }]
         })
       }
-      const body = bodies[bodies.length - 1]!
+      const body = bodies.at(-1) ?? expect.unreachable('no request body')
       const isPreload = Array.isArray(body.messages) && body.messages.length === 0
       return jsonResponse(
         isPreload
@@ -616,7 +639,8 @@ describe('runOllamaPrompt - auto context', () => {
 
     const result = await runOllamaPrompt('diff', baseOpts({ ollama: { ...ollama, context: 'auto' } }))
     expect(result.text).toBe('Add a thing')
-    const real = bodies.find((b) => Array.isArray(b.messages) && b.messages.length > 0)!
+    const real =
+      bodies.find((b) => Array.isArray(b.messages) && b.messages.length > 0) ?? expect.unreachable('no chat request')
     expect((real.options as { num_ctx: number }).num_ctx).toBe(131072)
   })
 
@@ -643,4 +667,18 @@ describe('runOllamaPrompt - auto context', () => {
     expect(isPromptTooLongError(error)).toBe(true)
     expect(error.message).toMatch(/4096-token/)
   })
+})
+
+describe("Node's fetch timeout", () => {
+  test.each(['UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT'])(
+    'explains %s instead of "fetch failed"',
+    async (code) => {
+      globalThis.fetch = (async () => {
+        throw new TypeError('fetch failed', { cause: Object.assign(new Error('Timeout Error'), { code }) })
+      }) as unknown as typeof fetch
+      await expect(runOllamaPrompt('d', baseOpts())).rejects.toThrow(
+        /sent nothing for 300 s, Node's fetch limit.*smaller model.*maxChunkTokens.*bin\/stopwatch\.ts/s
+      )
+    }
+  )
 })

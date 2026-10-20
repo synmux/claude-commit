@@ -28,6 +28,28 @@ describe('filenames-only flags', () => {
   })
 })
 
+describe('typesafe flags', () => {
+  test('--typesafe turns the check on over config', () => {
+    const program = buildProgram()
+    program.parse(['--typesafe'], { from: 'user' })
+    const config = resolveConfig({ typesafe: { env: '__TYPESAFE_API_KEY' } }, flagsToConfig(program.opts()))
+    expect(config.typesafe.enable).toBe(true)
+    expect(config.typesafe.env).toBe('__TYPESAFE_API_KEY')
+  })
+
+  test('--no-typesafe turns a configured check off', () => {
+    const program = buildProgram()
+    program.parse(['--no-typesafe'], { from: 'user' })
+    expect(resolveConfig({ typesafe: { enable: true } }, flagsToConfig(program.opts())).typesafe.enable).toBe(false)
+  })
+
+  test('omitting both leaves the configured setting', () => {
+    const program = buildProgram()
+    program.parse([], { from: 'user' })
+    expect(flagsToConfig(program.opts()).typesafe).toBeUndefined()
+  })
+})
+
 describe('resolveInteractiveMode', () => {
   const base = {
     configInteractive: false,

@@ -172,6 +172,14 @@ export async function resolveOllamaContext(
   return probeOllamaContext(name, resolved, signal)
 }
 
+/**
+ * How long Node's built-in fetch waits for Ollama to send anything - the
+ * response headers, or the next piece of a streamed reply - before it gives
+ * up. It is fetch's own fixed limit (undici's `headersTimeout` and
+ * `bodyTimeout`); cco does not change it, only explains it when it fires.
+ */
+const NODE_FETCH_TIMEOUT_SECONDS = 300
+
 /** `fetch` with transport failures and cancellation turned into cco errors. */
 async function ollamaFetch(url: string, init: RequestInit, host: string, signal?: AbortSignal): Promise<Response> {
   try {
@@ -285,9 +293,36 @@ async function describeHttpFailure(response: Response, host: string, model: stri
   }
 }
 
+/**
+ * The messages and codes along an error's `cause` chain, outermost first.
+ * Node's fetch reports every transport failure as "fetch failed"; what went
+ * wrong (`ECONNREFUSED`, `UND_ERR_HEADERS_TIMEOUT`, ...) is in the cause.
+ */
+function causeChain(error: unknown): string[] {
+  const parts: string[] = []
+  let current: unknown = error
+  for (let depth = 0; current !== null && typeof current === 'object' && depth < 5; depth++) {
+    const { message, code, cause } = current as { message?: unknown; code?: unknown; cause?: unknown }
+    if (typeof message === 'string' && message !== '') parts.push(message)
+    if (typeof code === 'string' && !parts.includes(code)) parts.push(code)
+    current = cause
+  }
+  return parts.length > 0 ? parts : [String(error)]
+}
+
 /** Turn a transport-level failure into a message that says what to do about it. */
 function describeTransportFailure(error: unknown, host: string): string {
-  const message = error instanceof Error ? error.message : String(error)
+  const message = causeChain(error).join(': ')
+  // A summary is not streamed, so Ollama sends nothing until it is written:
+  // a 38k-token chunk on a 31B model hit this at exactly 300.9 s.
+  if (/UND_ERR_(HEADERS|BODY)_TIMEOUT/.test(message)) {
+    return (
+      `Ollama at ${host} sent nothing for ${NODE_FETCH_TIMEOUT_SECONDS} s, Node's fetch limit, so the request ` +
+      `was abandoned. The model is too slow for this chunk on this machine: use a smaller model, ` +
+      `lower "maxChunkTokens" or "ollama.context" to send smaller chunks, or time models with ` +
+      `bin/stopwatch.ts (in a checkout of claude-commit).`
+    )
+  }
   if (/econnrefused|failed to fetch|unable to connect|connection refused/i.test(message)) {
     return (
       `Cannot reach the Ollama server at ${host}. Start it with ` +
@@ -338,8 +373,7 @@ async function consumeStream(
     const { value, done } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    let newline: number
-    while ((newline = buffer.indexOf('\n')) >= 0) {
+    for (let newline = buffer.indexOf('\n'); newline >= 0; newline = buffer.indexOf('\n')) {
       const line = buffer.slice(0, newline)
       buffer = buffer.slice(newline + 1)
       handleLine(line)

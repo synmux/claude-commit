@@ -6,7 +6,15 @@ import { Command } from 'commander'
 import { presentCredentialVars } from './agent.ts'
 import { loadFileConfig, resolveConfig } from './config.ts'
 import { ClaudeCommitError } from './errors.ts'
-import { generateCommit, type IgnoreStats, type LowPriorityStats, type OllamaContextWindow } from './generate.ts'
+import {
+  describeCandidateCheck,
+  describeCheckNotices,
+  type GenerateResult,
+  generateCommit,
+  type IgnoreStats,
+  type LowPriorityStats,
+  type OllamaContextWindow
+} from './generate.ts'
 import { commit, getRepoRoot, getStagedDiff, getStagedStat, isGitRepo, stageAll } from './git.ts'
 import type { ModelConfig, OllamaConfig, PartialConfig } from './types.ts'
 import { color } from './ui/colors.ts'
@@ -41,6 +49,8 @@ interface CliOptions {
   ignore?: boolean
   ollamaHost?: string
   ollamaContext?: number | 'auto'
+  /** `true` for `--typesafe`, `false` for `--no-typesafe`, unset otherwise. */
+  typesafe?: boolean
 }
 
 /** Build the Commander program. Exported for tests. */
@@ -79,6 +89,8 @@ export function buildProgram(): Command {
       'context window for Ollama models: a token count, or auto to use ' + "the server's own choice for this machine",
       parseContextFlag
     )
+    .option('--typesafe', 'check and rank interactive options with TypeSafe (needs an API key)')
+    .option('--no-typesafe', 'skip the TypeSafe check even when "typesafe.enable" is set in config')
     .option('-d, --dry-run', 'print the message to stdout without committing')
     .option('-y, --yes', 'commit without asking for confirmation')
     .option('--no-spinner', 'disable the progress spinner')
@@ -99,6 +111,12 @@ export function buildProgram(): Command {
         '  e.g. --model-summary ollama:ornith-1.5:35b. Everything after the',
         '  prefix is the Ollama model name, tag included. The server needs no',
         '  credential; point cco at it with --ollama-host or $OLLAMA_HOST.',
+        '',
+        'TypeSafe check:',
+        '  With "typesafe": { "enable": true } in config (or --typesafe),',
+        "  interactive options are checked by TypeSafe's Jev model: best",
+        '  first, doubtful ones flagged, near-duplicates dropped. The key is',
+        '  read from $TYPESAFE_API_KEY, or the variable "typesafe.env" names.',
         '',
         'Examples:',
         '  cco                     generate and commit a message for staged changes',
@@ -143,6 +161,7 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
     ollama.context = Math.max(1, opts.ollamaContext)
   }
   if (Object.keys(ollama).length) cfg.ollama = ollama
+  if (opts.typesafe !== undefined) cfg.typesafe = { enable: opts.typesafe }
   if (opts.count !== undefined && Number.isFinite(opts.count)) {
     cfg.interactiveCount = Math.max(1, opts.count)
   }
@@ -279,7 +298,7 @@ async function runNonInteractive(
   const spinner = new Spinner(useSpinner, config.spinner)
 
   spinner.start(config.filenamesOnly ? 'Reading filenames' : 'Reading diff')
-  let result
+  let result: GenerateResult
   try {
     result = await generateCommit(diff, config, {
       progress: { onPhase: (label) => spinner.update(label) },
@@ -301,6 +320,9 @@ async function runNonInteractive(
     for (const window of result.ollamaContexts) {
       process.stderr.write(color('90', describeOllamaContext(window)) + '\n')
     }
+    if (result.candidateCheck?.status === 'checked') {
+      process.stderr.write(color('90', describeCandidateCheck(result.candidateCheck)) + '\n')
+    }
     if (config.ignore.length > 0) {
       process.stderr.write(color('90', describeIgnoreStats(result.ignored)) + '\n')
     }
@@ -314,7 +336,13 @@ async function runNonInteractive(
     }
   }
 
-  let message = result.messages[0]!
+  const chosen = result.messages[0]
+  if (chosen === undefined) throw new ClaudeCommitError('The model did not produce a commit message.')
+  let message = chosen
+  // Warnings go to stderr so a dry run's stdout stays the bare message.
+  for (const warning of [...describeCheckNotices(result.candidateCheck), ...(result.warnings[0] ?? [])]) {
+    process.stderr.write(`${color('33', `⚠ ${warning}`)}\n`)
+  }
 
   // Dry run: emit to stdout so it can be piped, and never commit.
   if (opts.dryRun) {

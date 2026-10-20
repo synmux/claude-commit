@@ -2,6 +2,7 @@ import { PassThrough, Writable } from 'node:stream'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { S_RADIO_ACTIVE, S_RADIO_INACTIVE, S_STEP_ACTIVE, S_STEP_CANCEL, S_STEP_SUBMIT } from '@clack/prompts'
 import { describe, expect, test } from 'vitest'
+import { describeCandidateCheck } from '../src/generate.ts'
 import { renderPicker, selectWithPrompt } from '../src/ui/interactive.ts'
 
 const messages = [
@@ -75,6 +76,28 @@ describe('renderPicker', () => {
     expect(frame).toContain('⏎ commit')
     expect(frame).toContain('e edit')
     expect(frame).toContain('q cancel')
+  })
+
+  test('shows TypeSafe warnings under the candidate they belong to', () => {
+    const frame = renderPicker({
+      messages,
+      warnings: [[], ['subject names a change the summaries do not show'], []],
+      cursor: 0,
+      state: 'active',
+      output
+    })
+    const lines = frame.split('\n')
+    const warningIndex = lines.findIndex((line) => line.includes('subject names a change the summaries do not show'))
+    const secondSubjectIndex = lines.findIndex((line) => line.includes(subject(messages[1] ?? '')))
+    const thirdSubjectIndex = lines.findIndex((line) => line.includes(subject(messages[2] ?? '')))
+    expect(warningIndex).toBeGreaterThan(secondSubjectIndex)
+    expect(warningIndex).toBeLessThan(thirdSubjectIndex)
+    expect(frame.match(/⚠/g)).toHaveLength(1)
+  })
+
+  test('draws no warning line when nothing was checked', () => {
+    const frame = renderPicker({ messages, cursor: 0, state: 'active', output })
+    expect(frame).not.toContain('⚠')
   })
 
   test('on submit collapses to the chosen subject', () => {
@@ -242,5 +265,16 @@ describe('selectWithPrompt', () => {
       process.stdout.write = original
     }
     expect(written).toEqual([])
+  })
+})
+
+describe('describeCandidateCheck', () => {
+  test('names the model, the tokens and the dropped duplicates', () => {
+    expect(describeCandidateCheck({ model: 'jev-1.13.0', inputTokens: 1500, droppedDuplicates: 1 })).toBe(
+      'TypeSafe check (jev-1.13.0): 1500 input tokens, 1 near-duplicate dropped'
+    )
+    expect(describeCandidateCheck({ model: 'jev-1.13.0', inputTokens: 900, droppedDuplicates: 0 })).toMatch(
+      /0 near-duplicates dropped$/
+    )
   })
 })

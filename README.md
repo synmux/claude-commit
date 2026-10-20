@@ -22,8 +22,6 @@ feat(auth): add error handling and refresh token rotation to login
 
 ## How it works
 
-Want more details? See [WALKTHROUGH.md](WALKTHROUGH.md).
-
 ```plaintext
 staged diff ──ignore──▶ ──split──▶ [chunk, …] ──sonnet──▶ summaries ──sonnet──▶ commit message
 ```
@@ -49,7 +47,7 @@ For less model work at the cost of less useful messages, enable
 
 ## Install
 
-Requires [Node.js](https://nodejs.org) 22.18 or later (24 LTS recommended).
+Requires [Node.js](https://nodejs.org) 24.21 or later.
 
 ```sh
 npm install -g @synmux/claude-commit   # `cco` and `claude-commit` on your PATH
@@ -118,6 +116,7 @@ and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 | `--no-ignore`                            | Disregard`ignore` for this run, so every staged change is read                             |
 | `--ollama-host <url>`                    | Base URL of the Ollama server for`ollama:` models                                          |
 | `--ollama-context <tokens>`              | Context window requested from Ollama models                                                |
+| `--typesafe` / `--no-typesafe`           | Check and rank interactive options with TypeSafe, or skip the check when enabled in config |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                             |
 | `-y, --yes`                              | Commit without asking for confirmation                                                     |
 | `--no-spinner`                           | Disable the progress spinner                                                               |
@@ -180,6 +179,48 @@ To make interactive mode the default without typing `-i` every time, set
 or with `--dry-run` - `cco` ignores the setting and falls back to the
 non-interactive flow rather than failing.
 
+### TypeSafe candidate check
+
+With `"typesafe": { "enable": true }` in your config (or `--typesafe`), cco
+asks [TypeSafe](https://typesafe.ai)'s Jev model to check its messages:
+every option before the picker opens, or the single message of a
+non-interactive run. The check compares each message with the summaries
+it was written from, then:
+
+- shows a `⚠` line under an option whose subject names a change the
+  summaries do not show, or that claims an edit they do not show
+- flags a subject about low-priority changes when the primary changes are
+  elsewhere
+- flags an option that ignores your `customPrompt`, when one is set
+- drops an option that says the same thing as one above it
+- warns when the staged changes look like more than one commit, so you
+  can split them before committing
+
+Otherwise the options keep the order the model wrote them in. Tests
+showed the model's first option beats any reordering, and a flagged
+option moves to the bottom.
+
+With TypeSafe on, plus `gitmoji` and `conventionalCommits`, cco also
+checks that each gitmoji fits its type. An option such as `🔧 feat:` or
+`🎨 feat:` gets a `⚠` line and moves down. Pairings the guide allows,
+such as `🔒️` with any type, pass. This check runs in code, without a
+request. In a non-interactive run, every warning prints on stderr before
+you confirm. With TypeSafe off, none of this runs.
+
+One check costs a fraction of a cent and takes under a second. If it
+fails, cco says why and shows the options in the model's order. A failed
+check never blocks a commit.
+
+The check needs a TypeSafe API key in `$TYPESAFE_API_KEY`. To read it from
+another variable, set `"typesafe.env"`, for example
+`"env": "__TYPESAFE_API_KEY"`. If the check is on and the key is missing,
+cco stops before it calls any model.
+
+When on, cco sends the summaries (or file paths) and the candidate
+messages to TypeSafe. It never sends diff content. The check is off by
+default for that reason. It adds one request to every run, interactive
+or not.
+
 ## Configuration
 
 Configuration is layered, from lowest to highest precedence:
@@ -225,9 +266,20 @@ keys are valid at every level:
     "context": "auto",
     "keepAlive": null
   },
+  "typesafe": {
+    "enable": false,
+    "env": "TYPESAFE_API_KEY",
+    "model": "jev-1.13.0",
+    "timeout": 5000
+  },
   "allowApiKey": false
 }
 ```
+
+`typesafe` configures the [candidate check](#typesafe-candidate-check).
+`env` names the variable that holds the API key. `model` is pinned because
+the check's thresholds were tested against `jev-1.13.0`. `timeout` is the
+wait per attempt in milliseconds (one retry follows a failure).
 
 `spinner` chooses the progress animation: any name from the
 [cli-spinners](https://github.com/sindresorhus/cli-spinners) set bundled with
@@ -433,6 +485,17 @@ Where the number comes from is `ollama.context`:
   or negative to pin it. `null` leaves the server's own default. Pinning is
   worth it if you commit often; a 35b model takes a while to load.
 
+### Slow models
+
+Node's fetch waits at most 300 seconds for Ollama to send anything.
+Summary requests are not streamed, so nothing arrives until the whole
+summary is written. A large chunk on a big local model can take longer
+than that. cco then stops with a message saying the model was too slow,
+instead of a bare "fetch failed". To fix it, use a smaller model, or send
+smaller chunks with a lower `maxChunkTokens` or `ollama.context`.
+`node bin/stopwatch.ts <model>` (see [Development](#development)) shows
+how long a model takes on this machine.
+
 ### What differs from a Claude model
 
 - **Cost is reported as zero**, because local inference is not billed. In a
@@ -449,10 +512,23 @@ Where the number comes from is `ollama.context`:
 ## Development
 
 ```sh
-pnpm test           # run the test suite (vitest)
-pnpm run typecheck  # tsc --noEmit
-pnpm run build      # bundle bin/ and index.ts into dist/ (only needed to publish)
+pnpm test            # run the test suite (vitest)
+pnpm run lint:types  # tsc --noEmit
+pnpm run build       # bundle bin/ and index.ts into dist/ (only needed to publish)
 ```
+
+To see whether a model is too slow for this machine, time it on three
+synthetic commits of about 400, 8.5k and 40k tokens:
+
+```sh
+node bin/stopwatch.ts ollama:gemma4:e4b-it-qat
+node bin/stopwatch.ts sonnet
+```
+
+It runs the real pipeline with that model in both stages, using the rest
+of your config (Ollama host and window), and prints the
+summary, final and total time for each commit. The commits are generated
+fresh each run, so a server's prompt cache cannot flatter a second run.
 
 The sources run directly on Node's native type stripping, so there is no build
 step during development: `node bin/cco.js` picks up `dist/` when it exists and

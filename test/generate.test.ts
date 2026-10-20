@@ -2,8 +2,9 @@ import { describe, expect, test } from 'vitest'
 import type { runPrompt } from '../src/agent.ts'
 import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
-import { generateCommit } from '../src/generate.ts'
+import { describeCheckNotices, generateCommit } from '../src/generate.ts'
 import type { Config, ModelResult } from '../src/types.ts'
+import { answeringJevFetch, fakeJevFetch } from './typesafe-fixtures.ts'
 
 type Runner = typeof runPrompt
 
@@ -154,9 +155,9 @@ describe('generateCommit', () => {
     const { runner, summaryCalls } = stubRunner()
     const result = await generateCommit(`${textDiff}\n${skillDiff}`, baseConfig, { runner })
     expect(result.summaries.map((summary) => summary.priority)).toEqual(['primary'])
-    expect(summaryCalls[0]!.prompt).toContain('old line')
-    expect(summaryCalls[0]!.prompt).toContain('generated 2026-08-24')
-    expect(summaryCalls[0]!.system).not.toMatch(LOW_PRIORITY_SYSTEM)
+    expect(summaryCalls[0]?.prompt).toContain('old line')
+    expect(summaryCalls[0]?.prompt).toContain('generated 2026-08-24')
+    expect(summaryCalls[0]?.system).not.toMatch(LOW_PRIORITY_SYSTEM)
   })
 
   test('low-priority sections are summarised separately, after the primary ones, with their own prompt', async () => {
@@ -186,7 +187,7 @@ describe('generateCommit', () => {
       runner
     })
     expect(summaryCalls.length).toBe(1)
-    expect(summaryCalls[0]!.system).not.toMatch(LOW_PRIORITY_SYSTEM)
+    expect(summaryCalls[0]?.system).not.toMatch(LOW_PRIORITY_SYSTEM)
     expect(result.summaries.map((summary) => summary.priority)).toEqual(['primary'])
     expect(finalPrompts[0]).not.toContain('Low-priority changes')
   })
@@ -215,7 +216,7 @@ describe('generateCommit', () => {
     const result = await generateCommit(`${textDiff}\n${armorDiff(1_000)}`, config, { runner })
     expect(rejected).toBe(true)
     // One primary chunk, then several low-priority pieces after the retry.
-    expect(result.summaries[0]!.priority).toBe('primary')
+    expect(result.summaries[0]?.priority).toBe('primary')
     const lowSummaries = result.summaries.slice(1)
     expect(lowSummaries.length).toBeGreaterThan(1)
     expect(lowSummaries.every((summary) => summary.priority === 'low')).toBe(true)
@@ -259,9 +260,9 @@ describe('generateCommit', () => {
       runner
     })
     expect(summaryCalls.length).toBe(2)
-    expect(summaryCalls[1]!.system).toMatch(LOW_PRIORITY_SYSTEM)
-    expect(summaryCalls[1]!.prompt).toContain('[cco: 400 armored/encoded lines omitted]')
-    expect(summaryCalls[1]!.prompt).not.toContain('Ab9Xy')
+    expect(summaryCalls[1]?.system).toMatch(LOW_PRIORITY_SYSTEM)
+    expect(summaryCalls[1]?.prompt).toContain('[cco: 400 armored/encoded lines omitted]')
+    expect(summaryCalls[1]?.prompt).not.toContain('Ab9Xy')
   })
 
   test('skipArmored redacts ciphertext before it reaches the model', async () => {
@@ -304,12 +305,12 @@ describe('filenamesOnly', () => {
       }
     )
     expect(calls).toHaveLength(1)
-    expect(calls[0]!.model).toBe('final-model')
-    expect(calls[0]!.prompt).toContain('"a.txt"')
-    expect(calls[0]!.prompt).toContain('".agents/skills/ora-skilld/SKILL.md"')
-    expect(calls[0]!.prompt).toContain('Low-priority changes')
-    expect(calls[0]!.prompt).not.toMatch(/old line|new line|generated 2026|diff --git|@@|summary of/)
-    expect(calls[0]!.system).toContain('only the filenames')
+    expect(calls[0]?.model).toBe('final-model')
+    expect(calls[0]?.prompt).toContain('"a.txt"')
+    expect(calls[0]?.prompt).toContain('".agents/skills/ora-skilld/SKILL.md"')
+    expect(calls[0]?.prompt).toContain('Low-priority changes')
+    expect(calls[0]?.prompt).not.toMatch(/old line|new line|generated 2026|diff --git|@@|summary of/)
+    expect(calls[0]?.system).toContain('only the filenames')
     expect(result.messages).toEqual(['Update files'])
     expect(result.chunkCount).toBe(0)
     expect(result.summaries).toEqual([])
@@ -580,7 +581,7 @@ describe('Ollama auto context', () => {
       ollamaConfig({ ollama: { ...baseConfig.ollama, context: 16_384 } }),
       {
         runner: stubRunner,
-        resolveOllamaContext: async (model, config) => {
+        resolveOllamaContext: async (_model, config) => {
           probes += 1
           // The real resolver short-circuits on a number; mirror that.
           return typeof config?.context === 'number' ? config.context : 0
@@ -661,3 +662,198 @@ function armorFreeDiff(lines: number): string {
     ...body
   ].join('\n')
 }
+
+describe('TypeSafe candidate check', () => {
+  const candidates = ['fix(a): first option', 'fix(a): second option', 'fix(a): third option']
+  const typesafeConfig: Config = { ...baseConfig, typesafe: { ...baseConfig.typesafe, enable: true } }
+  const env = { TYPESAFE_API_KEY: 'ts-key' }
+
+  /** A runner whose final stage returns three candidates, counting every call. */
+  function threeOptionRunner() {
+    const calls: string[] = []
+    const runner: Runner = async (prompt, opts): Promise<ModelResult> => {
+      calls.push(prompt)
+      if (opts.outputFormat) return { text: '', costUsd: 0.001, structured: { messages: candidates } }
+      return { text: 'Summary: a.txt replaces old line with new line.', costUsd: 0.002 }
+    }
+    return { runner, calls }
+  }
+
+  test('flags, reorders and reports the candidates when enabled', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch({ c0_subject_shown: 0.05 })
+    const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 3, env, typesafeFetch: fetch })
+
+    expect(result.messages).toEqual([candidates[1], candidates[2], candidates[0]])
+    expect(result.warnings).toEqual([[], [], ['subject names a change the summaries do not show']])
+    expect(result.candidateCheck).toEqual({
+      status: 'checked',
+      model: 'jev-1.13.0',
+      inputTokens: 1500,
+      droppedDuplicates: 0,
+      mixedCommit: false
+    })
+    expect(requests).toHaveLength(1)
+    expect(JSON.stringify(requests[0]?.body.state)).toContain('a.txt replaces old line')
+  })
+
+  test('a missing key fails before any model is called', async () => {
+    const { runner, calls } = threeOptionRunner()
+    await expect(generateCommit(textDiff, typesafeConfig, { runner, count: 3, env: {} })).rejects.toThrow(
+      /TYPESAFE_API_KEY/
+    )
+    expect(calls).toHaveLength(0)
+  })
+
+  test('reads the key from the variable "typesafe.env" names', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch()
+    const config: Config = { ...typesafeConfig, typesafe: { ...typesafeConfig.typesafe, env: '__TYPESAFE_API_KEY' } }
+    await generateCommit(textDiff, config, {
+      runner,
+      count: 3,
+      env: { __TYPESAFE_API_KEY: 'alt' },
+      typesafeFetch: fetch
+    })
+    expect(requests[0]?.headers.get('authorization')).toBe('Bearer alt')
+  })
+
+  test('a failed check keeps the model order and says why', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch } = fakeJevFetch(() => ({ status: 401, json: { error: 'invalid key' } }))
+    const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 3, env, typesafeFetch: fetch })
+
+    expect(result.messages).toEqual(candidates)
+    expect(result.warnings).toEqual([[], [], []])
+    expect(result.candidateCheck?.status).toBe('failed')
+  })
+
+  test('checks a single non-interactive message too', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch()
+    const single = await generateCommit(textDiff, typesafeConfig, { runner, count: 1, env, typesafeFetch: fetch })
+
+    expect(requests).toHaveLength(1)
+    expect(single.candidateCheck?.status).toBe('checked')
+  })
+
+  test('a missing key fails a single-message run before any model is called', async () => {
+    const { runner, calls } = threeOptionRunner()
+    await expect(generateCommit(textDiff, typesafeConfig, { runner, count: 1, env: {} })).rejects.toThrow(
+      /TYPESAFE_API_KEY/
+    )
+    expect(calls).toHaveLength(0)
+  })
+
+  test('does not run when disabled', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch()
+    const disabled = await generateCommit(textDiff, baseConfig, { runner, count: 3, env: {}, typesafeFetch: fetch })
+
+    expect(requests).toHaveLength(0)
+    expect(disabled.candidateCheck).toBeNull()
+    expect(disabled.messages).toEqual(candidates)
+  })
+
+  test('reports staged changes that look like more than one commit', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch({ mixed_commit: 0.7 })
+    const result = await generateCommit(textDiff, typesafeConfig, { runner, count: 1, env, typesafeFetch: fetch })
+
+    expect(requests[0]?.body.questions.mixed_commit?.type).toBe('noul')
+    expect(result.candidateCheck).toMatchObject({ status: 'checked', mixedCommit: true })
+    expect(describeCheckNotices(result.candidateCheck)).toEqual([
+      'These staged changes look like more than one commit. Consider splitting them.'
+    ])
+  })
+
+  test('sends the custom instructions and flags a candidate that ignores them', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch({ c1_follows_custom: 0.05 })
+    const config: Config = { ...typesafeConfig, customPrompt: 'Mention the ticket.' }
+    const result = await generateCommit(textDiff, config, { runner, count: 3, env, typesafeFetch: fetch })
+
+    expect(requests[0]?.body.state.custom_instructions).toBe('Mention the ticket.')
+    expect(result.messages.at(-1)).toBe(candidates[1])
+    expect(result.warnings.at(-1)).toEqual(['ignores your custom instructions'])
+  })
+
+  test('checks filenames-only candidates against the file list', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch()
+    await generateCommit(
+      textDiff,
+      { ...typesafeConfig, filenamesOnly: true },
+      { runner, count: 3, env, typesafeFetch: fetch }
+    )
+
+    const state = requests[0]?.body.state as { context: string; evidence: { primary: string } }
+    expect(state.context).toMatch(/paths of the changed files/)
+    expect(state.evidence.primary).toBe('a.txt')
+  })
+})
+
+describe('gitmoji format check', () => {
+  const clashing = ['🔧 feat(config): change a default', '✨ feat(config): change a default']
+  const runner: Runner = async (_prompt, opts): Promise<ModelResult> =>
+    opts.outputFormat
+      ? { text: '', costUsd: 0, structured: { messages: clashing } }
+      : { text: 'Summary: a default changed.', costUsd: 0 }
+
+  const singleRunner: Runner = async (_prompt, opts): Promise<ModelResult> =>
+    opts.outputFormat
+      ? { text: '', costUsd: 0, structured: { messages: [clashing[0]] } }
+      : { text: 'Summary: a default changed.', costUsd: 0 }
+  const formats = { gitmoji: true, conventionalCommits: true }
+  const enabled = { ...baseConfig.typesafe, enable: true }
+  const env = { TYPESAFE_API_KEY: 'ts-key' }
+
+  test('with TypeSafe off, a clash changes nothing', async () => {
+    const result = await generateCommit(textDiff, { ...baseConfig, ...formats }, { runner, count: 2 })
+    expect(result.messages).toEqual(clashing)
+    expect(result.warnings).toEqual([[], []])
+  })
+
+  test('with TypeSafe on, flags a clash and moves it last', async () => {
+    const { fetch } = answeringJevFetch()
+    const config: Config = { ...baseConfig, ...formats, typesafe: enabled }
+    const result = await generateCommit(textDiff, config, { runner, count: 2, env, typesafeFetch: fetch })
+    expect(result.messages).toEqual([clashing[1], clashing[0]])
+    expect(result.warnings).toEqual([[], ['gitmoji does not match the commit type']])
+  })
+
+  test('with TypeSafe on, flags a single message', async () => {
+    const { fetch } = answeringJevFetch()
+    const config: Config = { ...baseConfig, ...formats, typesafe: enabled }
+    const result = await generateCommit(textDiff, config, { runner: singleRunner, count: 1, env, typesafeFetch: fetch })
+    expect(result.warnings).toEqual([['gitmoji does not match the commit type']])
+  })
+
+  test('stays quiet unless both gitmoji and conventional commits are on', async () => {
+    const config: Config = { ...baseConfig, gitmoji: true, typesafe: enabled }
+    const { fetch } = answeringJevFetch()
+    const result = await generateCommit(textDiff, config, { runner: singleRunner, count: 1, env, typesafeFetch: fetch })
+    expect(result.warnings).toEqual([[]])
+  })
+})
+
+describe('describeCheckNotices', () => {
+  test('says nothing when the check passed or did not run', () => {
+    expect(describeCheckNotices(null)).toEqual([])
+    expect(
+      describeCheckNotices({
+        status: 'checked',
+        model: 'jev',
+        inputTokens: 1,
+        droppedDuplicates: 0,
+        mixedCommit: false
+      })
+    ).toEqual([])
+  })
+
+  test('names the error when the check failed', () => {
+    expect(describeCheckNotices({ status: 'failed', error: '401 bad key' })).toEqual([
+      'TypeSafe check failed (401 bad key); nothing was flagged or reordered.'
+    ])
+  })
+})
