@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "transactionId": "1792507219165533000-10",
+  "skills":
+    {
+      "automate-commit-based-gh-release-changelog":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/automation/automate-commit-based-gh-release-changelog",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/automation/automate-commit-based-gh-release-changelog",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:c03bd8ac6301b0627c686c2a06910e76858a88fc896988d0149ab9be45a2887a",
+              "content_sha256": "c03bd8ac6301b0627c686c2a06910e76858a88fc896988d0149ab9be45a2887a",
+              "installed_sha256": "90018c0bf34f62198830d071d9188f2f6066a30ef5605b9701682bb029f1bc81",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+            ],
+        },
+      "automate-npm-release":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/automation/automate-npm-release",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/automation/automate-npm-release",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:1a2a2316e903c3db7ce17edaee81f95307e1aa36d79aab6219b195afb66f5fc1",
+              "content_sha256": "1a2a2316e903c3db7ce17edaee81f95307e1aa36d79aab6219b195afb66f5fc1",
+              "installed_sha256": "69aba04eaa88e1c38e8ac58a615903634ad05064ee95ca6b3385f77d95c77c07",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+      "clean-code":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/coding/clean-code",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/coding/clean-code",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:d8a15ff3dfc5e4499120804236973f927ec25770dc42ea0a21e16ea34e9e032b",
+              "content_sha256": "d8a15ff3dfc5e4499120804236973f927ec25770dc42ea0a21e16ea34e9e032b",
+              "installed_sha256": "1079a5188ba890aa4346111beb15ac15396199c4e931f9b3b92dda2645b8f95b",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+      "code-organisation":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/coding/code-organisation",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/coding/code-organisation",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:3e1430388d8ffff4e60489d10e9be8b11866392e67b50db7a2c323e651159c04",
+              "content_sha256": "3e1430388d8ffff4e60489d10e9be8b11866392e67b50db7a2c323e651159c04",
+              "installed_sha256": "dd216ad08bbc436a30ad576a857d33d023aae35272f2766c605861eb2af2cac0",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+      "coding":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/coding/coding",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/coding/coding",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:77cd7b2b5e2b1974b54d73469d0a49be54ae3141cb8ee43ee576f23d7533894c",
+              "content_sha256": "77cd7b2b5e2b1974b54d73469d0a49be54ae3141cb8ee43ee576f23d7533894c",
+              "installed_sha256": "bbe5920b94086a6cfb583389519ce38d8bdf10e146a7d1efeaec0887b823fa3a",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+      "create-pr":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/engineering/create-pr",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/engineering/create-pr",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:e6f2f286df2bf1d7fcf9aadd954907b30f0acf01eff2f3288bd41688b57b8ca2",
+              "content_sha256": "e6f2f286df2bf1d7fcf9aadd954907b30f0acf01eff2f3288bd41688b57b8ca2",
+              "installed_sha256": "3b82a64fec9e91f943589fbb6da3a01533f6f0a1543a0e638f44e196e25c1c98",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+      "create-ticket":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/engineering/create-ticket",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/engineering/create-ticket",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:48b61182a2390479686e51aaef9f5d527dde0eb9f5cdaeb89b71fa731a99bf46",
+              "content_sha256": "48b61182a2390479686e51aaef9f5d527dde0eb9f5cdaeb89b71fa731a99bf46",
+              "installed_sha256": "bb8056ca49a5a3830b239a75340371eb402797b3a2dfb000a89ce9d137cbd911",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+      "humanizer":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/third-party/humanizer",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/third-party/humanizer",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:b32f8656ed6303e8a27fde835877013d598a94de4b33913a0634247ea63bd0dc",
+              "content_sha256": "b32f8656ed6303e8a27fde835877013d598a94de4b33913a0634247ea63bd0dc",
+              "installed_sha256": "6c29be98997e6fb44e7b4b0118b8c0779f54bf6513c490dd3b69b18d2d639b4b",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+      "node-cli":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/scaffolding/node-cli",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/scaffolding/node-cli",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:f2d69d8bb0e7e3b215f237e67081c9a9ce2e9704f900b5ea3fcd78572846bd1c",
+              "content_sha256": "f2d69d8bb0e7e3b215f237e67081c9a9ce2e9704f900b5ea3fcd78572846bd1c",
+              "installed_sha256": "d6865d2621646c2bcd4757ae2ccf17e49a66462fa32d124fffca7f23bce2c363",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+      "writing-for-agents":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/.agents/skills/writing-for-agents",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": ".agents/skills/writing-for-agents",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:be151aaa21aa198c5a1943a440aa6ed12ec9fbf45f0dade25601549ca57782b7",
+              "content_sha256": "be151aaa21aa198c5a1943a440aa6ed12ec9fbf45f0dade25601549ca57782b7",
+              "installed_sha256": "4ea87a30fea2e91ac4a24fb3f0aa2a2ba3bc5273634fb573cfdb254781f34713",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+      "writing-for-humans":
+        {
+          "source":
+            {
+              "type": "remote",
+              "source": "jd-solanki/ai/skills/in-progress/writing-for-humans",
+              "commit_sha": "f32abaf10ff582832dfcf6cfd174ac0644154a17",
+              "skill_path": "skills/in-progress/writing-for-humans",
+            },
+          "sourceStatus":
+            {
+              "type": "verified",
+              "artifact_id": "sha256:8643a7986b85d2825cfe4eaa93b8854e98ea49258b39131ec659962be846b437",
+              "content_sha256": "8643a7986b85d2825cfe4eaa93b8854e98ea49258b39131ec659962be846b437",
+              "installed_sha256": "0e746d3107cf1505efaed5b73a1d7b8c317dcc9ae410e9d68f757e8f3b924f5e",
+              "attestation_key_id": "skilld-production-2026-08",
+            },
+          "targets":
+            [
+              { "agent": "claude-code", "mode": "copy" },
+              { "agent": "codex", "mode": "copy" },
+              { "agent": "github-copilot", "mode": "copy" },
+              { "agent": "amp", "mode": "copy" },
+              { "agent": "kilo", "mode": "copy" },
+              { "agent": "zed", "mode": "copy" },
+            ],
+        },
+    },
+}
