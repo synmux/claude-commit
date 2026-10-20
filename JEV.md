@@ -19,7 +19,7 @@ Jev has three question types:
 | Candidate check (interactive)    | Shipped and tuned: `79eade2`, `596ee5e` |
 | A. Autopick (non-interactive)    | Rejected after testing (see A)          |
 | B. Mixed-commit warning          | Shipped (see B)                         |
-| C. Scope and breaking change     | Planned                                 |
+| C. Scope and breaking change     | Rejected after testing (see C)          |
 | D. Picker search                 | Planned                                 |
 | E. Instruction and format checks | Shipped (see E)                         |
 
@@ -48,17 +48,16 @@ These apply to every feature below.
 - **One request where possible.** B and E join the candidate check's
   request, which already holds the summaries and the options. With
   TypeSafe on, that check runs on every run, including the single
-  message of a non-interactive one. C needs its answer before the final
-  model runs, so it is a separate, earlier request. D runs only when the
-  user asks for it.
+  message of a non-interactive one. D runs only when the user asks for
+  it.
 - **Jev never blocks a commit.** A failed request leaves today's
   behaviour in place and says why. A missing key with the check on is an
   error before any model call, as now.
 - **Code decides.** Thresholds are named constants with the evidence that
   set them in a comment, and are tuned on real `cco` output before they
   ship.
-- **No new data leaves the machine.** Jev sees the summaries, the options
-  and, for C, past commit subjects and paths. It never sees diff content.
+- **No new data leaves the machine.** Jev sees the summaries, the options and,
+  for D, the user's typed search. It never sees diff content.
 
 ## A. Autopick for non-interactive runs (rejected)
 
@@ -130,86 +129,58 @@ That also brought the code in line with the documented rule that a
 missing key with `typesafe.enable` on is an error before any model call.
 File-list evidence skips the question, because it was never tested.
 
-## C. Scope and breaking change from history
+## C. Scope and breaking change from history (rejected)
 
-### Problem
+### Idea
 
-Scopes drift because the final model never sees the repository's
-history. This repository has both `fix(generate)` and `feat(generator)`,
-and both `chore(deps)` and `build(deps)`. Breaking changes depend on the
-model noticing on its own. A missing `!` gives release tooling the wrong
-version bump.
+Before the final stage, a Jev Choice would pick a scope from the
+repository's history, and a Noul would decide whether the change is
+breaking. Confident answers would be written into the final prompt.
 
-### Behaviour
+### Test
 
-Only with `conventionalCommits` on. After the summaries and before the
-final model, code reads the last 200 commit subjects and the paths each
-commit touched (`git log -n 200 --format=%s --name-only`). It collects
-every `type(scope)` scope with its 3 most-touched paths. Then one Jev
-request decides:
+History replay on the last 50 scoped commits. For each one, the options
+were built only from the commits before it (the 40 most-used scopes,
+each with its 3 most-touched paths). Evidence was the commit's diff and
+changed paths. The breaking-change question also ran on the summaries
+of the 20 tuning commits.
 
-- a confident historical scope adds `Use the scope "<scope>".` to the
-  final system prompt
-- a confident breaking change adds `Mark this as a breaking change with
-"!" after the type or scope.`
+| Question                | Result                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| Scope, confidence ≥ 0.8 | Used on 22 of 50 commits, matched the scope used 12 times                                     |
+| Scope, confidence ≥ 0.9 | Used on 11, matched 7                                                                         |
+| Scope, new areas        | Forced an old scope (at 0.8 or more) onto 5 of the 16 commits that started a new one          |
+| Breaking, on diffs      | The 2 real `!` commits scored 0.61 and 0.75; the highest unmarked commit 0.79                 |
+| Breaking, on summaries  | Fired on 6 of 20 commits at 0.6 and 3 at 0.85; only `2d11c56` (0.93) is marked `!` in history |
 
-Below the thresholds, the prompt is unchanged. The step is skipped when
-fewer than 10 past commits have a scope. This adds one request (about
-0.3 s) before the final stage.
+### Decision
 
-### Questions
+Neither half was built.
 
-```json
-{
-  "scope": {
-    "type": "choice",
-    "instructions": {
-      "question": "Which past scope best names the area of the primary change?",
-      "inspect": ["`evidence.primary`", "`changed_paths`"],
-      "focus": "Match the area of the code that changed, not the kind of change (fix, feature, refactor)"
-    },
-    "criteria": {
-      "<scope>": { "past_paths": ["<path>", "<path>", "<path>"] },
-      "new_area": "The primary change is in an area no listed scope covers",
-      "several_areas": "The primary change spans two or more listed areas about equally"
-    }
-  },
-  "breaking_change": {
-    "type": "noul",
-    "instructions": "Does `evidence.primary` describe a change that makes an existing user's setup stop working or behave differently without them changing anything?",
-    "criteria": {
-      "true": "A flag, config key, default value, output format or public function is removed, renamed or changed in a way existing users rely on",
-      "false": "The change adds behaviour, fixes a defect without changing documented behaviour, or changes only internals"
-    }
-  }
-}
-```
+- **Scope.** Some mismatches were the consistency C was meant to give
+  (`release` instead of `publish`), but others overrode real
+  conventions: dependency bumps got `workflows` where the history uses
+  `deps`. Confident wrong answers on new areas would push stale scopes
+  into the prompt. About 55% agreement is not worth reshaping the prompt
+  for.
+- **Breaking change.** The question finds default and behaviour changes
+  (a renamed config key, a changed default), which strict semver calls
+  breaking but this history leaves unmarked: `!` appears on 2 of 134
+  commits. Only a 0.9 threshold matches that practice, and it rests on a
+  single positive case with a 0.04 margin. A false `!` makes release
+  tooling cut a major version, and nothing in this repository reads `!`
+  yet. Opus did miss the real one (`!` on none of its 10 options for
+  `2d11c56`), so the gap is real but small.
 
-Options are capped at the 40 most frequent scopes. When two scopes
-differ only by spelling (`generate` and `generator`), code keeps the more
-frequent one before building the options.
+### What would reopen it
 
-### Composition
-
-- Use the scope when Choice confidence is at least 0.8 and the answer is a
-  real scope.
-- Mark the change as breaking when the Noul is at least 0.8.
-- Both values are placeholders until validated.
-
-### Validation before it ships
-
-Replay history. For each of the last 50 commits with a scope, build the
-options from the commits before it, then compare Jev's pick with the
-scope actually used. Report accuracy at each confidence threshold.
-
-The history has only 2 commits marked `!`, too few to validate the
-breaking-change question. Add synthetic cases from real summaries with a
-renamed config key or a changed default. As a control, run 20 ordinary
-commits and expect no `!`.
-
-### Effort
-
-1 to 2 hours.
+- **Breaking change:** a repository whose release tooling reads `!`,
+  with enough marked commits to set a threshold. Ship it as a warning
+  only ("this looks like a breaking change"), never as an edit to the
+  message.
+- **Scope:** if drift still matters, try a non-Jev route first. Put the
+  past scopes, most used first, in the final prompt, and let the model
+  apply the conventions. Test it with the same replay.
 
 ## D. Picker search
 
@@ -289,9 +260,7 @@ gitmoji".
 
 ## Order of work
 
-1. **C, scope and breaking change.** Its own request, and a history
-   replay to validate.
-2. **D, picker search.** The most UI work, and only useful with `-i`.
+1. **D, picker search.** The most UI work, and only useful with `-i`.
 
 After each feature: run tests, typecheck and lint, run a live
 end-to-end check, update the design record and README, and commit with
