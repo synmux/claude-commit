@@ -90,6 +90,17 @@ export function resolveOllamaConfig(
   }
 }
 
+/**
+ * `mistral` as Ollama reports it: `mistral:latest`. A request may omit the
+ * tag, but `/api/ps` always states it, so names are compared with the
+ * default filled in. The tag is whatever follows the last `:` after the
+ * last `/`, so a registry port (`host:11434/ns/model`) is not mistaken for one.
+ */
+export function withDefaultTag(model: string): string {
+  const slash = model.lastIndexOf('/')
+  return model.indexOf(':', slash + 1) === -1 ? `${model}:latest` : model
+}
+
 /** The one field of a `/api/ps` entry cco reads, plus the names it matches on. */
 interface OllamaLoadedModel {
   name?: string
@@ -143,7 +154,12 @@ export async function probeOllamaContext(
     throw new ClaudeCommitError(await describeHttpFailure(ps, host, model))
   }
   const body = (await ps.json()) as { models?: OllamaLoadedModel[] }
-  const loaded = (body.models ?? []).find((entry) => entry.name === model || entry.model === model)
+  const wanted = withDefaultTag(model)
+  const loaded = (body.models ?? []).find(
+    (entry) =>
+      (entry.name !== undefined && withDefaultTag(entry.name) === wanted) ||
+      (entry.model !== undefined && withDefaultTag(entry.model) === wanted)
+  )
   const contextLength = loaded?.context_length
   if (typeof contextLength !== 'number' || contextLength <= 0) {
     throw new ClaudeCommitError(
@@ -302,7 +318,11 @@ function causeChain(error: unknown): string[] {
   const parts: string[] = []
   let current: unknown = error
   for (let depth = 0; current !== null && typeof current === 'object' && depth < 5; depth++) {
-    const { message, code, cause } = current as { message?: unknown; code?: unknown; cause?: unknown }
+    const { message, code, cause } = current as {
+      message?: unknown
+      code?: unknown
+      cause?: unknown
+    }
     if (typeof message === 'string' && message !== '') parts.push(message)
     if (typeof code === 'string' && !parts.includes(code)) parts.push(code)
     current = cause

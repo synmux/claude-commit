@@ -569,6 +569,38 @@ describe('probeOllamaContext', () => {
     expect(requests[0]?.body).toMatchObject({ keep_alive: '10m' })
   })
 
+  test('matches a name without a tag against the :latest ps reports it as', async () => {
+    // Ollama treats a missing tag as `latest` on the way in, but reports
+    // the full `mistral:latest` on the way out of /api/ps.
+    stubProbeServer([
+      {
+        name: 'mistral:latest',
+        model: 'mistral:latest',
+        context_length: 32768
+      }
+    ])
+    expect(await probeOllamaContext('mistral', settings)).toBe(32768)
+    stubProbeServer([{ name: 'mistral', model: 'mistral', context_length: 4096 }])
+    expect(await probeOllamaContext('mistral:latest', settings)).toBe(4096)
+    stubProbeServer([{ name: 'registry.example/ns/model:latest', context_length: 2048 }])
+    expect(await probeOllamaContext('registry.example/ns/model', settings)).toBe(2048)
+  })
+
+  test('does not match a different tag of the same model', async () => {
+    stubProbeServer([{ name: 'mistral:7b', context_length: 4096 }])
+    await expect(probeOllamaContext('mistral', settings)).rejects.toThrow(/did not report its context window/)
+  })
+
+  test('leaves keep_alive off the preload when it would mean "unload"', async () => {
+    // Ollama defines empty messages + keep_alive 0 as "unload this model",
+    // after which /api/ps has nothing to report.
+    for (const keepAlive of [0, '0', '0s', '0m']) {
+      const { requests } = stubProbeServer([{ name: 'gemma4:e2b-it-qat', context_length: 32768 }])
+      await probeOllamaContext('gemma4:e2b-it-qat', { ...settings, keepAlive })
+      expect(requests[0]?.body, `keepAlive ${JSON.stringify(keepAlive)}`).not.toHaveProperty('keep_alive')
+    }
+  })
+
   test('fails loudly when the model is not in ps afterwards', async () => {
     stubProbeServer([{ name: 'something-else:7b', context_length: 4096 }])
     await expect(probeOllamaContext('gemma4:e2b-it-qat', settings)).rejects.toThrow(
