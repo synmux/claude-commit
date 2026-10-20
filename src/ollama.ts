@@ -417,10 +417,12 @@ async function consumeStream(
 }
 
 /**
- * Tokens the server reported for the prompt. `prompt_eval_cached_count` is
- * documented as its own counter without saying whether cached tokens are
- * also inside `prompt_eval_count`, so take the larger: under either reading
- * that is the prompt's real size, and neither double-counts.
+ * Tokens the server reported for the prompt. Ollama's usage docs define
+ * `prompt_eval_count` as the whole prompt and `prompt_eval_cached_count` as
+ * the part of it read from the cache (`prompt_eval_duration` covers only
+ * the uncached rest), so the first is the prompt's real size and a cached
+ * system-prompt prefix cannot hide a truncation. Taking the larger costs
+ * nothing and also covers a server that reports only the cached count.
  */
 function promptTokensOf(final: OllamaChatChunk): number {
   return Math.max(final.prompt_eval_count ?? 0, final.prompt_eval_cached_count ?? 0)

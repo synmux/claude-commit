@@ -321,6 +321,22 @@ describe('runOllamaPrompt - silent truncation', () => {
     expect(isPromptTooLongError(await runOllamaPrompt('d', baseOpts()).catch((e) => e))).toBe(true)
   })
 
+  test('a cached prefix does not hide a truncation', async () => {
+    // prompt_eval_count is the whole prompt (cached tokens included), so a
+    // system prompt served from the cache cannot mask that the rest
+    // filled the window.
+    stubFetch(() =>
+      jsonResponse({
+        message: { content: 'summary' },
+        done: true,
+        done_reason: 'stop',
+        prompt_eval_count: 8192,
+        prompt_eval_cached_count: 3000
+      })
+    )
+    expect(isPromptTooLongError(await runOllamaPrompt('d', baseOpts()).catch((e) => e))).toBe(true)
+  })
+
   test('leaves a comfortably-sized prompt alone', async () => {
     stubFetch(() =>
       jsonResponse({
