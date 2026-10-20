@@ -101,6 +101,11 @@ export function withDefaultTag(model: string): string {
   return model.indexOf(':', slash + 1) === -1 ? `${model}:latest` : model
 }
 
+/** Whether a `keep_alive` value means zero (`0`, `"0"`, `"0s"`, ...): unload at once. */
+function isUnloadKeepAlive(keepAlive: string | number): boolean {
+  return (typeof keepAlive === 'number' ? keepAlive : parseFloat(keepAlive)) === 0
+}
+
 /** The one field of a `/api/ps` entry cco reads, plus the names it matches on. */
 interface OllamaLoadedModel {
   name?: string
@@ -139,7 +144,10 @@ export async function probeOllamaContext(
         model,
         messages: [],
         stream: false,
-        ...(keepAlive !== null ? { keep_alive: keepAlive } : {})
+        // Empty messages plus keep_alive 0 is Ollama's "unload" request,
+        // which would leave nothing in /api/ps; the real requests still
+        // send the configured value.
+        ...(keepAlive !== null && !isUnloadKeepAlive(keepAlive) ? { keep_alive: keepAlive } : {})
       })
     },
     host,
