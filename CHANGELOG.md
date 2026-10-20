@@ -25,6 +25,11 @@ carrying the same notes at greater length.
   does not fit (such as `🔧 feat:`) is flagged and moved down. It runs in
   code without a request, so non-interactive runs get it too.
 
+### [Unreleased] - Changed
+
+- **Requires Node.js 26** (26.11 or later), up from 24. `engines`, CI and
+  the publish workflow all run on 26.
+
 ### [Unreleased] - Fixed
 
 - **Ollama requests on large diffs no longer fail with a bare "fetch
@@ -62,8 +67,6 @@ carrying the same notes at greater length.
   floor (8,000 tokens) was sized for Claude; a 4k, 8k or 16k Ollama window
   could never halve above it, so the truncation error surfaced instead of
   the re-split. The floor now scales down with the chunk budget.
-- README, AGENTS.md and the CI workflows say Node 26, which `engines` has
-  required since the undici bump; they had drifted back to 24.
 
 ## [1.1.0] - 2026-09-13
 

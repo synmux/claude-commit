@@ -1,7 +1,7 @@
 # Design: `allowApiKey` configuration gate
 
 **Date:** 2026-07-01
-**Status:** Approved
+**Status:** Implemented
 
 ## Problem
 

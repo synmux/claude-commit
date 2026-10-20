@@ -9,9 +9,13 @@ model, inventory, provenance, pattern scan, then a report and a proposed diff.
 - **Commit audited:** `4a22e63`
   (`⬆️ chore(deps): bump agent sdk, clack, and node types`). Line numbers
   below refer to that commit.
-- **Status:** proposed, not applied. The fixes are in
-  [`2026-09-25-prompt-audit/`](2026-09-25-prompt-audit/), one patch per finding
-  plus a combined one. See [Applying the patches](#applying-the-patches).
+- **Status:** applied. F1, F2, F3 and F5 landed in later commits (their
+  patches no longer apply). F4, F6 and F7 were applied on 2026-10-20 during
+  a documentation pass: F6 with its facts brought up to date rather than
+  verbatim, and F7 (deleting `PROMPT.md`) after a note added to the brief on
+  2026-09-13 had also shipped. The patches are kept in
+  [`2026-09-25-prompt-audit/`](2026-09-25-prompt-audit/) as the record of what
+  was proposed; see [Applying the patches](#applying-the-patches).
 
 ## Summary
 

@@ -94,7 +94,11 @@ cco [options]
 
 By default `cco` summarizes your **staged** changes, generates a message, shows it,
 and asks for confirmation before committing. Pass `-y` to skip the prompt, or
-`--dry-run` to print the message without committing.
+`--dry-run` to print the message without committing. Answering `n`, or
+pressing Ctrl-C or Ctrl-D at the prompt, aborts with "Aborted. Nothing was
+committed." and exit code 1. Choosing `e` opens the message in your editor
+(`$GIT_EDITOR`, `$VISUAL` or `$EDITOR`); an editor that exits with an
+error or is killed by a signal aborts the commit too.
 
 ### Options
 
@@ -103,18 +107,18 @@ and asks for confirmation before committing. Pass `-y` to skip the prompt, or
 | `-i, --interactive` / `--no-interactive` | Choose between several options in an interactive picker, or skip it when enabled in config |
 | `-n, --count <n>`                        | Number of options to generate in interactive mode (default 3)                              |
 | `-a, --all`                              | Stage all changes (`git add -A`) before committing                                         |
-| `-c, --conventional`                     | Format as a[Conventional Commit](https://www.conventionalcommits.org)                      |
-| `-g, --gitmoji`                          | Prefix the subject with a[gitmoji](https://gitmoji.dev)                                    |
+| `-c, --conventional`                     | Format as a [Conventional Commit](https://www.conventionalcommits.org)                     |
+| `-g, --gitmoji`                          | Prefix the subject with a [gitmoji](https://gitmoji.dev)                                   |
 | `-m, --multiline` / `--no-multiline`     | Write a multi-line commit (subject + body), or force a single line                         |
-| `-t, --template <tpl>`                   | Template for the first line, e.g.`"[PROJ-1] {message}"`                                    |
+| `-t, --template <tpl>`                   | Template for the first line, e.g. `"[PROJ-1] {message}"`                                   |
 | `-p, --prompt <text>`                    | Extra instructions appended to the prompt                                                  |
 | `-f, --filenames-only`                   | Skip summarisation and send only filenames to the final model                              |
-| `--model-summary <model>`                | Model used to summarize the diff (default`sonnet`)                                         |
-| `--model-final <model>`                  | Model used to write the message (default`sonnet`)                                          |
+| `--model-summary <model>`                | Model used to summarize the diff (default `sonnet`)                                        |
+| `--model-final <model>`                  | Model used to write the message (default `sonnet`)                                         |
 | `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff          |
-| `--no-low-priority-paths`                | Ignore`lowPriorityPaths` for this run, so every change weighs the same                     |
-| `--no-ignore`                            | Disregard`ignore` for this run, so every staged change is read                             |
-| `--ollama-host <url>`                    | Base URL of the Ollama server for`ollama:` models                                          |
+| `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                    |
+| `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                            |
+| `--ollama-host <url>`                    | Base URL of the Ollama server for `ollama:` models                                         |
 | `--ollama-context <tokens>`              | Context window requested from Ollama models                                                |
 | `--typesafe` / `--no-typesafe`           | Check and rank interactive options with TypeSafe, or skip the check when enabled in config |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                             |
@@ -262,7 +266,6 @@ keys are valid at every level:
   "lowPriorityPaths": [],
   "ignore": [],
   "ollama": {
-    "host": "http://localhost:11434",
     "context": "auto",
     "keepAlive": null
   },
@@ -275,6 +278,9 @@ keys are valid at every level:
   "allowApiKey": false
 }
 ```
+
+`ollama.host` has no built-in default: when no layer sets it, `$OLLAMA_HOST`
+applies, then `http://localhost:11434` (see [Ollama models](#ollama-models)).
 
 `typesafe` configures the [candidate check](#typesafe-candidate-check).
 `env` names the variable that holds the API key. `model` is pinned because
@@ -514,6 +520,8 @@ how long a model takes on this machine.
 ```sh
 pnpm test            # run the test suite (vitest)
 pnpm run lint:types  # tsc --noEmit
+pnpm run lint        # trunk check -a (exits 1 on any finding)
+pnpm run format      # prettier, then biome, then trunk fmt - in that order
 pnpm run build       # bundle bin/ and index.ts into dist/ (only needed to publish)
 ```
 
