@@ -290,4 +290,14 @@ describe('describeCandidateCheck', () => {
       })
     ).toMatch(/0 near-duplicates dropped$/)
   })
+
+  test('says so when the API did not report input tokens', () => {
+    expect(
+      describeCandidateCheck({
+        model: 'jev-1.13.0',
+        inputTokens: null,
+        droppedDuplicates: 0
+      })
+    ).toBe('TypeSafe check (jev-1.13.0): input tokens not reported, 0 near-duplicates dropped')
+  })
 })

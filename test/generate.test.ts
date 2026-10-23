@@ -4,7 +4,7 @@ import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
 import { describeCheckNotices, generateCommit } from '../src/generate.ts'
 import type { Config, ModelResult } from '../src/types.ts'
-import { answeringJevFetch, fakeJevFetch } from './typesafe-fixtures.ts'
+import { answeringJevFetch, fakeJevFetch, jevAnswers } from './typesafe-fixtures.ts'
 
 type Runner = typeof runPrompt
 
@@ -583,6 +583,33 @@ describe('TypeSafe candidate check', () => {
     })
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests[0]?.body.state)).toContain('a.txt replaces old line')
+  })
+
+  test('reports a null token count when the API does not report usage', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch } = fakeJevFetch((body) => ({
+      status: 200,
+      json: {
+        model: 'jev-1.13.0',
+        answers: jevAnswers(body.questions),
+        usage: { input_tokens: null, output_tokens: 0 }
+      }
+    }))
+    const result = await generateCommit(textDiff, typesafeConfig, {
+      runner,
+      count: 3,
+      env,
+      typesafeFetch: fetch
+    })
+
+    expect(result.messages).toEqual(candidates)
+    expect(result.candidateCheck).toEqual({
+      status: 'checked',
+      model: 'jev-1.13.0',
+      inputTokens: null,
+      droppedDuplicates: 0,
+      mixedCommit: false
+    })
   })
 
   test('a missing key fails before any model is called', async () => {
