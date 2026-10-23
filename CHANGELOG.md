@@ -11,10 +11,6 @@ carrying the same notes at greater length.
 
 ### [Unreleased] - Added
 
-- **`ollama.maxChunkTokens`.** Caps the diff chunk sent to an Ollama
-  summary model, below the context window. A large `"auto"` window let one
-  request run past Node's 300 s fetch limit; a cap splits the diff into
-  more, shorter requests. Unset by default; Claude models ignore it.
 - **`package.stopwatch.json`.** `bin/stopwatch.ts` reads this file in place
   of `package.json` when it exists, so settings can be tried without
   changing the real config.
@@ -38,24 +34,20 @@ carrying the same notes at greater length.
 - **Requires Node.js 26** (26.11 or later), up from 24. `engines`, CI and
   the publish workflow all run on 26.
 
+### [Unreleased] - Removed
+
+- **Breaking: Ollama support is removed.** The `ollama:` model prefix, the
+  `ollama` config section, the `--ollama-host` and `--ollama-context` flags
+  and `$OLLAMA_HOST` are gone. `cco` now runs only Claude models, through the
+  Claude Agent SDK.
+- **`interactiveTemperature`.** The option is removed. It reached Claude
+  through `CLAUDE_CODE_EXTRA_BODY`, where the API rejected any non-default
+  value, so it never had an effect.
+
 ### [Unreleased] - Fixed
 
-- **Ollama requests on large diffs no longer fail with a bare "fetch
-  failed".** Node's fetch gave up after 300 s with no response headers,
-  and a non-streamed summary sends none until it is finished. That limit
-  stays, but when it fires, cco now says the model was too slow for the
-  chunk and what to change. Other transport errors now include their
-  underlying cause, and
-  a refused connection gets the "start `ollama serve`" hint, which Node's
-  real error shape had been hiding.
 - The picker types its states from Clack's own `State`, so the
   `validating` state that `@clack/core` added no longer breaks the build.
-- Ollama tests now await their rejection assertions, which Vitest 5
-  requires. Those tests previously passed without checking anything.
-- **`$OLLAMA_HOST` is honoured.** The built-in default host shadowed the
-  variable, so every `ollama:` run went to localhost unless `ollama.host`
-  was set. Precedence is as documented: config, then `$OLLAMA_HOST`, then
-  `http://localhost:11434`.
 - **Ctrl-C or Ctrl-D at "Commit this message?"** (and at the picker's
   plain-prompt fallback) now prints "Aborted. Nothing was committed." and
   exits 1. Before, the process quietly exited 0, so a wrapping script saw
@@ -64,17 +56,7 @@ carrying the same notes at greater length.
   while `code --wait` (or any waiting editor) was open counted as a
   successful edit and committed the unedited message. It is now an error,
   as it is for git itself.
-- **`"ollama.context": "auto"` works for untagged model names** such as
-  `ollama:mistral`: `/api/ps` reports `mistral:latest`, which no longer
-  fails to match.
-- **`"ollama.keepAlive": 0` no longer breaks the `"auto"` probe.** The
-  preload sent `keep_alive: 0` with no messages, which Ollama defines as
-  "unload the model", so the window could not be read back.
 - `cco -i --no-spinner` now disables the spinner in interactive mode too.
-- **Oversized Ollama prompts are re-split on small windows.** The retry
-  floor (8,000 tokens) was sized for Claude; a 4k, 8k or 16k Ollama window
-  could never halve above it, so the truncation error surfaced instead of
-  the re-split. The floor now scales down with the chunk budget.
 
 ## [1.1.0] - 2026-09-13
 

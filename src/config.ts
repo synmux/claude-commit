@@ -11,8 +11,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { ClaudeCommitError } from './errors.ts'
-import { DEFAULT_OLLAMA_CONTEXT } from './models.ts'
-import type { Config, ModelConfig, OllamaConfig, PartialConfig, TypeSafeConfig } from './types.ts'
+import type { Config, ModelConfig, PartialConfig, TypeSafeConfig } from './types.ts'
 import { DEFAULT_SPINNER, isSpinnerName } from './ui/spinner.ts'
 
 export const DEFAULT_CONFIG: Config = {
@@ -23,7 +22,6 @@ export const DEFAULT_CONFIG: Config = {
   customPrompt: null,
   interactive: false,
   interactiveCount: 3,
-  interactiveTemperature: 1,
   spinner: DEFAULT_SPINNER,
   models: {
     summary: 'sonnet',
@@ -35,12 +33,6 @@ export const DEFAULT_CONFIG: Config = {
   skipArmored: false,
   lowPriorityPaths: [],
   ignore: [],
-  ollama: {
-    // No default host: `resolveOllamaHost` falls back to `$OLLAMA_HOST`,
-    // then localhost, and a value here would shadow the variable.
-    context: DEFAULT_OLLAMA_CONTEXT,
-    keepAlive: null
-  },
   typesafe: {
     enable: false,
     env: 'TYPESAFE_API_KEY',
@@ -93,15 +85,14 @@ async function findGlobalConfigFile(
 }
 
 /**
- * Deep-ish merge of a partial config over a base config: `models`,
- * `ollama` and `typesafe` are merged key by key; the path lists (`lowPriorityPaths`,
+ * Deep-ish merge of a partial config over a base config: `models` and
+ * `typesafe` are merged key by key; the path lists (`lowPriorityPaths`,
  * `ignore`) are replaced whole - a higher layer's list wins outright, so a
  * project can drop a global pattern - and copied so the result never
  * aliases the base's array.
  */
 export function mergeConfig(base: Config, override: PartialConfig): Config {
   const models: ModelConfig = { ...base.models, ...override.models }
-  const ollama: OllamaConfig = { ...base.ollama, ...override.ollama }
   const typesafe: TypeSafeConfig = { ...base.typesafe, ...override.typesafe }
   const lowPriorityPaths = [...(override.lowPriorityPaths ?? base.lowPriorityPaths)]
   const ignore = [...(override.ignore ?? base.ignore)]
@@ -109,7 +100,6 @@ export function mergeConfig(base: Config, override: PartialConfig): Config {
     ...base,
     ...override,
     models,
-    ollama,
     typesafe,
     lowPriorityPaths,
     ignore
@@ -142,11 +132,6 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   if (typeof obj.interactiveCount === 'number' && Number.isFinite(obj.interactiveCount)) {
     out.interactiveCount = Math.max(1, Math.floor(obj.interactiveCount))
   }
-  if (obj.interactiveTemperature === null) {
-    out.interactiveTemperature = null
-  } else if (typeof obj.interactiveTemperature === 'number' && Number.isFinite(obj.interactiveTemperature)) {
-    out.interactiveTemperature = Math.min(2, Math.max(0, obj.interactiveTemperature))
-  }
   if (typeof obj.spinner === 'string' && isSpinnerName(obj.spinner)) {
     out.spinner = obj.spinner
   }
@@ -178,28 +163,6 @@ export function sanitizePartial(raw: unknown): PartialConfig {
       models.final = m.final.trim()
     }
     if (Object.keys(models).length) out.models = models
-  }
-
-  if (obj.ollama && typeof obj.ollama === 'object') {
-    const o = obj.ollama as Record<string, unknown>
-    const ollama: Partial<OllamaConfig> = {}
-    if (typeof o.host === 'string' && o.host.trim() !== '') {
-      ollama.host = o.host.trim()
-    }
-    if (typeof o.context === 'number' && o.context > 0) {
-      ollama.context = Math.floor(o.context)
-    } else if (o.context === 'auto') {
-      ollama.context = 'auto'
-    }
-    if (typeof o.maxChunkTokens === 'number' && o.maxChunkTokens >= 1) {
-      ollama.maxChunkTokens = Math.floor(o.maxChunkTokens)
-    }
-    if (typeof o.keepAlive === 'string' || typeof o.keepAlive === 'number') {
-      ollama.keepAlive = o.keepAlive
-    } else if (o.keepAlive === null) {
-      ollama.keepAlive = null
-    }
-    if (Object.keys(ollama).length) out.ollama = ollama
   }
 
   if (obj.typesafe && typeof obj.typesafe === 'object') {
@@ -315,17 +278,14 @@ export async function loadFileConfig(
 }
 
 /**
- * Merge two partial configs: `models`, `ollama` and `typesafe` are merged
- * key by key; every other key, including both path lists, is taken whole
+ * Merge two partial configs: `models` and `typesafe` are merged key by
+ * key; every other key, including both path lists, is taken whole
  * from the override when present.
  */
 export function mergePartial(base: PartialConfig, override: PartialConfig): PartialConfig {
   const out: PartialConfig = { ...base, ...override }
   if (base.models || override.models) {
     out.models = { ...base.models, ...override.models }
-  }
-  if (base.ollama || override.ollama) {
-    out.ollama = { ...base.ollama, ...override.ollama }
   }
   if (base.typesafe || override.typesafe) {
     out.typesafe = { ...base.typesafe, ...override.typesafe }

@@ -76,66 +76,10 @@ describe('buildSubprocessEnv', () => {
     expect(Object.keys(env)).not.toContain('ANTHROPIC_API_KEY')
   })
 
-  test('passes credentials through when the gate is on', () => {
-    const env = builtEnv({
-      baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: 'sk-test' },
-      allowApiKey: true,
-      temperature: 1 // forces an env to be built so passthrough is observable
-    })
-    expect(env.ANTHROPIC_API_KEY).toBe('sk-test')
-  })
-
-  test('injects the temperature via CLAUDE_CODE_EXTRA_BODY', () => {
-    const env = builtEnv({
-      baseEnv: cleanEnv,
-      allowApiKey: false,
-      temperature: 0.8
-    })
-    expect(JSON.parse(env.CLAUDE_CODE_EXTRA_BODY ?? '')).toEqual({
-      temperature: 0.8
-    })
-  })
-
-  test('merges the temperature over an existing extra body', () => {
-    const env = builtEnv({
-      baseEnv: { ...cleanEnv, CLAUDE_CODE_EXTRA_BODY: '{"foo":1}' },
-      allowApiKey: false,
-      temperature: 0.5
-    })
-    expect(JSON.parse(env.CLAUDE_CODE_EXTRA_BODY ?? '')).toEqual({
-      foo: 1,
-      temperature: 0.5
-    })
-  })
-
-  test('ignores a malformed existing extra body', () => {
-    const env = builtEnv({
-      baseEnv: { ...cleanEnv, CLAUDE_CODE_EXTRA_BODY: '{oops' },
-      allowApiKey: false,
-      temperature: 0.5
-    })
-    expect(JSON.parse(env.CLAUDE_CODE_EXTRA_BODY ?? '')).toEqual({
-      temperature: 0.5
-    })
-  })
-
-  test('combines credential stripping with the temperature override', () => {
-    const env = builtEnv({
-      baseEnv: { ...cleanEnv, ANTHROPIC_API_KEY: 'sk-test' },
-      allowApiKey: false,
-      temperature: 1.2
-    })
-    expect(Object.keys(env)).not.toContain('ANTHROPIC_API_KEY')
-    expect(JSON.parse(env.CLAUDE_CODE_EXTRA_BODY ?? '')).toEqual({
-      temperature: 1.2
-    })
-  })
-
   test('does not mutate the base environment', () => {
     const baseEnv = { ...cleanEnv, ANTHROPIC_API_KEY: 'sk-test' }
-    buildSubprocessEnv({ baseEnv, allowApiKey: false, temperature: 0.5 })
+    buildSubprocessEnv({ baseEnv, allowApiKey: false })
     expect(baseEnv.ANTHROPIC_API_KEY).toBe('sk-test')
-    expect(Object.keys(baseEnv)).not.toContain('CLAUDE_CODE_EXTRA_BODY')
   })
 })
 

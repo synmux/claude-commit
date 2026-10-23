@@ -12,11 +12,10 @@ import {
   type GenerateResult,
   generateCommit,
   type IgnoreStats,
-  type LowPriorityStats,
-  type OllamaContextWindow
+  type LowPriorityStats
 } from './generate.ts'
 import { commit, getRepoRoot, getStagedDiff, getStagedStat, isGitRepo, stageAll } from './git.ts'
-import type { ModelConfig, OllamaConfig, PartialConfig } from './types.ts'
+import type { ModelConfig, PartialConfig } from './types.ts'
 import { color } from './ui/colors.ts'
 import { confirmCommit, editInEditor } from './ui/editor.ts'
 import { playParty } from './ui/party.ts'
@@ -47,8 +46,6 @@ interface CliOptions {
   lowPriorityPaths?: boolean
   /** `false` when `--no-ignore` was passed (Commander's negated-flag shape). */
   ignore?: boolean
-  ollamaHost?: string
-  ollamaContext?: number | 'auto'
   /** `true` for `--typesafe`, `false` for `--no-typesafe`, unset otherwise. */
   typesafe?: boolean
 }
@@ -83,12 +80,6 @@ export function buildProgram(): Command {
       'ignore the "lowPriorityPaths" config for this run, so every change ' + 'weighs the same'
     )
     .option('--no-ignore', 'disregard the "ignore" config for this run, so every staged change is ' + 'read')
-    .option('--ollama-host <url>', 'base URL of the Ollama server for ollama: models')
-    .option(
-      '--ollama-context <tokens|auto>',
-      'context window for Ollama models: a token count, or auto to use ' + "the server's own choice for this machine",
-      parseContextFlag
-    )
     .option('--typesafe', 'check and rank interactive options with TypeSafe (needs an API key)')
     .option('--no-typesafe', 'skip the TypeSafe check even when "typesafe.enable" is set in config')
     .option('-d, --dry-run', 'print the message to stdout without committing')
@@ -101,16 +92,10 @@ export function buildProgram(): Command {
       [
         '',
         'Authentication:',
-        '  Claude models use the Claude Agent SDK with your Claude Code',
+        '  cco uses the Claude Agent SDK with your Claude Code',
         '  subscription (run `claude login`). ANTHROPIC_API_KEY /',
         '  ANTHROPIC_AUTH_TOKEN are ignored unless the config sets',
         '  "allowApiKey": true (pay-as-you-go billing).',
-        '',
-        'Ollama models:',
-        '  Prefix a model with `ollama:` to run it on a local Ollama server,',
-        '  e.g. --model-summary ollama:ornith-1.5:35b. Everything after the',
-        '  prefix is the Ollama model name, tag included. The server needs no',
-        '  credential; point cco at it with --ollama-host or $OLLAMA_HOST.',
         '',
         'TypeSafe check:',
         '  With "typesafe": { "enable": true } in config (or --typesafe),',
@@ -122,17 +107,10 @@ export function buildProgram(): Command {
         '  cco                     generate and commit a message for staged changes',
         '  cco -a -c               stage everything and write a Conventional Commit',
         '  cco -i                  pick from several options interactively',
-        '  cco --dry-run | cat     print a message without committing',
-        '  cco --model-summary ollama:ornith-1.5:35b',
-        '                          read the diff locally, write the message with Claude'
+        '  cco --dry-run | cat     print a message without committing'
       ].join('\n')
     )
   return program
-}
-
-/** `--ollama-context` accepts a token count or the literal `auto`. */
-function parseContextFlag(value: string): number | 'auto' {
-  return value.trim().toLowerCase() === 'auto' ? 'auto' : parseInt(value, 10)
 }
 
 /**
@@ -153,14 +131,6 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
   // configured patterns because lists replace rather than merge.
   if (opts.lowPriorityPaths === false) cfg.lowPriorityPaths = []
   if (opts.ignore === false) cfg.ignore = []
-  const ollama: Partial<OllamaConfig> = {}
-  if (opts.ollamaHost) ollama.host = opts.ollamaHost
-  if (opts.ollamaContext === 'auto') {
-    ollama.context = 'auto'
-  } else if (opts.ollamaContext !== undefined && Number.isFinite(opts.ollamaContext)) {
-    ollama.context = Math.max(1, opts.ollamaContext)
-  }
-  if (Object.keys(ollama).length) cfg.ollama = ollama
   if (opts.typesafe !== undefined) cfg.typesafe = { enable: opts.typesafe }
   if (opts.count !== undefined && Number.isFinite(opts.count)) {
     cfg.interactiveCount = Math.max(1, opts.count)
@@ -322,9 +292,6 @@ async function runNonInteractive(
         `${config.filenamesOnly ? 'filenames only (summariser skipped)' : `${result.chunkCount} chunk(s)`}, cost $${result.costUsd.toFixed(4)}`
       ) + '\n'
     )
-    for (const window of result.ollamaContexts) {
-      process.stderr.write(color('90', describeOllamaContext(window)) + '\n')
-    }
     if (result.candidateCheck?.status === 'checked') {
       process.stderr.write(color('90', describeCandidateCheck(result.candidateCheck)) + '\n')
     }
@@ -394,17 +361,6 @@ export function describeLowPriorityStats(stats: LowPriorityStats): string {
     return `low-priority paths: matched all ${files} - nothing else changed, so treated as primary`
   }
   return `low-priority paths: matched ${stats.matchedFiles} of ${files}`
-}
-
-/**
- * One verbose line per Ollama model naming the context window it ran with
- * and where the number came from. With `"auto"` this is the only place the
- * server's choice is visible, and it is the first thing to check when a
- * summary reads as if it saw half the diff.
- */
-export function describeOllamaContext(window: OllamaContextWindow): string {
-  const source = window.source === 'auto' ? 'chosen by the server' : 'from config'
-  return `ollama: ${window.model} context ${window.tokens} tokens (${source})`
 }
 
 /**

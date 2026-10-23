@@ -15,7 +15,7 @@ const settings = DEFAULT_CONFIG.typesafe
 
 const summaries: CandidateEvidence = {
   kind: 'summaries',
-  primary: 'src/generate.ts: retry the final stage without a temperature override.',
+  primary: 'src/generate.ts: retry the final stage without structured output.',
   lowPriority: null
 }
 
@@ -25,9 +25,9 @@ const split: CandidateEvidence = {
 }
 
 const messages = [
-  'fix(generate): retry without temperature\n\n- Retry once without it.',
+  'fix(generate): retry without structured output\n\n- Retry once without it.',
   'chore(deps): bump vitest',
-  'fix(generate): fall back when temperature is rejected'
+  'fix(generate): fall back when structured output is rejected'
 ]
 
 /** Answers for the request {@link buildCandidateRequest} builds, with overrides by question name. */
@@ -75,7 +75,7 @@ describe('buildCandidateRequest', () => {
   test('splits each candidate into subject and body', () => {
     const { state } = buildCandidateRequest(messages, summaries)
     expect(state.candidates[0]).toEqual({
-      subject: 'fix(generate): retry without temperature',
+      subject: 'fix(generate): retry without structured output',
       body: '- Retry once without it.'
     })
     expect(state.candidates[1]).toEqual({

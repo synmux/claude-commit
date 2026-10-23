@@ -285,7 +285,7 @@ function flaggedLastOrder(count: number, warnings: string[][]): number[] {
  * before the request - count as flags too.
  *
  * The model's order is kept on purpose. In a blind comparison over 37
- * commits (opus and local Ollama models), every attempt to reorder passing
+ * commits (opus and several local models), every attempt to reorder passing
  * candidates - by a specificity score, or by asking Jev which option a
  * maintainer would keep - lost to the model's first option (1 win in 26).
  *

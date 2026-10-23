@@ -1,15 +1,12 @@
 /**
  * Time how long a model takes to write commit messages for a small, a
- * medium and a large commit - to see whether an Ollama model is too big
- * for this machine, or how a Claude model compares.
+ * medium and a large commit, to see how Claude models compare.
  *
- *   node bin/stopwatch.ts ollama:gemma4:e4b-it-qat
  *   node bin/stopwatch.ts sonnet
  *
  * Each commit runs through the real pipeline (summary stage, then final
- * stage) with the given model in both stages. Every other setting - the
- * Ollama host, window and `ollama.maxChunkTokens`, `maxChunkTokens`,
- * `allowApiKey` - comes from your claude-commit config, so the timings
+ * stage) with the given model in both stages. Every other setting -
+ * `maxChunkTokens`, `allowApiKey` - comes from your claude-commit config, so the timings
  * match what `cco` would do. A `package.stopwatch.json` at the repo root,
  * when present, is read in place of `package.json`, so its `claude-commit`
  * key can hold experimental settings without touching the real config.
@@ -27,8 +24,7 @@ import { loadFileConfig, resolveConfig } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
 import { generateCommit } from '../src/generate.ts'
 import { getRepoRoot, isGitRepo } from '../src/git.ts'
-import { isOllamaModel } from '../src/models.ts'
-import { clampChunkTokens, estimateDiffTokens } from '../src/tokens.ts'
+import { estimateDiffTokens } from '../src/tokens.ts'
 
 /** How many files a synthetic commit touches, and how many changed lines each gets. */
 export interface CommitSize {
@@ -36,14 +32,14 @@ export interface CommitSize {
   linesPerFile: number
 }
 
-/** Small is one quick fix; large is about the size that first hit Ollama's 300 s limit (~40k tokens). */
+/** Small is one quick fix; large is about 40k tokens. */
 export const COMMIT_SIZES = {
   small: { files: 1, linesPerFile: 24 },
   medium: { files: 6, linesPerFile: 100 },
   large: { files: 40, linesPerFile: 70 }
 } as const satisfies Record<string, CommitSize>
 
-const AREAS = ['config', 'generate', 'ollama', 'prompts', 'tokens', 'ui', 'diff', 'paths', 'agent', 'git']
+const AREAS = ['config', 'generate', 'typesafe', 'prompts', 'tokens', 'ui', 'diff', 'paths', 'agent', 'git']
 const NOUNS = ['budget', 'chunk', 'window', 'summary', 'option', 'pattern', 'request', 'reply', 'limit', 'path']
 const VERBS = ['resolve', 'measure', 'split', 'merge', 'check', 'format', 'parse', 'clamp', 'load', 'render']
 
@@ -137,7 +133,7 @@ interface Timing {
 async function main(argv: string[]): Promise<number> {
   const model = argv[0]
   if (!model || model.startsWith('-')) {
-    process.stderr.write('Usage: node bin/stopwatch.ts <model>   e.g. ollama:gemma4:e4b-it-qat or sonnet\n')
+    process.stderr.write('Usage: node bin/stopwatch.ts <model>   e.g. sonnet\n')
     return 2
   }
 
@@ -158,8 +154,6 @@ async function main(argv: string[]): Promise<number> {
   process.once('SIGINT', () => abortController.abort())
 
   const timings: Timing[] = []
-  let windowNote = ''
-  let windowTokens = typeof config.ollama.context === 'number' ? config.ollama.context : undefined
   for (const [size, shape] of Object.entries(COMMIT_SIZES)) {
     const diff = syntheticDiff(shape, randomBytes(6).toString('hex'))
     const tokens = estimateDiffTokens(diff, config.charsPerToken)
@@ -182,11 +176,6 @@ async function main(argv: string[]): Promise<number> {
           }
         }
       })
-      const window = result.ollamaContexts[0]
-      if (window) {
-        windowTokens = window.tokens
-        windowNote = `context window ${window.tokens} tokens (${window.source === 'auto' ? 'chosen by the server' : 'from config'})`
-      }
       timings.push({
         size,
         lines: diff.split('\n').length,
@@ -216,12 +205,7 @@ async function main(argv: string[]): Promise<number> {
     }
   }
 
-  // Report the cap the pipeline enforced, which the window can lower below the configured one.
-  const capNote =
-    isOllamaModel(model) && config.ollama.maxChunkTokens !== undefined && windowTokens !== undefined
-      ? `, chunks capped at ${clampChunkTokens(model, config.maxChunkTokens, windowTokens, config.ollama.maxChunkTokens)} tokens`
-      : ''
-  process.stdout.write(`\nmodel ${model}${windowNote ? `, ${windowNote}` : ''}${capNote}\n\n`)
+  process.stdout.write(`\nmodel ${model}\n\n`)
   process.stdout.write('size     lines   ~tokens  chunks  summary   final     total     cost     result\n')
   for (const timing of timings) {
     process.stdout.write(

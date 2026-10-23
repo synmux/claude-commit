@@ -3,7 +3,6 @@ import {
   buildProgram,
   describeIgnoreStats,
   describeLowPriorityStats,
-  describeOllamaContext,
   flagsToConfig,
   resolveInteractiveMode
 } from '../src/cli.ts'
@@ -181,72 +180,15 @@ describe('ignore flags', () => {
   })
 })
 
-describe('ollama flags', () => {
-  test('--ollama-host maps onto the config block', () => {
-    expect(flagsToConfig({ ollamaHost: 'http://box:11434' }).ollama).toEqual({
-      host: 'http://box:11434'
-    })
-  })
-
-  test('--ollama-context maps onto the config block', () => {
-    expect(flagsToConfig({ ollamaContext: 16384 }).ollama).toEqual({
-      context: 16384
-    })
-  })
-
-  test('--ollama-context auto asks the server', () => {
-    expect(flagsToConfig({ ollamaContext: 'auto' }).ollama).toEqual({
-      context: 'auto'
-    })
+describe('model flags', () => {
+  test('a model id passes through --model-summary unchanged', () => {
     const program = buildProgram()
-    program.parse(['--ollama-context', 'AUTO'], { from: 'user' })
-    expect(program.opts().ollamaContext).toBe('auto')
-  })
-
-  test('no ollama flags means no ollama override', () => {
-    expect(flagsToConfig({}).ollama).toBeUndefined()
-  })
-
-  test('an unparseable context length is dropped rather than sent', () => {
-    expect(flagsToConfig({ ollamaContext: NaN }).ollama).toBeUndefined()
-  })
-
-  test('the program parses both flags', () => {
-    const program = buildProgram()
-    program.parse(['--ollama-host', 'http://box:11434', '--ollama-context', '16384'], {
-      from: 'user'
-    })
-    expect(program.opts().ollamaHost).toBe('http://box:11434')
-    expect(program.opts().ollamaContext).toBe(16384)
-  })
-
-  test('an ollama: model passes through --model-summary unchanged', () => {
-    const program = buildProgram()
-    program.parse(['--model-summary', 'ollama:ornith-1.5:35b'], {
+    program.parse(['--model-summary', 'claude-haiku-4-5'], {
       from: 'user'
     })
     expect(flagsToConfig(program.opts()).models).toEqual({
-      summary: 'ollama:ornith-1.5:35b'
+      summary: 'claude-haiku-4-5'
     })
-  })
-})
-
-describe('describeOllamaContext', () => {
-  test('says where the number came from', () => {
-    expect(
-      describeOllamaContext({
-        model: 'ollama:gemma4:e2b-it-qat',
-        tokens: 131072,
-        source: 'auto'
-      })
-    ).toBe('ollama: ollama:gemma4:e2b-it-qat context 131072 tokens (chosen by the server)')
-    expect(
-      describeOllamaContext({
-        model: 'ollama:x',
-        tokens: 8192,
-        source: 'config'
-      })
-    ).toBe('ollama: ollama:x context 8192 tokens (from config)')
   })
 })
 

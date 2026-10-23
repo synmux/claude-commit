@@ -12,8 +12,8 @@ three modules (`Bun.Glob` in `src/paths.ts`, `Bun.$` / `Bun.spawn` in
 which was built on `@opentui/core`. OpenTUI is a full terminal-UI framework
 with a native (Zig) renderer; on Node it needs version 26.4 or later plus
 `--experimental-ffi`, and its Node support is exercised only on Linux x64.
-The rest of the tool - the Claude Agent SDK, `ora`, `commander`, `fetch`
-against Ollama, `node:readline` prompts - already ran on Node.
+The rest of the tool - the Claude Agent SDK, `ora`, `commander`,
+`node:readline` prompts - already ran on Node.
 
 The goal: run on Node 24 LTS with pnpm as the package manager, without any
 runtime flag, and keep the interactive mode.

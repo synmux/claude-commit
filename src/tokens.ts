@@ -7,8 +7,6 @@
  * latency for no real benefit. We slightly over-estimate tokens so that chunks
  * stay safely under the model's context window.
  */
-import { DEFAULT_OLLAMA_CONTEXT_TOKENS, isOllamaModel } from './models.ts'
-
 /** Estimate the number of tokens in `text` given a chars-per-token ratio. */
 export function estimateTokens(text: string, charsPerToken: number): number {
   if (charsPerToken <= 0) throw new Error('charsPerToken must be positive')
@@ -33,20 +31,8 @@ export function tokensToChars(tokens: number, charsPerToken: number): number {
  */
 const MILLION_TOKEN_CONTEXT_MODELS = /\[1m\]|^(claude-)?(sonnet|opus)$|sonnet-5|sonnet-4-6|opus-4-[678]|fable|mythos/i
 
-/**
- * The context window (input token capacity) for a model name or alias.
- *
- * For an `ollama:` model the window is not a property of the name at all -
- * it is whatever `options.num_ctx` the request asks for, which cco pins to
- * `ollama.contextTokens` so that chunk sizing and the request agree. Pass
- * that value as `ollamaContextTokens`; the default matches
- * {@link DEFAULT_OLLAMA_CONTEXT_TOKENS}.
- */
-export function contextWindowTokens(
-  model: string,
-  ollamaContextTokens: number = DEFAULT_OLLAMA_CONTEXT_TOKENS
-): number {
-  if (isOllamaModel(model)) return Math.max(1, Math.floor(ollamaContextTokens))
+/** The context window (input token capacity) for a model name or alias. */
+export function contextWindowTokens(model: string): number {
   return MILLION_TOKEN_CONTEXT_MODELS.test(model) ? 1_000_000 : 200_000
 }
 
@@ -60,9 +46,9 @@ export const CONTEXT_RESERVE_TOKENS = 32_000
 
 /**
  * The fraction of a context window the reserve may take when the flat
- * {@link CONTEXT_RESERVE_TOKENS} would swallow it. A local model running at
- * 32k has a window smaller than the flat reserve, which would leave a
- * budget of zero and shatter the diff into one chunk per line.
+ * {@link CONTEXT_RESERVE_TOKENS} would swallow it. A window smaller than the
+ * flat reserve would otherwise leave a budget of zero and shatter the diff
+ * into one chunk per line.
  */
 const MAX_RESERVE_FRACTION = 4
 
@@ -70,8 +56,7 @@ const MAX_RESERVE_FRACTION = 4
  * Tokens to hold back from `contextWindow` when sizing chunks: the flat
  * reserve, or a quarter of the window when that is smaller. Both Claude
  * tiers (200k and 1M) are far above the crossover, so they reserve the full
- * 32k exactly as before; only windows under 128k - which in practice means
- * Ollama - scale down.
+ * 32k; only windows under 128k scale down.
  */
 export function contextReserveTokens(contextWindow: number): number {
   return Math.min(CONTEXT_RESERVE_TOKENS, Math.floor(contextWindow / MAX_RESERVE_FRACTION))
@@ -81,20 +66,10 @@ export function contextReserveTokens(contextWindow: number): number {
  * Clamp a configured per-chunk token budget so that one chunk plus overhead
  * always fits the given model's context window. The configured
  * `maxChunkTokens` remains the user-facing cap; this only ever lowers it.
- * `ollamaContextTokens` supplies the window for an `ollama:` model, and
- * `ollamaMaxChunkTokens` (`ollama.maxChunkTokens`) caps it further; both
- * are ignored for a Claude model.
  */
-export function clampChunkTokens(
-  model: string,
-  maxChunkTokens: number,
-  ollamaContextTokens?: number,
-  ollamaMaxChunkTokens?: number
-): number {
-  const window = contextWindowTokens(model, ollamaContextTokens)
-  const windowBudget = Math.min(maxChunkTokens, window - contextReserveTokens(window))
-  const ollamaCap = isOllamaModel(model) && ollamaMaxChunkTokens !== undefined ? ollamaMaxChunkTokens : Infinity
-  return Math.max(1, Math.min(windowBudget, ollamaCap))
+export function clampChunkTokens(model: string, maxChunkTokens: number): number {
+  const window = contextWindowTokens(model)
+  return Math.max(1, Math.min(maxChunkTokens, window - contextReserveTokens(window)))
 }
 
 /**

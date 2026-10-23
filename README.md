@@ -40,8 +40,7 @@ staged diff ──ignore──▶ ──split──▶ [chunk, …] ──sonnet
    whole point of the tool, and its input is tiny, so a strong model here costs
    almost nothing extra.
 
-Either stage can run on a local [Ollama](#ollama-models) model instead; by
-default both go through the
+Both stages go through the
 [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview).
 
 For less model work at the cost of less useful messages, enable
@@ -85,9 +84,6 @@ instead (pay-as-you-go), opt in explicitly in your configuration:
 { "allowApiKey": true }
 ```
 
-Ollama models sit outside all of this: they run on a server you control, over
-plain HTTP, with no credential at all. See [Ollama models](#ollama-models).
-
 ## Usage
 
 ```sh
@@ -120,8 +116,6 @@ error or is killed by a signal aborts the commit too.
 | `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff          |
 | `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                    |
 | `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                            |
-| `--ollama-host <url>`                    | Base URL of the Ollama server for `ollama:` models                                         |
-| `--ollama-context <tokens>`              | Context window requested from Ollama models                                                |
 | `--typesafe` / `--no-typesafe`           | Check and rank interactive options with TypeSafe, or skip the check when enabled in config |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                             |
 | `-y, --yes`                              | Commit without asking for confirmation                                                     |
@@ -173,9 +167,7 @@ library results have an empty `summaries` array and `chunkCount: 0`.
 
 `cco -i` opens a picker (built on [Clack](https://github.com/bombshell-dev/clack))
 listing several candidate messages, each with its subject and a one-line body
-preview. The options are generated with a higher temperature
-(`interactiveTemperature`) for more variety. Use the arrow keys (or `j`/`k`) to
-move between options, `Enter` to commit the highlighted option, `e` to edit it
+preview. Use the arrow keys (or `j`/`k`) to move between options, `Enter` to commit the highlighted option, `e` to edit it
 in your `$EDITOR` first, and `q`/`Esc`/`Ctrl-C` to cancel. The picker draws on
 stderr, so stdout stays clean.
 
@@ -255,7 +247,6 @@ keys are valid at every level:
   "customPrompt": "Reference the ticket id from the branch name when present.",
   "interactive": true,
   "interactiveCount": 3,
-  "interactiveTemperature": 1,
   "spinner": "material",
   "models": {
     "summary": "sonnet",
@@ -267,10 +258,6 @@ keys are valid at every level:
   "skipArmored": false,
   "lowPriorityPaths": [],
   "ignore": [],
-  "ollama": {
-    "context": "auto",
-    "keepAlive": null
-  },
   "typesafe": {
     "enable": false,
     "env": "TYPESAFE_API_KEY",
@@ -280,9 +267,6 @@ keys are valid at every level:
   "allowApiKey": false
 }
 ```
-
-`ollama.host` has no built-in default: when no layer sets it, `$OLLAMA_HOST`
-applies, then `http://localhost:11434` (see [Ollama models](#ollama-models)).
 
 `typesafe` configures the [candidate check](#typesafe-candidate-check).
 `env` names the variable that holds the API key. `model` is pinned because
@@ -422,116 +406,6 @@ one path and _all_ of them match, so a rename out of an ignored directory
 survives. `--verbose` reports the count
 (`ignore: dropped 3 of 41 files before reading`).
 
-## Ollama models
-
-Any model can be run on a local (or self-hosted) [Ollama](https://ollama.com)
-server instead of Claude, by prefixing its name with `ollama:`. Everything
-after the prefix is the Ollama model name **verbatim**, tag included:
-
-```json
-{
-  "models": {
-    "summary": "ollama:ornith-1.5:35b",
-    "final": "sonnet"
-  }
-}
-```
-
-The two stages resolve independently, so that mixed setup is the interesting
-one: reading the diff is the bulk of the work and the most sensitive thing
-`cco` touches, so it runs locally and free, while the final message - one
-short, quality-sensitive call on a summary - still goes to Claude. The prefix
-works anywhere a model name does, including the flags:
-
-```sh
-cco --model-summary ollama:ornith-1.5:35b --dry-run -v
-```
-
-The server needs no credential. `cco` talks to Ollama's native `/api/chat`
-endpoint, not either of its OpenAI/Anthropic compatibility layers, because
-only the native API can set a context length.
-
-### Context length is the setting that matters
-
-Ollama picks a context window for each model from available VRAM (4k / 32k /
-256k tiers, capped at the model's trained maximum), and a prompt that
-exceeds it is truncated **silently** - HTTP 200, oldest content dropped,
-nothing on the response to say so. A summary written from half a diff is
-worse than no summary, so `cco` never lets that number stay implicit: it
-sends an explicit window on every request, sizes its diff chunks against the
-same number, and checks the token counts afterwards to catch a truncation
-that happened anyway (in which case it re-splits the chunk and retries,
-exactly as it does for a Claude context overflow).
-
-Where the number comes from is `ollama.context`:
-
-```json
-{
-  "ollama": {
-    "host": "http://localhost:11434",
-    "context": "auto",
-    "keepAlive": "10m"
-  }
-}
-```
-
-- `context` - `"auto"` (the default) **asks the server** rather than
-  guessing: the model is preloaded with no window set, so Ollama applies
-  its own VRAM-based choice, and `cco` reads that choice back from
-  `/api/ps` before sizing anything. That is the largest window Ollama
-  believes this machine can actually run - 131072 for a Gemma model on a
-  large Mac, 4096 for the same model on a small laptop - resolved once per
-  model per run, and shown under `--verbose`. A number pins the window
-  instead: lower it when memory is tight (usage scales with it, multiplied
-  by `OLLAMA_NUM_PARALLEL`), or raise it past the tier if you know your
-  hardware better than the server does. A smaller window is never a
-  correctness problem - `cco` just splits the diff into more chunks.
-- `host` - defaults to `$OLLAMA_HOST`, then `http://localhost:11434`. A bare
-  `box.local:11434` gains an `http://`, matching Ollama's own convention.
-- `maxChunkTokens` - the largest diff chunk, in tokens, sent to an Ollama
-  summary model in one request. Unset by default, so only the window and the
-  top-level `maxChunkTokens` limit it. A large `"auto"` window can let one
-  request grow past what the model can summarise before the 300 s limit
-  (see [Slow models](#slow-models)); a cap splits the diff into more,
-  shorter requests instead. Claude models ignore it.
-- `keepAlive` - how long the server keeps the model loaded after a request: a
-  duration string (`"10m"`), seconds as a number, `0` to unload immediately,
-  or negative to pin it. `null` leaves the server's own default. Pinning is
-  worth it if you commit often; a 35b model takes a while to load.
-
-### Slow models
-
-Node's fetch waits at most 300 seconds for Ollama to send anything.
-Summary requests are generally not streamed, so nothing arrives until the
-whole summary is written. A large chunk on a big local model can take longer
-than that. cco then stops with a message saying the model was too slow,
-instead of a bare "fetch failed". To fix it, use a smaller model, or send
-smaller chunks with `ollama.maxChunkTokens`, which caps only Ollama
-requests. The cap does not help a slow final model: the final stage is not
-chunked, because its input is the summaries.
-`node bin/stopwatch.ts <model>` (see [Development](#development)) shows
-how long a model takes on this machine.
-
-### What differs from a Claude model
-
-- **Cost is reported as zero**, because local inference is not billed. In a
-  mixed run, `--verbose`'s total is exactly the Claude half.
-- **Structured output** is requested through Ollama's `format` field. A model
-  or server that cannot honour it (Ollama Cloud does not support it at all)
-  falls back to plain-text parsing automatically.
-- **The final model is loaded early.** When the final stage uses a
-  different Ollama model, `cco` starts loading it while the summaries are
-  written, so the final stage does not start with a cold load. With an
-  Ollama summary model it waits for the last chunk, because two models
-  that do not fit in memory together would otherwise push each other out
-  between chunks. That last chunk is streamed, so `cco` can see when the
-  server has started on it.
-- **A missing model is an error, not a download.** `cco` tells you to run
-  `ollama pull <model>` rather than pulling tens of gigabytes on your behalf.
-- **Reasoning is never requested**, and any the model volunteers is
-  discarded - models disagree about whether thinking can even be switched
-  off, and asking is a good way to earn a 400.
-
 ## Development
 
 ```sh
@@ -546,24 +420,24 @@ To see whether a model is too slow for this machine, time it on three
 synthetic commits of about 400, 8.5k and 40k tokens:
 
 ```sh
-node bin/stopwatch.ts ollama:gemma4:e4b-it-qat
+node bin/stopwatch.ts haiku
 node bin/stopwatch.ts sonnet
 ```
 
 It runs the real pipeline with that model in both stages, using the rest
-of your config (Ollama host, window and `ollama.maxChunkTokens`), and prints
-the summary, final and total time for each commit. To try settings without
-touching your real config, put them under a `claude-commit` key in a
-`package.stopwatch.json` at the repo root. When that file exists, the
-stopwatch reads it in place of `package.json` (git ignores it):
+of your config, and prints the summary, final and total time for each commit.
+To try settings without touching your real config, put them under a
+`claude-commit` key in a `package.stopwatch.json` at the repo root. When that
+file exists, the stopwatch reads it in place of `package.json` (git ignores
+it):
 
 ```json
 {
-  "claude-commit": { "ollama": { "context": "auto", "maxChunkTokens": 24000 } }
+  "claude-commit": { "maxChunkTokens": 24000 }
 }
 ```
 
-The commits are generated fresh each run, so a server's prompt cache cannot flatter a second run.
+The commits are generated fresh each run, so a prompt cache cannot flatter a second run.
 
 The sources run directly on Node's native type stripping, so there is no build
 step during development: `node bin/cco.js` picks up `dist/` when it exists and
