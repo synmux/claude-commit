@@ -1,6 +1,6 @@
 # claude-commit - Project Overview
 
-Node 26 / TypeScript CLI (`cco` / `claude-commit`) that generates git commit messages from the staged diff using the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`, spawns the bundled `claude` binary) Migrated off Bun and OpenTUI on 2026-09-13 (design: `docs/superpowers/specs/2026-09-13-node-pnpm-clack-migration-design.md`).
+Node 26 / TypeScript CLI (`cco` / `claude-commit`) that generates git commit messages from the staged diff using the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`, spawns the bundled `claude` binary). Migrated off Bun and OpenTUI on 2026-09-13 (design: `docs/superpowers/specs/2026-09-13-node-pnpm-clack-migration-design.md`).
 
 ## Toolchain
 
