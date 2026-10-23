@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import {
   CONTEXT_RESERVE_TOKENS,
   clampChunkTokens,
-  contextReserveTokens,
   contextWindowTokens,
   estimateDiffTokens,
   estimateTokens,
@@ -131,23 +130,5 @@ describe('clampChunkTokens', () => {
   test('never raises a budget below the clamp', () => {
     expect(clampChunkTokens('haiku', 100_000)).toBe(100_000)
     expect(clampChunkTokens('sonnet', 50_000)).toBe(50_000)
-  })
-})
-
-describe('context reserve', () => {
-  test('both Claude tiers keep the full flat reserve, unchanged', () => {
-    expect(contextReserveTokens(200_000)).toBe(CONTEXT_RESERVE_TOKENS)
-    expect(contextReserveTokens(1_000_000)).toBe(CONTEXT_RESERVE_TOKENS)
-  })
-
-  test('a small window reserves a quarter instead of being swallowed whole', () => {
-    // A flat 32k reserve against a 32k window would leave a budget of zero.
-    expect(contextReserveTokens(32_768)).toBe(8_192)
-    expect(contextReserveTokens(4_096)).toBe(1_024)
-  })
-
-  test('the crossover is where a quarter of the window equals the flat reserve', () => {
-    expect(contextReserveTokens(128_000)).toBe(CONTEXT_RESERVE_TOKENS)
-    expect(contextReserveTokens(127_996)).toBe(31_999)
   })
 })

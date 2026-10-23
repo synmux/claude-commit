@@ -45,31 +45,12 @@ export function contextWindowTokens(model: string): number {
 export const CONTEXT_RESERVE_TOKENS = 32_000
 
 /**
- * The fraction of a context window the reserve may take when the flat
- * {@link CONTEXT_RESERVE_TOKENS} would swallow it. A window smaller than the
- * flat reserve would otherwise leave a budget of zero and shatter the diff
- * into one chunk per line.
- */
-const MAX_RESERVE_FRACTION = 4
-
-/**
- * Tokens to hold back from `contextWindow` when sizing chunks: the flat
- * reserve, or a quarter of the window when that is smaller. Both Claude
- * tiers (200k and 1M) are far above the crossover, so they reserve the full
- * 32k; only windows under 128k scale down.
- */
-export function contextReserveTokens(contextWindow: number): number {
-  return Math.min(CONTEXT_RESERVE_TOKENS, Math.floor(contextWindow / MAX_RESERVE_FRACTION))
-}
-
-/**
  * Clamp a configured per-chunk token budget so that one chunk plus overhead
  * always fits the given model's context window. The configured
  * `maxChunkTokens` remains the user-facing cap; this only ever lowers it.
  */
 export function clampChunkTokens(model: string, maxChunkTokens: number): number {
-  const window = contextWindowTokens(model)
-  return Math.max(1, Math.min(maxChunkTokens, window - contextReserveTokens(window)))
+  return Math.max(1, Math.min(maxChunkTokens, contextWindowTokens(model) - CONTEXT_RESERVE_TOKENS))
 }
 
 /**

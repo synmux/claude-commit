@@ -143,15 +143,8 @@ export interface GenerateResult {
  * Floor for overflow-retry halving. Below this a chunk is essentially
  * prompt-sized already, so a "prompt is too long" rejection indicates
  * something other than chunk sizing and is surfaced instead of retried.
- * A small configured `maxChunkTokens` scales it down instead, see
- * {@link retryFloorTokens}, or the retry could never run at all.
  */
 const MIN_RETRY_CHUNK_TOKENS = 8_000
-
-/** The retry floor for a partition whose chunks were budgeted at `chunkTokens`: two halvings, at least. */
-function retryFloorTokens(chunkTokens: number): number {
-  return Math.min(MIN_RETRY_CHUNK_TOKENS, Math.floor(chunkTokens / 4))
-}
 
 interface PartitionSummaryOptions {
   config: Config
@@ -210,7 +203,7 @@ async function summarizePartition(
       costUsd += result.costUsd
     } catch (error) {
       const halvedBudget = Math.floor(task.tokenBudget / 2)
-      if (!isPromptTooLongError(error) || halvedBudget < retryFloorTokens(chunkTokens)) {
+      if (!isPromptTooLongError(error) || halvedBudget < MIN_RETRY_CHUNK_TOKENS) {
         throw error
       }
       const pieces = splitDiffToFit(task.chunk, halvedBudget, config.charsPerToken)

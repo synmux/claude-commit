@@ -148,29 +148,10 @@ describe('generateCommit', () => {
       calls++
       throw promptTooLong()
     })
-    // A 10k budget has a floor of 2.5k (a quarter of it): the ~7k-token
-    // diff is retried at 5k and again at 2.5k, and the third halving,
-    // 1.25k, is under the floor, so the third rejection surfaces.
-    const config: Config = { ...baseConfig, maxChunkTokens: 10_000 }
+    // Halving 15k lands below the 8k floor, so the first rejection surfaces.
+    const config: Config = { ...baseConfig, maxChunkTokens: 15_000 }
     await expect(generateCommit(armorDiff(100), config, { runner })).rejects.toThrow(/prompt is too long/i)
-    expect(calls).toBe(3)
-  })
-
-  test('the retry floor scales down with a small chunk budget', async () => {
-    // A 3,072-token chunk budget halves to well under the flat 8k floor,
-    // which would surface the rejection instead of re-splitting.
-    let rejected = false
-    const { runner, summaryPrompts } = stubRunner((_prompt, index) => {
-      if (index === 0 && !rejected) {
-        rejected = true
-        throw promptTooLong()
-      }
-    })
-    const config: Config = { ...baseConfig, maxChunkTokens: 3_072 }
-    const result = await generateCommit(armorDiff(30), config, { runner })
-    expect(rejected).toBe(true)
-    expect(result.chunkCount).toBeGreaterThan(1)
-    expect(summaryPrompts.join('').includes(armorLine(0).slice(1))).toBe(true)
+    expect(calls).toBe(1)
   })
 
   test('summaries are tagged primary when no low-priority paths are configured', async () => {
