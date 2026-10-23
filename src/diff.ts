@@ -261,7 +261,9 @@ function unquoteGitPath(raw: string): string {
   while (index < inner.length) {
     if (inner[index] !== '\\') {
       // Copy one code point (possibly a surrogate pair) as UTF-8 bytes.
-      const literal = String.fromCodePoint(inner.codePointAt(index)!)
+      const codePoint = inner.codePointAt(index)
+      if (codePoint === undefined) break
+      const literal = String.fromCodePoint(codePoint)
       bytes.push(...textEncoder.encode(literal))
       index += literal.length
       continue
@@ -410,7 +412,7 @@ export function sectionPaths(section: string): string[] {
   if (paths.length > 0) return paths
 
   const header = lines[0]
-  return header !== undefined && header.startsWith(FILE_HEADER) ? pathsFromHeader(header) : []
+  return header?.startsWith(FILE_HEADER) ? pathsFromHeader(header) : []
 }
 
 /**
@@ -530,8 +532,7 @@ export function applyIgnorePatterns(diff: string, isIgnored: PathMatcher): Ignor
 export function splitDiffToFit(diff: string, maxTokens: number, charsPerToken: number): string[] {
   const queue = splitDiff(diff, charBudgetFor(diff, maxTokens, charsPerToken))
   const fitted: string[] = []
-  while (queue.length > 0) {
-    const chunk = queue.shift()!
+  for (let chunk = queue.shift(); chunk !== undefined; chunk = queue.shift()) {
     if (estimateDiffTokens(chunk, charsPerToken) <= maxTokens) {
       fitted.push(chunk)
       continue

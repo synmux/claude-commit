@@ -319,7 +319,9 @@ describe('structured output', () => {
       required: ['messages'],
       additionalProperties: false
     })
-    expect((MESSAGES_SCHEMA as any).properties.messages.type).toBe('array')
+    expect(MESSAGES_SCHEMA).toMatchObject({
+      properties: { messages: { type: 'array' } }
+    })
   })
 
   test('extractMessages returns the string list from a valid object', () => {

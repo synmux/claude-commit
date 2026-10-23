@@ -92,7 +92,7 @@ describe('staged-change readers', () => {
       const { primary, totalFiles } = partitionDiff(diff, () => false)
       const engineSection = primary.split('\ndiff --git ').find((section) => section.includes('a/engine b/engine'))
       expect(engineSection).toBeDefined()
-      expect(sectionPaths(`diff --git ${engineSection!.replace(/^diff --git /, '')}`)).toEqual(['engine'])
+      expect(sectionPaths(`diff --git ${(engineSection ?? '').replace(/^diff --git /, '')}`)).toEqual(['engine'])
       expect(totalFiles).toBe(4) // .gitmodules, engine, sub/file.txt, top.txt
     })
   })
