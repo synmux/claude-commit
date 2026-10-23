@@ -108,7 +108,8 @@ export interface RankedCandidates {
 
 /** The ranked candidates plus what the request cost. */
 export interface CheckedCandidates extends RankedCandidates {
-  inputTokens: number
+  /** Input tokens the request used, or `null` when the API did not report them. */
+  inputTokens: number | null
   /** The model that answered, as reported by the API. */
   model: string
 }

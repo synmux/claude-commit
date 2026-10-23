@@ -93,7 +93,7 @@ export type CandidateCheckReport =
   | {
       status: 'checked'
       model: string
-      inputTokens: number
+      inputTokens: number | null
       droppedDuplicates: number
       mixedCommit: boolean
     }
@@ -477,11 +477,12 @@ export function describeCheckNotices(check: CandidateCheckReport | null): string
 /** One `--verbose` line for a completed TypeSafe check. */
 export function describeCandidateCheck(check: {
   model: string
-  inputTokens: number
+  inputTokens: number | null
   droppedDuplicates: number
 }): string {
   const dropped = `${check.droppedDuplicates} near-duplicate${check.droppedDuplicates === 1 ? '' : 's'} dropped`
-  return `TypeSafe check (${check.model}): ${check.inputTokens} input tokens, ${dropped}`
+  const tokens = check.inputTokens === null ? 'input tokens not reported' : `${check.inputTokens} input tokens`
+  return `TypeSafe check (${check.model}): ${tokens}, ${dropped}`
 }
 
 function dedupe(items: string[]): string[] {
