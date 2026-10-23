@@ -21,7 +21,7 @@ remain inside their list items.
 Ignore filtering and low-priority partitioning run before filename
 extraction. Fully ignored commits still fail; all-low-priority commits
 still promote their files. Chunking, armoured-content redaction and all
-summary calls are bypassed, including Ollama summary-model context probes.
+summary calls are bypassed.
 
 `buildFilenamesUser()` presents the path groups and shares output-format
 instructions with `buildFinalUser()`. The final system prompt describes the
@@ -29,9 +29,8 @@ limited evidence, prohibits invented edits or motivations, and retains
 formatting, templates, custom instructions and priority weighting. A
 requested body describes affected files or areas without inventing reasons.
 
-The existing final-stage structured output, temperature fallback, streaming,
-cancellation and deduplication paths serve both modes. Ollama final-model
-context resolution and truncation checks remain in force. Results contain
+The existing final-stage structured output, streaming,
+cancellation and deduplication paths serve both modes. Results contain
 `summaries: []`, `chunkCount: 0` and final-stage costs only.
 
 ## Alternatives declined
@@ -46,7 +45,7 @@ context resolution and truncation checks remain in force. Results contain
 ## Verification
 
 Tests cover configuration and aliases, path extraction, filename quoting,
-formatting, priorities, ignored changes, summary bypass, Ollama probe
-selection, interactive fallbacks, streaming and empty inputs. For an
+formatting, priorities, ignored changes, summary bypass,
+interactive fallbacks, streaming and empty inputs. For an
 end-to-end check, run a real CLI dry-run with an unavailable summary model;
 filenames-only mode should succeed using only the final model.

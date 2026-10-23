@@ -1,6 +1,6 @@
 # claude-commit - Project Overview
 
-Node 26 / TypeScript CLI (`cco` / `claude-commit`) that generates git commit messages from the staged diff using the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`, spawns the bundled `claude` binary) and/or Ollama. Migrated off Bun and OpenTUI on 2026-09-13 (design: `docs/superpowers/specs/2026-09-13-node-pnpm-clack-migration-design.md`).
+Node 26 / TypeScript CLI (`cco` / `claude-commit`) that generates git commit messages from the staged diff using the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`, spawns the bundled `claude` binary). Migrated off Bun and OpenTUI on 2026-09-13 (design: `docs/superpowers/specs/2026-09-13-node-pnpm-clack-migration-design.md`).
 
 ## Toolchain
 
@@ -12,7 +12,7 @@ Node 26 / TypeScript CLI (`cco` / `claude-commit`) that generates git commit mes
 
 ## Pipeline
 
-diff → (skipArmored redaction) → `partitionDiff` by `lowPriorityPaths` → per partition: `splitDiffToFit` chunks → summary model per chunk → final model writes message(s). `filenamesOnly` skips summarisation. Entry: `bin/cco.js` → `bin/cco.ts` → `src/cli.ts` (commander) → `src/generate.ts` → `src/agent.ts` (`runPrompt`, dispatches Claude SDK vs `src/ollama.ts`).
+diff → (skipArmored redaction) → `partitionDiff` by `lowPriorityPaths` → per partition: `splitDiffToFit` chunks → summary model per chunk → final model writes message(s). `filenamesOnly` skips summarisation. Entry: `bin/cco.js` → `bin/cco.ts` → `src/cli.ts` (commander) → `src/generate.ts` → `src/agent.ts` (`runPrompt`, the Claude Agent SDK call seam).
 
 ## Key modules
 
@@ -21,7 +21,6 @@ diff → (skipArmored redaction) → `partitionDiff` by `lowPriorityPaths` → p
 - `src/git.ts` - `spawn("git", …)` with uncapped buffering, exit code read on `close`; readers share `STAGED_DIFF_FLAGS` (neutralise `diff.relative/external/ignoreSubmodules/submodule/noprefix/mnemonicPrefix`); commit pipes the message to `git commit -F -`.
 - `src/ui/interactive.ts` - Clack picker: `@clack/core` `SelectPrompt` with pure exported `renderPicker()`, `limitOptions` windowing from `@clack/prompts`, `e`/`q` via `prompt.on("key")` setting `prompt.state`; output on stderr; readline fallback kept. Never use Clack's `spinner()` (raw mode + `process.exit(0)` on Ctrl-C); the spinner stays `ora`.
 - `src/ui/editor.ts` - `$EDITOR` launch (an editor killed by a signal rejects) and the readline prompts; `askLine` resolves `null` when the interface closes (Ctrl-C/Ctrl-D), which callers treat as "no"/cancel.
-- `src/ollama.ts` - native `/api/chat`; `"auto"` context probes `/api/ps` after a preload (model names compared with `:latest` filled in; a zero `keep_alive` is left off the preload because empty messages + 0 means unload).
 - Tests in `test/*.test.ts` (vitest); `test/git.test.ts` builds a real temp repo (submodule, hostile diff config) via `execFile`; `test/interactive.test.ts` drives the real Clack prompt through a `PassThrough` input and a collecting `Writable` with `columns`/`rows` (wait 80 ms after a lone ESC).
 
 ## Commands

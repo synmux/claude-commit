@@ -1,13 +1,6 @@
 /**
  * The model-call layer: {@link runPrompt} turns one prompt into one text
- * completion, routing to whichever backend the model name asks for.
- *
- * A bare model name goes to Claude, through the Agent SDK, below. An
- * `ollama:`-prefixed one goes to `src/ollama.ts` instead. Both return the
- * same {@link ModelResult}, so the pipeline in `src/generate.ts` - and the
- * injectable runner its tests use - never learns which provider ran.
- *
- * The Claude path, in detail:
+ * completion from Claude, through the Agent SDK.
  *
  * The Agent SDK spawns a bundled `claude` binary, so authentication follows
  * Claude Code's own resolution order over the environment we hand it. By
@@ -22,8 +15,6 @@
  */
 import { type Options, query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeCommitError } from './errors.ts'
-import { parseModelRef } from './models.ts'
-import { runOllamaPrompt } from './ollama.ts'
 import type { ModelResult, RunPromptOptions } from './types.ts'
 
 export type { RunPromptOptions } from './types.ts'
@@ -46,8 +37,6 @@ export interface SubprocessEnvOptions {
    * Defaults to false so the gate fails safe when a caller omits it.
    */
   allowApiKey?: boolean
-  /** Sampling temperature to inject via `CLAUDE_CODE_EXTRA_BODY`, preserving any existing extra body. */
-  temperature?: number
 }
 
 /**
@@ -60,29 +49,12 @@ export interface SubprocessEnvOptions {
  * billing to pay-as-you-go.
  */
 export function buildSubprocessEnv(opts: SubprocessEnvOptions): Record<string, string | undefined> | undefined {
-  const { baseEnv, allowApiKey = false, temperature } = opts
+  const { baseEnv, allowApiKey = false } = opts
   const stripped = allowApiKey ? [] : presentCredentialVars(baseEnv)
-  if (stripped.length === 0 && temperature == null) return undefined
+  if (stripped.length === 0) return undefined
 
   const env = { ...baseEnv }
   for (const name of stripped) delete env[name]
-
-  if (temperature != null) {
-    let extra: Record<string, unknown> = {}
-    const existing = baseEnv.CLAUDE_CODE_EXTRA_BODY
-    if (existing) {
-      try {
-        const parsed: unknown = JSON.parse(existing)
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          extra = parsed as Record<string, unknown>
-        }
-      } catch {
-        /* ignore a malformed existing value */
-      }
-    }
-    env.CLAUDE_CODE_EXTRA_BODY = JSON.stringify({ ...extra, temperature })
-  }
-
   return env
 }
 
@@ -153,15 +125,19 @@ export function buildQueryOptions(opts: RunPromptOptions, subprocessEnv?: Record
 }
 
 /**
- * Run a single prompt against a Claude model via the Agent SDK.
+ * Run a single prompt against a Claude model via the Agent SDK, and return
+ * its text response.
+ *
+ * This is the single seam every caller uses; `generate.ts` accepts a
+ * replacement of exactly this shape so the pipeline can be tested without a
+ * model.
  *
  * Throws {@link ClaudeCommitError} on any model/authentication/quota failure.
  */
-export async function runClaudePrompt(prompt: string, opts: RunPromptOptions): Promise<ModelResult> {
+export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise<ModelResult> {
   const subprocessEnv = buildSubprocessEnv({
     baseEnv: process.env,
-    allowApiKey: opts.allowApiKey ?? false,
-    ...(opts.temperature != null ? { temperature: opts.temperature } : {})
+    allowApiKey: opts.allowApiKey ?? false
   })
   const options = buildQueryOptions(opts, subprocessEnv)
 
@@ -230,20 +206,4 @@ export async function runClaudePrompt(prompt: string, opts: RunPromptOptions): P
     ...(model ? { model } : {}),
     ...(structured !== undefined ? { structured } : {})
   }
-}
-
-/**
- * Run a single prompt against whichever provider `opts.model` names, and
- * return its text response.
- *
- * This is the single seam every caller uses; `generate.ts` accepts a
- * replacement of exactly this shape so the pipeline can be tested without a
- * model of either kind.
- *
- * Throws {@link ClaudeCommitError} on any model, authentication, transport
- * or quota failure.
- */
-export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise<ModelResult> {
-  const { provider } = parseModelRef(opts.model)
-  return provider === 'ollama' ? runOllamaPrompt(prompt, opts) : runClaudePrompt(prompt, opts)
 }

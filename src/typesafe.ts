@@ -108,7 +108,8 @@ export interface RankedCandidates {
 
 /** The ranked candidates plus what the request cost. */
 export interface CheckedCandidates extends RankedCandidates {
-  inputTokens: number
+  /** Input tokens the request used, or `null` when the API did not report them. */
+  inputTokens: number | null
   /** The model that answered, as reported by the API. */
   model: string
 }
@@ -285,7 +286,7 @@ function flaggedLastOrder(count: number, warnings: string[][]): number[] {
  * before the request - count as flags too.
  *
  * The model's order is kept on purpose. In a blind comparison over 37
- * commits (opus and local Ollama models), every attempt to reorder passing
+ * commits (opus and several local models), every attempt to reorder passing
  * candidates - by a specificity score, or by asking Jev which option a
  * maintainer would keep - lost to the model's first option (1 win in 26).
  *

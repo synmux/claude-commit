@@ -4,7 +4,7 @@ import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
 import { describeCheckNotices, generateCommit } from '../src/generate.ts'
 import type { Config, ModelResult } from '../src/types.ts'
-import { answeringJevFetch, fakeJevFetch } from './typesafe-fixtures.ts'
+import { answeringJevFetch, fakeJevFetch, jevAnswers } from './typesafe-fixtures.ts'
 
 type Runner = typeof runPrompt
 
@@ -148,36 +148,10 @@ describe('generateCommit', () => {
       calls++
       throw promptTooLong()
     })
-    // A 10k budget has a floor of 2.5k (a quarter of it): the ~7k-token
-    // diff is retried at 5k and again at 2.5k, and the third halving,
-    // 1.25k, is under the floor, so the third rejection surfaces.
-    const config: Config = { ...baseConfig, maxChunkTokens: 10_000 }
+    // Halving 15k lands below the 8k floor, so the first rejection surfaces.
+    const config: Config = { ...baseConfig, maxChunkTokens: 15_000 }
     await expect(generateCommit(armorDiff(100), config, { runner })).rejects.toThrow(/prompt is too long/i)
-    expect(calls).toBe(3)
-  })
-
-  test('the retry floor scales down with a small Ollama window', async () => {
-    // A 4k window gives a 3,072-token chunk budget; halving that is well
-    // under the 8k floor sized for Claude, which used to surface the
-    // truncation error instead of re-splitting.
-    let rejected = false
-    const { runner, summaryPrompts } = stubRunner((_prompt, index) => {
-      if (index === 0 && !rejected) {
-        rejected = true
-        throw new ClaudeCommitError(
-          'Ollama truncated the request: the prompt is too long for the 4096-token context window.'
-        )
-      }
-    })
-    const config: Config = {
-      ...baseConfig,
-      models: { summary: 'ollama:mistral', final: 'ollama:mistral' },
-      ollama: { ...baseConfig.ollama, context: 4_096 }
-    }
-    const result = await generateCommit(armorDiff(30), config, { runner })
-    expect(rejected).toBe(true)
-    expect(result.chunkCount).toBeGreaterThan(1)
-    expect(summaryPrompts.join('').includes(armorLine(0).slice(1))).toBe(true)
+    expect(calls).toBe(1)
   })
 
   test('summaries are tagged primary when no low-priority paths are configured', async () => {
@@ -315,7 +289,7 @@ describe('filenamesOnly', () => {
       `${skillDiff}\n${textDiff}`,
       {
         ...config,
-        models: { summary: 'ollama:unavailable', final: 'final-model' },
+        models: { summary: 'summary-model', final: 'final-model' },
         maxChunkTokens: 1
       },
       {
@@ -326,9 +300,6 @@ describe('filenamesOnly', () => {
             costUsd: 0.012,
             structured: { messages: ['Update files'] }
           }
-        },
-        resolveOllamaContext: async () => {
-          throw new Error('The summary model must not be loaded')
         },
         progress: { onPhase: (phase) => phases.push(phase) }
       }
@@ -344,7 +315,6 @@ describe('filenamesOnly', () => {
     expect(result.chunkCount).toBe(0)
     expect(result.summaries).toEqual([])
     expect(result.costUsd).toBe(0.012)
-    expect(result.ollamaContexts).toEqual([])
     expect(phases).toEqual(['Writing commit message'])
     expect(result.lowPriority).toEqual({
       matchedFiles: 1,
@@ -383,31 +353,25 @@ describe('filenamesOnly', () => {
     }
   })
 
-  test('interactive fallbacks keep filename input and resolve only the final Ollama model', async () => {
+  test('interactive fallbacks keep filename input and call only the final model', async () => {
     const prompts: string[] = []
-    const temperatures: Array<number | undefined> = []
-    const probes: string[] = []
+    const structured: boolean[] = []
     const abortController = new AbortController()
     const streamed: string[] = []
     const result = await generateCommit(
       textDiff,
       {
         ...config,
-        models: { summary: 'ollama:summary', final: 'ollama:final' }
+        models: { summary: 'summary-model', final: 'final-model' }
       },
       {
         count: 2,
         abortController,
         progress: { onText: (text) => streamed.push(text) },
-        resolveOllamaContext: async (model) => {
-          probes.push(model)
-          return 8192
-        },
         runner: async (prompt, options) => {
           prompts.push(prompt)
-          temperatures.push(options.temperature)
-          expect(options.model).toBe('ollama:final')
-          expect(options.ollama?.context).toBe(8192)
+          structured.push(options.outputFormat !== undefined)
+          expect(options.model).toBe('final-model')
           expect(options.abortController).toBe(abortController)
           expect(options.allowApiKey).toBe(false)
           if (options.outputFormat) return { text: 'invalid JSON', costUsd: 0.001 }
@@ -419,19 +383,17 @@ describe('filenamesOnly', () => {
         }
       }
     )
-    expect(probes).toEqual(['ollama:final'])
-    expect(temperatures).toEqual([config.interactiveTemperature ?? undefined, undefined, undefined])
-    expect(prompts).toHaveLength(3)
+    expect(structured).toEqual([true, false])
+    expect(prompts).toHaveLength(2)
     for (const prompt of prompts) {
       expect(prompt).toContain('"a.txt"')
       expect(prompt).toContain('exactly 2 distinct')
       expect(prompt).not.toMatch(/old line|new line|diff --git|@@/)
     }
     expect(result.messages).toEqual(['Update files', 'Refresh files'])
-    expect(result.costUsd).toBeCloseTo(0.004)
+    expect(result.costUsd).toBeCloseTo(0.003)
     expect(result.chunkCount).toBe(0)
     expect(streamed).toEqual(['Update files'])
-    expect(result.ollamaContexts).toEqual([{ model: 'ollama:final', tokens: 8192, source: 'auto' }])
   })
 
   test.each(['', ' \n', 'unrecognisable input'])('rejects input without filenames: %p', async (diff) => {
@@ -543,280 +505,21 @@ describe('ignore', () => {
   })
 })
 
-describe('Ollama auto context', () => {
-  const stubRunner = (async () => ({
-    text: 'A summary',
-    costUsd: 0
-  })) as Runner
-  const ollamaConfig = (over: Partial<Config> = {}): Config => ({
-    ...baseConfig,
-    models: { summary: 'ollama:gemma4', final: 'ollama:gemma4' },
-    ollama: { ...baseConfig.ollama, context: 'auto' },
-    ...over
-  })
+describe('chunk sizing', () => {
+  test("sizes summary chunks against the summary model's window", async () => {
+    const runner = (async () => ({ text: 'A summary', costUsd: 0 }) satisfies ModelResult) as Runner
 
-  test('resolves the window once per model, before any chunk is sized', async () => {
-    const asked: string[] = []
-    const result = await generateCommit(armorFreeDiff(4_000), ollamaConfig(), {
-      runner: stubRunner,
-      resolveOllamaContext: async (model) => {
-        asked.push(model)
-        return 8_192
-      }
-    })
-    // Summary and final are the same model: one probe serves both stages.
-    expect(asked).toEqual(['ollama:gemma4'])
-    expect(result.ollamaContexts).toEqual([{ model: 'ollama:gemma4', tokens: 8_192, source: 'auto' }])
-    // And the probed 8k window, not the 32k fallback, sized the chunks.
-    expect(result.chunkCount).toBeGreaterThan(1)
-  })
-
-  test('probes each distinct model, in the order it is first needed', async () => {
-    const asked: string[] = []
-    await generateCommit(
-      armorFreeDiff(10),
-      ollamaConfig({
-        models: { summary: 'ollama:small', final: 'ollama:big' }
-      }),
-      {
-        runner: stubRunner,
-        resolveOllamaContext: async (model) => {
-          asked.push(model)
-          return 32_768
-        }
-      }
-    )
-    expect(asked).toEqual(['ollama:small', 'ollama:big'])
-  })
-
-  test('hands the runner a pinned number, never auto', async () => {
-    const seen: unknown[] = []
-    const runner = (async (_prompt: string, opts: { ollama?: { context: unknown } }) => {
-      seen.push(opts.ollama?.context)
-      return { text: 'A summary', costUsd: 0 }
-    }) as unknown as Runner
-    await generateCommit(armorFreeDiff(10), ollamaConfig(), {
-      runner,
-      resolveOllamaContext: async () => 65_536
-    })
-    expect(seen.length).toBeGreaterThan(0)
-    expect(seen.every((c) => c === 65_536)).toBe(true)
-  })
-
-  test('a configured number is reported as such and never probed for', async () => {
-    let probes = 0
-    const result = await generateCommit(
-      armorFreeDiff(10),
-      ollamaConfig({ ollama: { ...baseConfig.ollama, context: 16_384 } }),
-      {
-        runner: stubRunner,
-        resolveOllamaContext: async (_model, config) => {
-          probes += 1
-          // The real resolver short-circuits on a number; mirror that.
-          return typeof config?.context === 'number' ? config.context : 0
-        }
-      }
-    )
-    expect(probes).toBe(1)
-    expect(result.ollamaContexts).toEqual([{ model: 'ollama:gemma4', tokens: 16_384, source: 'config' }])
-  })
-
-  test('Claude models are never asked', async () => {
-    let probes = 0
-    const result = await generateCommit(armorFreeDiff(10), baseConfig, {
-      runner: stubRunner,
-      resolveOllamaContext: async () => {
-        probes += 1
-        return 1
-      }
-    })
-    expect(probes).toBe(0)
-    expect(result.ollamaContexts).toEqual([])
-  })
-
-  test('a failed probe fails the run before any model call', async () => {
-    let calls = 0
-    const runner = (async () => {
-      calls += 1
-      return { text: 'x', costUsd: 0 }
-    }) as Runner
-    const promise = generateCommit(armorFreeDiff(10), ollamaConfig(), {
-      runner,
-      resolveOllamaContext: async () => {
-        throw new ClaudeCommitError('Cannot reach the Ollama server')
-      }
-    })
-    await expect(promise).rejects.toThrow(/Cannot reach/)
-    expect(calls).toBe(0)
-  })
-})
-
-describe('Ollama chunk sizing', () => {
-  test('sizes summary chunks against the configured Ollama window', async () => {
-    const prompts: string[] = []
-    const runner = (async (prompt: string) => {
-      prompts.push(prompt)
-      return { text: 'A summary', costUsd: 0 } satisfies ModelResult
-    }) as Runner
-
-    // ~200k characters of ordinary diff: one chunk at Claude's 1M window,
-    // several at an Ollama 8k one.
-    const big = armorFreeDiff(4_000)
-    const claudeRun = await generateCommit(big, baseConfig, { runner })
-    const claudeChunks = claudeRun.chunkCount
-
-    prompts.length = 0
-    const ollamaRun = await generateCommit(
+    // ~740k characters of ordinary diff: one chunk at Sonnet's 1M window,
+    // more than one at Haiku's 200k.
+    const big = armorFreeDiff(12_000)
+    const sonnetRun = await generateCommit(big, baseConfig, { runner })
+    const haikuRun = await generateCommit(
       big,
-      {
-        ...baseConfig,
-        models: { summary: 'ollama:gemma4', final: 'sonnet' },
-        ollama: { ...baseConfig.ollama, context: 8_192 }
-      },
+      { ...baseConfig, models: { summary: 'haiku', final: 'sonnet' } },
       { runner }
     )
-    expect(claudeChunks).toBe(1)
-    expect(ollamaRun.chunkCount).toBeGreaterThan(1)
-  })
-})
-
-describe('Ollama final-model warm-up', () => {
-  /**
-   * Records summary calls (and whether each streams), final calls, probes
-   * and preloads in one timeline. A streamed summary emits its text through
-   * `onText`, as the real Ollama runner does.
-   */
-  function timeline() {
-    const events: string[] = []
-    const runner = (async (_prompt, opts) => {
-      if (opts.outputFormat) {
-        events.push('final')
-        return {
-          text: '',
-          costUsd: 0,
-          structured: { messages: ['fix: warmed'] }
-        }
-      }
-      events.push(opts.onText ? 'summary:streamed' : 'summary')
-      opts.onText?.('A summary')
-      opts.onText?.(' arrives')
-      return { text: 'A summary arrives', costUsd: 0 }
-    }) as Runner
-    const resolveOllamaContext = async (model: string, config?: { context?: number | 'auto' }) => {
-      events.push(`probe ${model}`)
-      return typeof config?.context === 'number' ? config.context : 8_192
-    }
-    const warmOllamaModel = async (model: string) => {
-      events.push(`preload ${model}`)
-    }
-    return {
-      events,
-      options: { runner, resolveOllamaContext, warmOllamaModel }
-    }
-  }
-
-  const twoModels = (context: number | 'auto', summary = 'ollama:small'): Config => ({
-    ...baseConfig,
-    models: { summary, final: 'ollama:big' },
-    ollama: { ...baseConfig.ollama, context }
-  })
-
-  test('loads the final model while the last chunk is written, not before', async () => {
-    const { events, options } = timeline()
-    const result = await generateCommit(armorFreeDiff(4_000), twoModels('auto'), options)
-    expect(result.chunkCount).toBeGreaterThan(2)
-    // Earlier chunks run alone: warming then could evict the summary model
-    // between chunks when the two do not fit together. Only the last chunk
-    // streams, and the probe that loads `big` starts once its text arrives.
-    const summaries = events.filter((event) => event.startsWith('summary'))
-    expect(summaries.slice(0, -1).every((event) => event === 'summary')).toBe(true)
-    expect(events.slice(-3)).toEqual(['summary:streamed', 'probe ollama:big', 'final'])
-    expect(events.filter((event) => event === 'probe ollama:big')).toHaveLength(1)
-  })
-
-  test('a configured window is preloaded rather than probed', async () => {
-    const { events, options } = timeline()
-    await generateCommit(armorFreeDiff(10), twoModels(16_384), options)
-    expect(events).toEqual([
-      'probe ollama:small',
-      'summary:streamed',
-      'preload ollama:big',
-      'probe ollama:big',
-      'final'
-    ])
-  })
-
-  test('warms during the low-priority partition when there is one', async () => {
-    const { events, options } = timeline()
-    await generateCommit(
-      `${textDiff}\n${skillDiff}`,
-      {
-        ...twoModels(8_192),
-        lowPriorityPaths: lowPriorityConfig.lowPriorityPaths
-      },
-      options
-    )
-    expect(events.filter((event) => event.startsWith('summary'))).toEqual(['summary', 'summary:streamed'])
-  })
-
-  test('with a Claude summariser, warms before the first chunk', async () => {
-    const { events, options } = timeline()
-    await generateCommit(armorFreeDiff(10), twoModels(16_384, 'sonnet'), options)
-    // No shared server to contend for, so there is nothing to wait for -
-    // and a Claude summary is never switched to streaming.
-    expect(events).toEqual(['preload ollama:big', 'summary', 'probe ollama:big', 'final'])
-  })
-
-  test('one model for both stages is already loaded: nothing to warm', async () => {
-    const { events, options } = timeline()
-    await generateCommit(
-      armorFreeDiff(10),
-      {
-        ...twoModels(16_384),
-        models: { summary: 'ollama:big', final: 'ollama:big' }
-      },
-      options
-    )
-    expect(events).toEqual(['probe ollama:big', 'summary', 'final'])
-  })
-
-  test('a Claude final model leaves the summary requests unstreamed', async () => {
-    const { events, options } = timeline()
-    await generateCommit(
-      armorFreeDiff(10),
-      {
-        ...twoModels(16_384),
-        models: { summary: 'ollama:small', final: 'sonnet' }
-      },
-      options
-    )
-    expect(events.filter((event) => event.startsWith('summary'))).toEqual(['summary'])
-  })
-
-  test('a failed preload is left to the final request to report', async () => {
-    const { events, options } = timeline()
-    const result = await generateCommit(armorFreeDiff(10), twoModels(16_384), {
-      ...options,
-      warmOllamaModel: async () => {
-        throw new ClaudeCommitError('Ollama has no model "big"')
-      }
-    })
-    expect(result.messages).toEqual(['fix: warmed'])
-    expect(events.at(-1)).toBe('final')
-  })
-
-  test('a failed auto probe still fails the run, once', async () => {
-    const { options } = timeline()
-    let probes = 0
-    const promise = generateCommit(armorFreeDiff(10), twoModels('auto', 'sonnet'), {
-      ...options,
-      resolveOllamaContext: async () => {
-        probes += 1
-        throw new ClaudeCommitError('Cannot reach the Ollama server')
-      }
-    })
-    await expect(promise).rejects.toThrow(/Cannot reach/)
-    expect(probes).toBe(1)
+    expect(sonnetRun.chunkCount).toBe(1)
+    expect(haikuRun.chunkCount).toBeGreaterThan(1)
   })
 })
 
@@ -880,6 +583,33 @@ describe('TypeSafe candidate check', () => {
     })
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests[0]?.body.state)).toContain('a.txt replaces old line')
+  })
+
+  test('reports a null token count when the API does not report usage', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch } = fakeJevFetch((body) => ({
+      status: 200,
+      json: {
+        model: 'jev-1.13.0',
+        answers: jevAnswers(body.questions),
+        usage: { input_tokens: null, output_tokens: 0 }
+      }
+    }))
+    const result = await generateCommit(textDiff, typesafeConfig, {
+      runner,
+      count: 3,
+      env,
+      typesafeFetch: fetch
+    })
+
+    expect(result.messages).toEqual(candidates)
+    expect(result.candidateCheck).toEqual({
+      status: 'checked',
+      model: 'jev-1.13.0',
+      inputTokens: null,
+      droppedDuplicates: 0,
+      mixedCommit: false
+    })
   })
 
   test('a missing key fails before any model is called', async () => {

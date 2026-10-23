@@ -54,14 +54,11 @@ presence alone perturbs the SDK's credential resolution.
 
 ### Enforcement (`src/agent.ts`)
 
-- Replace `envWithTemperature` with a pure, exported
-  `buildSubprocessEnv({ baseEnv, allowApiKey, temperature })` returning the
-  env record for the SDK subprocess (or `undefined` when the parent env can be
-  inherited unchanged). Responsibilities:
-  - delete `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` when `allowApiKey` is
-    false and they are present;
-  - fold in the `CLAUDE_CODE_EXTRA_BODY` temperature override (preserving any
-    existing extra body), as today.
+- Add a pure, exported `buildSubprocessEnv({ baseEnv, allowApiKey })`
+  returning the env record for the SDK subprocess (or `undefined` when the
+  parent env can be inherited unchanged). Its one responsibility: delete
+  `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` when `allowApiKey` is false
+  and they are present.
 - `RunPromptOptions` gains `allowApiKey?: boolean`, **defaulting to `false` at
   this layer too** - the fail-safe holds even if a future caller forgets it.
 - `src/generate.ts` passes `config.allowApiKey` at both `runPrompt` call
@@ -92,9 +89,7 @@ The strip is the guarantee; the notice is discoverability.
   ignored), default `false`, precedence through `resolveConfig`.
 - `test/agent.test.ts` (new): `buildSubprocessEnv` - strips both variables
   when the gate is off; preserves them when on; leaves unrelated variables
-  intact; temperature merge still respects an existing
-  `CLAUDE_CODE_EXTRA_BODY`; inherits (returns `undefined`) when there is
-  nothing to change.
+  intact; inherits (returns `undefined`) when there is nothing to change.
 
 ## Error handling
 

@@ -197,7 +197,7 @@ The table shipped, and the Jev question did not.
 ### Mixed commits (2026-10-20)
 
 Cases: 37 clean (each commit's own primary summaries from the opus and
-Ollama runs), and 37 mixed, made by interleaving the paragraphs of two
+local-model runs), and 37 mixed, made by interleaving the paragraphs of two
 unrelated commits' summaries. Pairs about the same topic were skipped.
 AUC was 0.92. Four "clean" cases scored high, and on reading, all four were
 really mixed:
@@ -247,16 +247,16 @@ the one to commit.
 
 The real pipeline wrote 3 options per commit for the 20 tuning commits,
 with opus for both stages, and for 17 of them with
-`ollama:gemma4:31b-mlx` (summaries) and `ollama:muse-glimmer:30b-mlx`
-(messages). The 3 largest diffs failed on the Ollama side. Each picking
+two local models (one for summaries, one for messages). The 3 largest diffs
+failed on the local-model side. Each picking
 policy was compared with option 0, and opus judged every case where they
 differed, seeing the summaries and both messages in random A/B order.
 
-| Policy                             | Opus: differs, won | Ollama: differs, won |
-| ---------------------------------- | ------------------ | -------------------- |
-| Rank by a specificity score        | 10, won 1          | 7, won 0             |
-| Jev Choice: "best for the history" | 4, won 0 (1 tie)   | 5, won 0             |
-| Guard: skip flagged options only   | never differs      | never differs        |
+| Policy                             | Opus: differs, won | Local: differs, won |
+| ---------------------------------- | ------------------ | ------------------- |
+| Rank by a specificity score        | 10, won 1          | 7, won 0            |
+| Jev Choice: "best for the history" | 4, won 0 (1 tie)   | 5, won 0            |
+| Guard: skip flagged options only   | never differs      | never differs       |
 
 Option 0 never carried a warning with either model, so the guard had
 nothing to do, and every policy that moved away from option 0 lost (1 win

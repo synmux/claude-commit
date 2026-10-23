@@ -11,7 +11,6 @@ import {
   resolveConfig,
   sanitizePartial
 } from '../src/config.ts'
-import { resolveOllamaConfig } from '../src/ollama.ts'
 
 describe('sanitizePartial', () => {
   test('keeps known keys with correct types', () => {
@@ -37,21 +36,9 @@ describe('sanitizePartial', () => {
     expect(sanitizePartial(null)).toEqual({})
     expect(sanitizePartial('x')).toEqual({})
   })
-
-  test('interactiveTemperature: accepts null, clamps to 0..2, ignores bad types', () => {
-    expect(sanitizePartial({ interactiveTemperature: null }).interactiveTemperature).toBe(null)
-    expect(sanitizePartial({ interactiveTemperature: 0.8 }).interactiveTemperature).toBe(0.8)
-    expect(sanitizePartial({ interactiveTemperature: 5 }).interactiveTemperature).toBe(2)
-    expect(sanitizePartial({ interactiveTemperature: -1 }).interactiveTemperature).toBe(0)
-    expect(sanitizePartial({ interactiveTemperature: 'hot' }).interactiveTemperature).toBeUndefined()
-  })
 })
 
 describe('default config', () => {
-  test('bumps interactive temperature by default', () => {
-    expect(DEFAULT_CONFIG.interactiveTemperature).toBe(1)
-  })
-
   test('does not allow API credentials by default', () => {
     expect(DEFAULT_CONFIG.allowApiKey).toBe(false)
   })
@@ -245,20 +232,6 @@ describe('loadFileConfig', () => {
     expect(cfg.lowPriorityPaths).toEqual(['.agents/skills/*-skilld'])
   })
 
-  test('reads a named package file in place of package.json', async () => {
-    await writeFile(join(dir, 'package.json'), JSON.stringify({ 'claude-commit': { gitmoji: true } }))
-    await writeFile(
-      join(dir, 'package.stopwatch.json'),
-      JSON.stringify({
-        'claude-commit': { ollama: { maxChunkTokens: 16_000 } }
-      })
-    )
-    const cfg = await loadFileConfig(dir, dir, undefined, { XDG_CONFIG_HOME: dir }, 'package.stopwatch.json')
-    expect(cfg.ollama).toEqual({ maxChunkTokens: 16_000 })
-    expect(cfg.gitmoji).toBeUndefined()
-    expect((await loadFileConfig(dir, dir, undefined, { XDG_CONFIG_HOME: dir })).gitmoji).toBe(true)
-  })
-
   test('config file overrides package.json', async () => {
     await writeFile(join(dir, 'package.json'), JSON.stringify({ 'claude-commit': { gitmoji: true, multiline: true } }))
     await writeFile(join(dir, '.claude-commit.json'), JSON.stringify({ multiline: false }))
@@ -404,113 +377,26 @@ describe('ignore', () => {
   })
 })
 
-describe('ollama settings', () => {
-  test('sanitizePartial keeps a valid block', () => {
-    const out = sanitizePartial({
-      ollama: {
-        host: '  http://box:11434 ',
-        context: 65536,
-        keepAlive: '10m'
-      }
-    })
-    expect(out.ollama).toEqual({
-      host: 'http://box:11434',
-      context: 65536,
-      keepAlive: '10m'
-    })
-  })
-
-  test('drops values that cannot be used', () => {
-    const out = sanitizePartial({
-      ollama: { host: '   ', context: 0, keepAlive: true }
-    })
-    expect(out.ollama).toBeUndefined()
-  })
-
-  test('accepts a numeric or null keepAlive', () => {
-    expect(sanitizePartial({ ollama: { keepAlive: 0 } }).ollama).toEqual({
-      keepAlive: 0
-    })
-    expect(sanitizePartial({ ollama: { keepAlive: null } }).ollama).toEqual({
-      keepAlive: null
-    })
-  })
-
-  test('keeps a positive maxChunkTokens, floored, and drops anything else', () => {
-    expect(sanitizePartial({ ollama: { maxChunkTokens: 24_000.9 } }).ollama).toEqual({ maxChunkTokens: 24_000 })
-    expect(sanitizePartial({ ollama: { maxChunkTokens: 0 } }).ollama).toBeUndefined()
-    expect(sanitizePartial({ ollama: { maxChunkTokens: 0.5 } }).ollama).toBeUndefined()
-    expect(sanitizePartial({ ollama: { maxChunkTokens: '24k' } }).ollama).toBeUndefined()
-  })
-
-  test('floors a fractional context length', () => {
-    expect(sanitizePartial({ ollama: { context: 8192.7 } }).ollama?.context).toBe(8192)
-  })
-
-  test('accepts the literal auto and nothing else that is a string', () => {
-    expect(sanitizePartial({ ollama: { context: 'auto' } }).ollama).toEqual({
-      context: 'auto'
-    })
-    expect(sanitizePartial({ ollama: { context: '256k' } }).ollama).toBeUndefined()
-  })
-
-  test('merges key by key, like models', () => {
-    const merged = mergePartial({ ollama: { host: 'http://global:1', context: 4096 } }, { ollama: { context: 32768 } })
-    expect(merged.ollama).toEqual({
-      host: 'http://global:1',
-      context: 32768
-    })
-  })
-
-  test('resolveConfig fills the unset half from the defaults', () => {
-    const config = resolveConfig({ ollama: { context: 16384 } }, {})
-    expect(config.ollama).toEqual({
-      context: 16384,
-      keepAlive: null
-    })
-  })
-
-  test('ships no default host, so $OLLAMA_HOST can be the fallback, and asks the server for the window', () => {
-    expect(DEFAULT_CONFIG.ollama).toEqual({
-      context: 'auto',
-      keepAlive: null
-    })
-  })
-
-  test('$OLLAMA_HOST reaches the resolved config when no layer sets a host', () => {
-    const config = resolveConfig({}, {})
-    const env = { OLLAMA_HOST: 'http://remote-box:11434' }
-    expect(resolveOllamaConfig(config.ollama, env).host).toBe('http://remote-box:11434')
-    expect(resolveOllamaConfig(resolveConfig({}, {}).ollama, {}).host).toBe('http://localhost:11434')
-  })
-
-  test('a configured host still beats $OLLAMA_HOST', () => {
-    const config = resolveConfig({ ollama: { host: 'http://configured:1' } }, {})
-    const env = { OLLAMA_HOST: 'http://remote-box:11434' }
-    expect(resolveOllamaConfig(config.ollama, env).host).toBe('http://configured:1')
-  })
-})
-
 describe('model names', () => {
-  test('an ollama: model survives sanitisation with its tag intact', () => {
+  test('a full model id survives sanitisation intact', () => {
     const out = sanitizePartial({
-      models: { summary: 'ollama:ornith-1.5:35b', final: 'sonnet' }
+      models: { summary: 'claude-haiku-4-5', final: 'sonnet' }
     })
     expect(out.models).toEqual({
-      summary: 'ollama:ornith-1.5:35b',
+      summary: 'claude-haiku-4-5',
       final: 'sonnet'
     })
   })
 
   test('a blank model name is a mistake, not an override', () => {
-    // Keeping "" would resolve to a model no provider can serve.
+    // Keeping "" would resolve to no model at all.
     expect(sanitizePartial({ models: { summary: '  ' } }).models).toBeUndefined()
   })
 
-  test('a mixed-provider config resolves both stages independently', () => {
-    const config = resolveConfig({ models: { summary: 'ollama:ornith-1.5:35b' } }, {})
+  test('each stage resolves independently', () => {
+    const config = resolveConfig({ models: { summary: 'haiku' } }, {})
     expect(config.models).toEqual({
-      summary: 'ollama:ornith-1.5:35b',
+      summary: 'haiku',
       final: 'sonnet'
     })
   })

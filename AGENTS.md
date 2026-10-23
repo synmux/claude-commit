@@ -8,20 +8,18 @@ The pipeline lives in `src/generate.ts`; everything else feeds it.
 With `filenamesOnly: true` (`-f` / `--filenames-only`), it skips summarisation
 and sends only paths to the final model. Ignore and priority matching still
 apply. Use `diffPaths` for filename extraction and `buildFilenamesUser` for
-the final prompt; never pass diff bodies or preload the summary model in
+the final prompt; never pass diff bodies or call the summary model in
 this mode. Results contain no summaries and report zero chunks.
 
 ```plaintext
-git.ts ─▶ diff.ts (ignore, partition, chunk) ─▶ generate.ts ─▶ agent.ts ─▶ Claude | Ollama
+git.ts ─▶ diff.ts (ignore, partition, chunk) ─▶ generate.ts ─▶ agent.ts ─▶ Claude
                     ▲                                ▲
                 paths.ts, tokens.ts             prompts.ts, config.ts
 ```
 
 | Module            | Owns                                                                          |
 | ----------------- | ----------------------------------------------------------------------------- |
-| `src/agent.ts`    | `runPrompt` - the one call seam; dispatches by provider, holds Claude's SDK   |
-| `src/models.ts`   | Model-string parsing: the `ollama:` prefix, Ollama defaults. No transport     |
-| `src/ollama.ts`   | Ollama's native `/api/chat` over plain `fetch`; no SDK dependency             |
+| `src/agent.ts`    | `runPrompt` - the one call seam; holds Claude's Agent SDK                     |
 | `src/diff.ts`     | Splitting, chunk packing, `applyIgnorePatterns`, `partitionDiff`              |
 | `src/paths.ts`    | The gitignore-style matcher shared by `lowPriorityPaths` and `ignore`         |
 | `src/tokens.ts`   | Token estimation and context-window budgeting                                 |
@@ -36,7 +34,7 @@ Design records for each non-obvious feature live in
 `docs/superpowers/specs/`. Read the relevant one before changing that
 feature - they record what was rejected and why.
 
-Four behaviours are load-bearing and easy to break:
+Three behaviours are load-bearing and easy to break:
 
 - **Claude credentials are gated.** `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`
   are stripped from the SDK subprocess unless `allowApiKey` is set. Never
@@ -45,16 +43,6 @@ Four behaviours are load-bearing and easy to break:
   with `typesafe.enable` on is an error before any model call. A missing
   answer throws, and an API failure is reported to the user. Jev returns
   typed answers, not text, so it does not go through `runPrompt`.
-- **Ollama truncates an oversized prompt silently.** Every Ollama request
-  pins `options.num_ctx` and the response's token counts are checked against
-  it. Do not "simplify" either half away. The number comes from
-  `ollama.context`, which by default (`"auto"`) is read from `/api/ps` after
-  a preload with _no_ `num_ctx` - sending one on the preload would defeat
-  the probe. A separate Ollama final model is preloaded while summaries
-  run, but with an Ollama summariser only after the _last_ chunk's
-  streamed text arrives - earlier, two models that do not fit in VRAM
-  together evict each other between chunks. See
-  `docs/superpowers/specs/2026-10-20-ollama-final-warmup-design.md`.
 - **A readline prompt must settle when stdin closes.** In a terminal,
   readline owns Ctrl-C (raw mode, no SIGINT reaches the process) and closes
   itself, as it does on Ctrl-D. Ask through `askLine` in `src/ui/editor.ts`,

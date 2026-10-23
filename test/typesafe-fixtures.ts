@@ -3,7 +3,22 @@
  * tests. Only the HTTP transport is faked: the real SDK client builds the
  * request and parses the reply.
  */
+import { zstdDecompressSync } from 'node:zlib'
 import type { Questions } from '@typesafe-ai/sdk'
+
+/**
+ * The request body as the JSON text the SDK built. From 0.7.0 the SDK
+ * zstd-compresses any body of 1 KiB or more and sends it as bytes, so a
+ * stand-in transport has to undo that before it can read the request.
+ */
+function decodeRequestBody(body: RequestInit['body'], headers: Headers): string {
+  if (typeof body === 'string') return body
+  if (!(body instanceof Uint8Array)) {
+    throw new Error(`fakeJevFetch cannot decode a ${Object.prototype.toString.call(body)} body`)
+  }
+  const bytes = headers.get('content-encoding') === 'zstd' ? zstdDecompressSync(body) : body
+  return Buffer.from(bytes).toString('utf8')
+}
 
 /**
  * A plausible answer for every question: support questions pass, while the
@@ -50,8 +65,9 @@ export function fakeJevFetch(
 ) {
   const requests: RecordedJevRequest[] = []
   const fetch = async (url: string, init?: RequestInit): Promise<Response> => {
-    const body = JSON.parse(String(init?.body)) as RecordedJevRequest['body']
-    requests.push({ url, headers: new Headers(init?.headers), body })
+    const headers = new Headers(init?.headers)
+    const body = JSON.parse(decodeRequestBody(init?.body, headers)) as RecordedJevRequest['body']
+    requests.push({ url, headers, body })
     const { status, json } = reply(body)
     return new Response(JSON.stringify(json), {
       status,

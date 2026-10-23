@@ -5,65 +5,14 @@
 /**
  * Which models to use for each stage of the pipeline.
  *
- * A bare name (`sonnet`, `haiku`, a full `claude-*` id) runs through the
- * Claude Agent SDK. An `ollama:`-prefixed name runs against a local or
- * self-hosted Ollama server instead, with everything after the prefix taken
- * as the Ollama model name verbatim - tag included, so
- * `ollama:ornith-1.5:35b` means the model `ornith-1.5:35b`. The two stages
- * are resolved independently, so mixing providers is normal.
+ * Each is a Claude alias (`sonnet`, `haiku`) or a full `claude-*` id, run
+ * through the Claude Agent SDK.
  */
 export interface ModelConfig {
   /** Model used to read diffs and write summaries. Defaults to `sonnet`. */
   summary: string
   /** Model used to turn summaries into the final commit message. Defaults to `sonnet`. */
   final: string
-}
-
-/** Settings for the Ollama backend, used only by `ollama:`-prefixed models. */
-export interface OllamaConfig {
-  /**
-   * Base URL of the Ollama server. Unset by default, so that
-   * `$OLLAMA_HOST` applies, falling back to `http://localhost:11434`. A bare
-   * `host:port` (Ollama's own convention for that variable) is given an
-   * `http://` scheme.
-   */
-  host?: string
-  /**
-   * Context window requested for every Ollama call (`options.num_ctx`) and
-   * used to size diff chunks: a token count, or `"auto"` (the default) to
-   * take the window Ollama itself chooses for the model on this machine.
-   *
-   * The window is always sent explicitly, never left to the server: a
-   * prompt over it is truncated *silently* - HTTP 200, oldest content
-   * dropped, no flag on the response - and a summary written from half a
-   * diff is worse than an error, so cco pins the number it sized its chunks
-   * against and cross-checks the response's token counts.
-   *
-   * `"auto"` asks Ollama rather than guessing: the model is preloaded with
-   * no `num_ctx`, which makes the server pick from its VRAM tiers (4k / 32k
-   * / 256k, capped at the model's trained maximum), and the choice is read
-   * back from `/api/ps`. That is the largest window the server believes
-   * this machine can run, resolved once per model per run. A number pins
-   * the window instead - lower it when memory is tight (memory scales with
-   * it, multiplied by `OLLAMA_NUM_PARALLEL`), or raise it past the tier if
-   * you know better than the server does.
-   */
-  context: number | 'auto'
-  /**
-   * Largest diff chunk, in tokens, sent to an `ollama:` summary model,
-   * applied after the window clamp. A large window lets a chunk grow past
-   * what a local model can summarise inside Node's 300 s fetch limit, so
-   * this splits big diffs into more, shorter requests. Unset means no cap
-   * beyond the window and the global `maxChunkTokens`.
-   */
-  maxChunkTokens?: number
-  /**
-   * How long the server keeps the model loaded after a request: a duration
-   * string (`"10m"`), seconds as a number, `0` to unload immediately, or a
-   * negative value to pin it. `null` leaves the server's own default (which
-   * is itself 5 minutes unless `OLLAMA_KEEP_ALIVE` says otherwise).
-   */
-  keepAlive: string | number | null
 }
 
 /**
@@ -119,12 +68,6 @@ export interface Config {
   interactive: boolean
   /** How many candidate messages to generate in interactive mode. */
   interactiveCount: number
-  /**
-   * Sampling temperature for the final model when generating interactive
-   * options, to encourage variety between candidates. `null` leaves the model
-   * at its default. Only applied in interactive mode.
-   */
-  interactiveTemperature: number | null
   /**
    * Name of the progress spinner animation: any spinner from the cli-spinners
    * set bundled with ora (e.g. `"dots"`, `"moon"`, `"material"`). Unknown
@@ -182,8 +125,6 @@ export interface Config {
    * cannot.
    */
   ignore: string[]
-  /** Settings for the Ollama backend (`ollama:`-prefixed models). */
-  ollama: OllamaConfig
   /** Settings for the TypeSafe candidate check. */
   typesafe: TypeSafeConfig
   /**
@@ -200,11 +141,9 @@ export interface Config {
 export type PartialConfig = {
   [K in keyof Config]?: K extends 'models'
     ? Partial<ModelConfig>
-    : K extends 'ollama'
-      ? Partial<OllamaConfig>
-      : K extends 'typesafe'
-        ? Partial<TypeSafeConfig>
-        : Config[K]
+    : K extends 'typesafe'
+      ? Partial<TypeSafeConfig>
+      : Config[K]
 }
 
 /**
@@ -241,16 +180,9 @@ export interface FileChange {
   path: string
 }
 
-/**
- * One prompt to one model, whichever provider serves it.
- *
- * `model` carries the provider: bare names go to Claude, `ollama:`-prefixed
- * ones to Ollama (see {@link ModelConfig}). Some options only apply to one
- * provider - `allowApiKey` gates Claude credentials, `ollama` supplies the
- * host and context window - and each is simply ignored by the other.
- */
+/** One prompt to one Claude model. */
 export interface RunPromptOptions {
-  /** Model string: an alias (`sonnet`), a full id, or `ollama:<name>[:<tag>]`. */
+  /** Model string: an alias (`sonnet`) or a full id. */
   model: string
   /** Full custom system prompt. */
   system: string
@@ -258,15 +190,8 @@ export interface RunPromptOptions {
   onText?: (delta: string) => void
   /** Abort the in-flight request. */
   abortController?: AbortController
-  /** Receives the underlying CLI's stderr (for `--verbose`). Claude only. */
+  /** Receives the underlying CLI's stderr (for `--verbose`). */
   onStderr?: (data: string) => void
-  /**
-   * Sampling temperature. Used to add variety when generating several
-   * interactive options. Models that don't accept a temperature override
-   * will reject the request, so the caller should be prepared to retry
-   * without it.
-   */
-  temperature?: number
   /**
    * Request a structured JSON response matching this schema. The parsed object
    * is returned on {@link ModelResult.structured}. Models that don't support
@@ -278,9 +203,7 @@ export interface RunPromptOptions {
    * Allow API credentials from the environment to reach the Claude Agent SDK
    * subprocess. Defaults to false: `ANTHROPIC_API_KEY` /
    * `ANTHROPIC_AUTH_TOKEN` are stripped so the run is billed to the Claude
-   * subscription. Has no meaning for Ollama, which takes no credential.
+   * subscription.
    */
   allowApiKey?: boolean
-  /** Ollama host and context settings; required for an `ollama:` model. */
-  ollama?: OllamaConfig
 }
