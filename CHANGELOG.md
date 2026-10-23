@@ -11,10 +11,6 @@ carrying the same notes at greater length.
 
 ### [Unreleased] - Added
 
-- **`package.stopwatch.json`.** `bin/stopwatch.ts` reads this file in place
-  of `package.json` when it exists, so settings can be tried without
-  changing the real config.
-
 - **TypeSafe candidate check.** With `"typesafe": { "enable": true }` or
   `--typesafe`, interactive options are checked by TypeSafe's Jev model
   before the picker opens. An option whose subject or edits the summaries

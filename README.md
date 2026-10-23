@@ -416,29 +416,6 @@ pnpm run format      # prettier, then biome, then trunk fmt - in that order
 pnpm run build       # bundle bin/ and index.ts into dist/ (only needed to publish)
 ```
 
-To see whether a model is too slow for this machine, time it on three
-synthetic commits of about 400, 8.5k and 40k tokens:
-
-```sh
-node bin/stopwatch.ts haiku
-node bin/stopwatch.ts sonnet
-```
-
-It runs the real pipeline with that model in both stages, using the rest
-of your config, and prints the summary, final and total time for each commit.
-To try settings without touching your real config, put them under a
-`claude-commit` key in a `package.stopwatch.json` at the repo root. When that
-file exists, the stopwatch reads it in place of `package.json` (git ignores
-it):
-
-```json
-{
-  "claude-commit": { "maxChunkTokens": 24000 }
-}
-```
-
-The commits are generated fresh each run, so a prompt cache cannot flatter a second run.
-
 The sources run directly on Node's native type stripping, so there is no build
 step during development: `node bin/cco.js` picks up `dist/` when it exists and
 falls back to the TypeScript entry otherwise.

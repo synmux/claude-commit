@@ -232,20 +232,6 @@ describe('loadFileConfig', () => {
     expect(cfg.lowPriorityPaths).toEqual(['.agents/skills/*-skilld'])
   })
 
-  test('reads a named package file in place of package.json', async () => {
-    await writeFile(join(dir, 'package.json'), JSON.stringify({ 'claude-commit': { gitmoji: true } }))
-    await writeFile(
-      join(dir, 'package.stopwatch.json'),
-      JSON.stringify({
-        'claude-commit': { maxChunkTokens: 16_000 }
-      })
-    )
-    const cfg = await loadFileConfig(dir, dir, undefined, { XDG_CONFIG_HOME: dir }, 'package.stopwatch.json')
-    expect(cfg.maxChunkTokens).toBe(16_000)
-    expect(cfg.gitmoji).toBeUndefined()
-    expect((await loadFileConfig(dir, dir, undefined, { XDG_CONFIG_HOME: dir })).gitmoji).toBe(true)
-  })
-
   test('config file overrides package.json', async () => {
     await writeFile(join(dir, 'package.json'), JSON.stringify({ 'claude-commit': { gitmoji: true, multiline: true } }))
     await writeFile(join(dir, '.claude-commit.json'), JSON.stringify({ multiline: false }))

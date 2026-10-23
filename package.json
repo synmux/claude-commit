@@ -69,7 +69,6 @@
   },
   "files": [
     "bin",
-    "!bin/stopwatch.ts",
     "dist",
     "CHANGELOG.md"
   ],
@@ -90,7 +89,6 @@
     "prepare": "skilld prepare || true",
     "prepublishOnly": "pnpm run build",
     "start": "node bin/cco.js",
-    "stopwatch": "node bin/stopwatch.ts",
     "test": "vitest run"
   },
   "type": "module",

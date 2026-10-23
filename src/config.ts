@@ -230,16 +230,13 @@ async function findConfigFile(startDir: string, rootDir: string): Promise<string
  * to `repoRoot`). An explicit `configPath` short-circuits the project-file
  * discovery; the global and `package.json` layers still apply beneath it. `env`
  * supplies `XDG_CONFIG_HOME` for locating the global config (defaults to
- * `process.env`). `packageFile` names the repo-root file read in place of
- * `package.json`, for tools such as `bin/stopwatch.ts` that keep an
- * experimental copy.
+ * `process.env`).
  */
 export async function loadFileConfig(
   cwd: string,
   repoRoot: string,
   configPath?: string,
-  env: Record<string, string | undefined> = process.env,
-  packageFile = 'package.json'
+  env: Record<string, string | undefined> = process.env
 ): Promise<PartialConfig> {
   let result: PartialConfig = {}
 
@@ -257,7 +254,7 @@ export async function loadFileConfig(
   // committing its fix).
   let pkg: unknown
   try {
-    pkg = await readJsonIfExists(join(repoRoot, packageFile))
+    pkg = await readJsonIfExists(join(repoRoot, 'package.json'))
   } catch {
     pkg = undefined
   }
