@@ -23,7 +23,7 @@ lint:
     - biome@2.6.3
     - taplo@0.10.0
     - actionlint@1.7.12
-    - checkov@3.3.30
+    - checkov@3.4.0
     - git-diff-check
     - grype@0.121.0
     - markdownlint@0.50.0
@@ -53,4 +53,4 @@ actions:
     - trunk-upgrade-available
 tools:
   enabled:
-    - oxfmt@0.74.0
+    - oxfmt@0.75.0
