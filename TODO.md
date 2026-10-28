@@ -6,7 +6,7 @@ Open work, most useful first. Finished and rejected work is recorded in
 methods and numbers they refer to. The bugs from the 2026-10-20 review
 (items 1a-1h) are fixed; see CHANGELOG.md under "Unreleased - Fixed".
 
-## 0. Manual ideas
+## 0. Ideas
 
 - Read previous commit messages to get an idea of how to format our own
 
