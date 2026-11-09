@@ -41,7 +41,7 @@
     "@typesafe-ai/sdk": "^0.7.0",
     "cli-spinners": "^3.4.0",
     "commander": "^15.0.0",
-    "ora": "^9.4.1",
+    "ora": "^10.0.0",
     "picomatch": "^4.0.7"
   },
   "description": "Generate git commit messages with Claude, using your Claude Code subscription.",
