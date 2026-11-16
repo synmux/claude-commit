@@ -74,11 +74,17 @@ catalog are rejected even if a backend might still accept them.
 - `generate.ts` carries style through both summary priorities, structured and
   plain final attempts, multiple candidates and filenames-only generation.
 - Interactive generation carries the same option rather than rebuilding it.
-- TypeSafe remains unchanged: it checks the existing custom prompt and evidence,
-  not an additional potentially conflicting style rubric. Its failure reporting
-  is unchanged; CLI key preflight also runs before style discovery and analysis.
-  Setup analysis usage is separate from
-  the existing generation pipeline's cost total.
+- When TypeSafe is enabled, its existing request adds a `follows_style` Noul
+  question per candidate, using the custom-instruction threshold of 0.2. The
+  guide is state data, not evaluator instructions. Explicit formatting values,
+  subject template and custom instructions override conflicting guide rules;
+  null options defer to the guide. The guide and formatting overrides are sent
+  to TypeSafe only with an active guide, including an existing empty file.
+  Violations carry a warning and move last like custom-instruction violations;
+  they do not block a commit. Missing answers throw and are reported as failed
+  checks, never passes. No extra request runs, and no-guide behavior is unchanged.
+  CLI key preflight still runs before style discovery and analysis. Setup analysis
+  usage is separate from the existing generation pipeline's cost total.
 
 ## Rejected
 

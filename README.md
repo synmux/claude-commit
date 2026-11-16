@@ -192,6 +192,7 @@ it was written from, then:
 - flags a subject about low-priority changes when the primary changes are
   elsewhere
 - flags an option that ignores your `customPrompt`, when one is set
+- flags an option that ignores an active `COMMITS.md`, respecting explicit formatting overrides
 - drops an option that says the same thing as one above it
 - warns when the staged changes look like more than one commit, so you
   can split them before committing
@@ -216,8 +217,9 @@ another variable, set `"typesafe.env"`, for example
 `"env": "__TYPESAFE_API_KEY"`. If the check is on and the key is missing,
 cco stops before it calls any model.
 
-When on, cco sends the summaries (or file paths) and the candidate
-messages to TypeSafe. It never sends diff content. The check is off by
+When on, cco sends the summaries (or file paths), candidate messages, custom
+instructions, and any active `COMMITS.md` with its explicit overrides to
+TypeSafe. It never sends diff content. The check is off by
 default for that reason. It adds one request to every run, interactive
 or not.
 
@@ -308,8 +310,13 @@ Use `--no-conventional`, `--no-gitmoji`, or `--no-multiline` for explicit false.
 Templates and custom prompts also override conflicting guide instructions.
 Without an active guide, null behaves like the previous false default: a plain,
 imperative, capitalized, single-line subject. Existing explicit options keep
-their behavior. TypeSafe continues checking the existing custom prompt rules;
-it does not separately judge compliance with `COMMITS.md`.
+their behavior. When `typesafe.enable` is true, the existing TypeSafe request
+also checks each candidate against the active guide. Explicit formatting values,
+templates and custom prompts take precedence there too; null values defer to
+the guide. The guide and those overrides are sent to TypeSafe as check data.
+Violations are flagged like ignored custom instructions, not automatically
+rejected. Missing answers or API failures are reported as failed checks; a
+missing key remains an error. Without an active guide, TypeSafe is unchanged.
 
 `typesafe` configures the [candidate check](#typesafe-candidate-check).
 `env` names the variable that holds the API key. `model` is pinned because

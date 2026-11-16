@@ -661,13 +661,21 @@ describe('TypeSafe candidate check', () => {
     })
   })
 
-  test('a missing key fails before any model is called', async () => {
-    const { runner, calls } = threeOptionRunner()
-    await expect(generateCommit(textDiff, typesafeConfig, { runner, count: 3, env: {} })).rejects.toThrow(
-      /TYPESAFE_API_KEY/
-    )
-    expect(calls).toHaveLength(0)
-  })
+  test.each([null, 'Use repository conventions.'])(
+    'a missing key fails before any model is called (style=%s)',
+    async (commitStyle) => {
+      const { runner, calls } = threeOptionRunner()
+      await expect(
+        generateCommit(textDiff, typesafeConfig, {
+          runner,
+          count: 3,
+          env: {},
+          commitStyle
+        })
+      ).rejects.toThrow(/TYPESAFE_API_KEY/)
+      expect(calls).toHaveLength(0)
+    }
+  )
 
   test('reads the key from the variable "typesafe.env" names', async () => {
     const { runner } = threeOptionRunner()
@@ -685,23 +693,27 @@ describe('TypeSafe candidate check', () => {
     expect(requests[0]?.headers.get('authorization')).toBe('Bearer alt')
   })
 
-  test('a failed check keeps the model order and says why', async () => {
-    const { runner } = threeOptionRunner()
-    const { fetch } = fakeJevFetch(() => ({
-      status: 401,
-      json: { error: 'invalid key' }
-    }))
-    const result = await generateCommit(textDiff, typesafeConfig, {
-      runner,
-      count: 3,
-      env,
-      typesafeFetch: fetch
-    })
+  test.each([null, 'Use repository conventions.'])(
+    'a failed check keeps the model order and says why (style=%s)',
+    async (commitStyle) => {
+      const { runner } = threeOptionRunner()
+      const { fetch } = fakeJevFetch(() => ({
+        status: 401,
+        json: { error: 'invalid key' }
+      }))
+      const result = await generateCommit(textDiff, typesafeConfig, {
+        runner,
+        count: 3,
+        env,
+        typesafeFetch: fetch,
+        commitStyle
+      })
 
-    expect(result.messages).toEqual(candidates)
-    expect(result.warnings).toEqual([[], [], []])
-    expect(result.candidateCheck?.status).toBe('failed')
-  })
+      expect(result.messages).toEqual(candidates)
+      expect(result.warnings).toEqual([[], [], []])
+      expect(result.candidateCheck?.status).toBe('failed')
+    }
+  )
 
   test('checks a single non-interactive message too', async () => {
     const { runner } = threeOptionRunner()
@@ -725,14 +737,15 @@ describe('TypeSafe candidate check', () => {
     expect(calls).toHaveLength(0)
   })
 
-  test('does not run when disabled', async () => {
+  test.each([null, 'Use repository conventions.'])('does not run when disabled (style=%s)', async (commitStyle) => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch()
     const disabled = await generateCommit(textDiff, baseConfig, {
       runner,
       count: 3,
       env: {},
-      typesafeFetch: fetch
+      typesafeFetch: fetch,
+      commitStyle
     })
 
     expect(requests).toHaveLength(0)
@@ -777,6 +790,65 @@ describe('TypeSafe candidate check', () => {
     expect(requests[0]?.body.state.custom_instructions).toBe('Mention the ticket.')
     expect(result.messages.at(-1)).toBe(candidates[1])
     expect(result.warnings.at(-1)).toEqual(['ignores your custom instructions'])
+  })
+
+  test.each([
+    [1, false],
+    [3, false],
+    [1, true],
+    [3, true]
+  ] as const)('checks active style in the same request (count=%s, filenamesOnly=%s)', async (count, filenamesOnly) => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch({ c0_follows_style: 0.05 })
+    const config: Config = {
+      ...typesafeConfig,
+      filenamesOnly,
+      conventionalCommits: false,
+      gitmoji: null,
+      multiline: true,
+      template: '[PROJ] {message}',
+      customPrompt: 'Mention the ticket.'
+    }
+    const result = await generateCommit(textDiff, config, {
+      runner,
+      count,
+      env,
+      typesafeFetch: fetch,
+      commitStyle: 'Use past tense and no body.'
+    })
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.body.state.repository_style).toBe('Use past tense and no body.')
+    expect(requests[0]?.body.state.style_overrides).toEqual({
+      conventionalCommits: false,
+      gitmoji: null,
+      multiline: true,
+      template: '[PROJ] {message}'
+    })
+    expect(requests[0]?.body.state.custom_instructions).toBe('Mention the ticket.')
+    expect(result.candidateCheck?.status).toBe('checked')
+    expect(result.warnings.some((warnings) => warnings.includes('ignores COMMITS.md instructions'))).toBe(true)
+  })
+
+  test('a missing style answer reports a failed check, never a pass', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch } = fakeJevFetch((body) => {
+      const answers = jevAnswers(body.questions)
+      delete answers.c0_follows_style
+      return { status: 200, json: { model: 'jev-1.13.0', answers } }
+    })
+    const result = await generateCommit(textDiff, typesafeConfig, {
+      runner,
+      count: 3,
+      env,
+      typesafeFetch: fetch,
+      commitStyle: 'Use past tense.'
+    })
+    expect(result.candidateCheck).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('c0_follows_style')
+    })
+    expect(result.messages).toEqual(candidates)
+    expect(result.warnings).toEqual([[], [], []])
   })
 
   test('checks filenames-only candidates against the file list', async () => {

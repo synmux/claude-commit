@@ -365,7 +365,16 @@ export async function generateCommit(
       const checked = await checkCandidates(deduped, evidence, {
         apiKey: typesafeKey,
         settings: config.typesafe,
-        rules: { customPrompt: config.customPrompt },
+        rules: {
+          customPrompt: config.customPrompt,
+          commitStyle: options.commitStyle,
+          styleOverrides: {
+            conventionalCommits: config.conventionalCommits,
+            gitmoji: config.gitmoji,
+            multiline: config.multiline,
+            template: config.template
+          }
+        },
         priorWarnings: formatWarnings,
         ...(typesafeFetch ? { fetch: typesafeFetch } : {}),
         ...(abortController ? { signal: abortController.signal } : {})
