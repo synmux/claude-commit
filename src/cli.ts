@@ -260,7 +260,7 @@ export async function run(argv: string[]): Promise<number> {
         model: config.models.commits,
         allowApiKey: config.allowApiKey,
         yes: Boolean(opts.yes),
-        hasTty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+        hasTty: Boolean(process.stdin.isTTY && process.stderr.isTTY),
         abortController,
         onPhase: (label) => styleSpinner.start(label),
         onNote: (message) => {

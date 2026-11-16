@@ -13,9 +13,50 @@ import {
   resolveInteractiveMode,
   run
 } from '../src/cli.ts'
+import * as commitStyle from '../src/commit-style.ts'
 import { resolveConfig } from '../src/config.ts'
+import { ClaudeCommitError } from '../src/errors.ts'
 
 describe('commit style flags', () => {
+  test.each([
+    [true, false, true, true],
+    [true, true, false, false],
+    [false, true, true, false]
+  ])('consent TTYs use stdin=%s and stderr, not stdout=%s (stderr=%s)', async (input, output, error, expected) => {
+    const root = await mkdtemp(join(tmpdir(), 'cco-style-tty-'))
+    const original = process.cwd()
+    const streams = [process.stdin, process.stdout, process.stderr]
+    const descriptors = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'))
+    streams.forEach((stream, index) => {
+      Object.defineProperty(stream, 'isTTY', {
+        configurable: true,
+        value: [input, output, error][index]
+      })
+    })
+    const setup = vi.spyOn(commitStyle, 'setupCommitStyle').mockRejectedValue(new ClaudeCommitError('stop at setup'))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const git = promisify(execFile)
+    try {
+      await git('git', ['init', '-q', root])
+      await writeFile(join(root, 'change.txt'), 'change\n')
+      await git('git', ['-C', root, 'add', 'change.txt'])
+      await writeFile(join(root, 'config.json'), '{}')
+      process.chdir(root)
+      expect(await run(['--config', join(root, 'config.json'), '--dry-run', '--no-spinner'])).toBe(1)
+      expect(setup).toHaveBeenCalledWith(expect.objectContaining({ hasTty: expected }))
+    } finally {
+      process.chdir(original)
+      streams.forEach((stream, index) => {
+        const descriptor = descriptors[index]
+        if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor)
+        else Reflect.deleteProperty(stream, 'isTTY')
+      })
+      setup.mockRestore()
+      stderr.mockRestore()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test.each([
     { args: ['-i'], ignore: [], error: 'requires an interactive terminal' },
     { args: ['--dry-run'], ignore: ['change.txt'], error: '"ignore" pattern' }
