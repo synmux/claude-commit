@@ -34,10 +34,10 @@ describe('commit style setup', () => {
     }
   }
 
-  test('null disables all work, including file access and validation', async () => {
+  test.each([null, undefined])('%s disables all work, including file access and validation', async (model) => {
     const opts = options()
     await mkdir(join(root, 'COMMITS.md'))
-    expect(await setupCommitStyle({ ...opts, model: null })).toBeNull()
+    expect(await setupCommitStyle({ ...opts, model })).toBeNull()
     expect(opts.validateModel).not.toHaveBeenCalled()
   })
 

@@ -12,7 +12,7 @@ import { askLine, type PromptIo } from './ui/editor.ts'
 
 interface CommitStyleOptions {
   repoRoot: string
-  model: string | null
+  model?: string | null
   allowApiKey: boolean
   yes: boolean
   hasTty: boolean
@@ -32,7 +32,7 @@ export async function setupCommitStyle(options: CommitStyleOptions): Promise<str
     runner = runPrompt,
     readHistory = getRecentCommitMessages
   } = options
-  if (model === null) return null
+  if (model == null) return null
   await validateModel(model, {
     allowApiKey: options.allowApiKey,
     abortController: options.abortController

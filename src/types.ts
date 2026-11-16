@@ -9,8 +9,8 @@
  * through the Claude Agent SDK.
  */
 export interface ModelConfig {
-  /** Opt-in model for analyzing commit history. Defaults to null (disabled). */
-  commits: string | null
+  /** Opt-in model for analyzing commit history. Null or undefined disables it; default null. */
+  commits?: string | null
   /** Model used to read diffs and write summaries. Defaults to `sonnet`. */
   summary: string
   /** Model used to turn summaries into the final commit message. Defaults to `sonnet`. */

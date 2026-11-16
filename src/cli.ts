@@ -250,7 +250,7 @@ export async function run(argv: string[]): Promise<number> {
       throw new ClaudeCommitError('Interactive mode (-i) requires an interactive terminal.')
     }
     prepareCommitDiff(diff, config)
-    if (config.models.commits !== null && config.typesafe.enable) resolveTypeSafeKey(config.typesafe)
+    if (config.models.commits != null && config.typesafe.enable) resolveTypeSafeKey(config.typesafe)
 
     const styleSpinner = new Spinner(useSpinner, config.spinner)
     let commitStyle: string | null
