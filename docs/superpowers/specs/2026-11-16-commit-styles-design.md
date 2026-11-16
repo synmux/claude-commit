@@ -35,7 +35,10 @@ therefore not staged or described by this run. Setup owns the full decision tree
 1. Null analysis model: return without validation or file access.
 2. Validate the model, even if a guide exists. Failure is fatal.
 3. Read only a regular `COMMITS.md` in the repo root if present. Symlinks and
-   other non-files are errors. An empty or whitespace-only guide is inactive:
+   other non-files are errors. Without `O_NOFOLLOW` (such as on Windows), check
+   with `lstat` before opening; a path replacement between those operations can
+   bypass symlink rejection. Always check the opened handle is a regular file.
+   An empty or whitespace-only guide is inactive:
    note "COMMITS.md is empty; continuing without repository style." and return
    without regeneration or modifying the file. This also applies to a file
    that appears during analysis.
@@ -52,7 +55,9 @@ therefore not staged or described by this run. Setup owns the full decision tree
    analysis prompt explains that the history may be truncated.
 6. Write a temporary file, then publish it with an exclusive hard link. On
    filesystems without hard-link support, create the destination exclusively
-   with no-follow flags, write and fsync it, and remove it if writing fails.
+   with no-follow flags where available, write and fsync it, and remove it if
+   writing fails. Exclusive creation rejects existing paths, including symlinks,
+   even without `O_NOFOLLOW`.
    Always remove the temporary file. If a file appeared meanwhile, read it
    instead of overwriting it. Never create an empty generated guide.
 

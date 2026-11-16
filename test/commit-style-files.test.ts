@@ -45,21 +45,29 @@ function setup() {
   })
 }
 
-test('fails closed before opening a guide when O_NOFOLLOW is unavailable', async () => {
+test('reads a regular guide without O_NOFOLLOW when the flag is unavailable', async () => {
   await actual.writeFile(join(root, 'COMMITS.md'), '# Existing guide')
   Reflect.set(constants, 'O_NOFOLLOW', undefined)
-  await expect(setup()).rejects.toThrow('O_NOFOLLOW is unavailable')
+  expect(await setup()).toBe('# Existing guide')
+  expect(open).toHaveBeenCalledWith(join(root, 'COMMITS.md'), constants.O_RDONLY | constants.O_NONBLOCK)
+})
+
+test('rejects a symlink before opening when O_NOFOLLOW is unavailable', async () => {
+  const target = join(root, 'target.md')
+  await actual.writeFile(target, '# Target guide')
+  await actual.symlink(target, join(root, 'COMMITS.md'))
+  Reflect.set(constants, 'O_NOFOLLOW', undefined)
+  await expect(setup()).rejects.toThrow('COMMITS.md must be a regular file.')
   expect(open).not.toHaveBeenCalled()
 })
 
-test('fails closed in exclusive-create fallback when O_NOFOLLOW is unavailable', async () => {
-  vi.mocked(link).mockImplementationOnce(async () => {
-    Reflect.set(constants, 'O_NOFOLLOW', undefined)
-    throw Object.assign(new Error('unsupported'), { code: 'ENOTSUP' })
-  })
-  await expect(setup()).rejects.toThrow('O_NOFOLLOW is unavailable')
-  expect(open).toHaveBeenCalledOnce()
-  expect(await readdir(root)).toEqual([])
+test('creates exclusively without O_NOFOLLOW when hard links and the flag are unavailable', async () => {
+  Reflect.set(constants, 'O_NOFOLLOW', undefined)
+  vi.mocked(link).mockRejectedValueOnce(Object.assign(new Error('unsupported'), { code: 'ENOTSUP' }))
+  expect(await setup()).toBe('# Style\n')
+  expect(open).toHaveBeenCalledWith(join(root, 'COMMITS.md'), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL)
+  expect(await readFile(join(root, 'COMMITS.md'), 'utf8')).toBe('# Style\n')
+  expect(await readdir(root)).toEqual(['COMMITS.md'])
 })
 
 test.each(['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS'])(

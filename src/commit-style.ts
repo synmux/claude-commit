@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { link, open, unlink, writeFile } from 'node:fs/promises'
+import { link, lstat, open, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { runPrompt, validateCommitStyleModel } from './agent.ts'
@@ -98,7 +98,7 @@ export async function setupCommitStyle(options: CommitStyleOptions): Promise<str
 }
 
 async function createStyleExclusively(path: string, style: string): Promise<void> {
-  const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollowFlag())
+  const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0))
   try {
     try {
       await file.writeFile(style, 'utf8')
@@ -110,13 +110,6 @@ async function createStyleExclusively(path: string, style: string): Promise<void
     await unlink(path)
     throw error
   }
-}
-
-function noFollowFlag(): number {
-  if (constants.O_NOFOLLOW === undefined) {
-    throw new ClaudeCommitError('Cannot safely access COMMITS.md: O_NOFOLLOW is unavailable on this platform.')
-  }
-  return constants.O_NOFOLLOW
 }
 
 function budgetHistory(messages: string[], model: string): string[] {
@@ -143,7 +136,11 @@ function activeStyle(style: string, onNote: CommitStyleOptions['onNote']): strin
 
 async function readStyle(path: string): Promise<string | null> {
   try {
-    const file = await open(path, constants.O_RDONLY | noFollowFlag() | constants.O_NONBLOCK)
+    if (constants.O_NOFOLLOW === undefined) {
+      // Without O_NOFOLLOW, a symlink replacement can race between lstat and open.
+      if ((await lstat(path)).isSymbolicLink()) throw new ClaudeCommitError('COMMITS.md must be a regular file.')
+    }
+    const file = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | constants.O_NONBLOCK)
     try {
       if (!(await file.stat()).isFile()) throw new ClaudeCommitError('COMMITS.md must be a regular file.')
       return await file.readFile('utf8')

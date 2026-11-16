@@ -288,7 +288,9 @@ failure is reported as an inability to verify, never as a successful validation.
 Catalog discovery sends no generation prompt and preserves the credential gate.
 
 cco reads only a regular `COMMITS.md` file in the repository root; symlinks are
-rejected. An empty or whitespace-only file is kept but disables repository style
+rejected. On platforms without `O_NOFOLLOW` (such as Windows), a symlink check
+precedes opening, leaving a race window if the path is replaced between the two.
+An empty or whitespace-only file is kept but disables repository style
 for the run, with a note; it is not regenerated. Otherwise, cco uses the file as
 mandatory commit-writing instructions. If it is missing, cco asks permission to
 analyze the latest 100 non-merge commit messages, including bodies, and create a
