@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest'
 import type { runPrompt } from '../src/agent.ts'
 import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
-import { describeCheckNotices, generateCommit } from '../src/generate.ts'
+import { describeCheckNotices, generateCommit, prepareCommitDiff } from '../src/generate.ts'
 import { availableContextTokens, estimateDiffTokens } from '../src/tokens.ts'
 import type { Config, ModelResult } from '../src/types.ts'
 import { answeringJevFetch, fakeJevFetch, jevAnswers } from './typesafe-fixtures.ts'
@@ -155,6 +155,31 @@ describe('generateCommit', () => {
       })
     ).rejects.toThrow(/COMMITS.md leaves no room.*Shorten COMMITS.md/)
     expect(runner).not.toHaveBeenCalled()
+  })
+
+  test('reuses prepared diff and resolved key without reading either input again', async () => {
+    const config = {
+      ...baseConfig,
+      typesafe: { ...baseConfig.typesafe, enable: true }
+    }
+    const { runner } = stubRunner()
+    const { fetch } = answeringJevFetch()
+    const options = {
+      runner,
+      typesafeFetch: fetch,
+      preparedDiff: prepareCommitDiff(textDiff, config),
+      typesafeKey: 'ts-key',
+      env: new Proxy(
+        {},
+        {
+          get() {
+            throw new Error('key resolved twice')
+          }
+        }
+      )
+    }
+    const result = await generateCommit('', config, options)
+    expect(result.messages).toEqual(['fix: stubbed message'])
   })
 
   test('filenames-only mode ignores the unused summary budget', async () => {

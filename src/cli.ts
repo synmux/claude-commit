@@ -10,6 +10,7 @@ import { ClaudeCommitError } from './errors.ts'
 import {
   describeCandidateCheck,
   describeCheckNotices,
+  type GenerateOptions,
   type GenerateResult,
   generateCommit,
   type IgnoreStats,
@@ -249,8 +250,8 @@ export async function run(argv: string[]): Promise<number> {
     if (interactiveMode === 'no-tty-error') {
       throw new ClaudeCommitError('Interactive mode (-i) requires an interactive terminal.')
     }
-    prepareCommitDiff(diff, config)
-    if (config.models.commits != null && config.typesafe.enable) resolveTypeSafeKey(config.typesafe)
+    const preparedDiff = prepareCommitDiff(diff, config)
+    const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe) : null
 
     const styleSpinner = new Spinner(useSpinner, config.spinner)
     let commitStyle: string | null
@@ -276,13 +277,19 @@ export async function run(argv: string[]): Promise<number> {
       const { runInteractive } = await import('./ui/interactive.ts')
       return await runInteractive(diff, config, {
         commitStyle,
+        preparedDiff,
+        typesafeKey,
         verbose,
         spinner: useSpinner,
         abortController
       })
     }
 
-    return await runNonInteractive(diff, config, opts, verbose, useSpinner, abortController, commitStyle)
+    return await runNonInteractive(diff, config, opts, verbose, useSpinner, abortController, {
+      commitStyle,
+      preparedDiff,
+      typesafeKey
+    })
   } catch (err) {
     if (err instanceof ClaudeCommitError) {
       process.stderr.write(`${color('31', 'error:')} ${err.message}\n`)
@@ -301,7 +308,7 @@ async function runNonInteractive(
   verbose: boolean,
   useSpinner: boolean,
   abortController: AbortController,
-  commitStyle: string | null
+  preflight: Pick<GenerateOptions, 'commitStyle' | 'preparedDiff' | 'typesafeKey'>
 ): Promise<number> {
   const spinner = new Spinner(useSpinner, config.spinner)
 
@@ -309,7 +316,7 @@ async function runNonInteractive(
   let result: GenerateResult
   try {
     result = await generateCommit(diff, config, {
-      commitStyle,
+      ...preflight,
       progress: { onPhase: (label) => spinner.update(label) },
       abortController
     })

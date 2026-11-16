@@ -16,8 +16,74 @@ import {
 import * as commitStyle from '../src/commit-style.ts'
 import { resolveConfig } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
+import * as generation from '../src/generate.ts'
+import * as typesafe from '../src/typesafe.ts'
+import * as interactive from '../src/ui/interactive.ts'
 
 describe('commit style flags', () => {
+  test.each([false, true])('passes preflight results into generation (interactive=%s)', async (isInteractive) => {
+    const root = await mkdtemp(join(tmpdir(), 'cco-preflight-reuse-'))
+    const original = process.cwd()
+    const streams = [process.stdin, process.stdout]
+    const descriptors = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'))
+    streams.forEach((stream) => {
+      Object.defineProperty(stream, 'isTTY', {
+        configurable: true,
+        value: true
+      })
+    })
+    const prepared = vi.spyOn(generation, 'prepareCommitDiff')
+    const key = vi.spyOn(typesafe, 'resolveTypeSafeKey').mockReturnValue('resolved-key')
+    const setup = vi.spyOn(commitStyle, 'setupCommitStyle').mockResolvedValue('repository style')
+    const generate = vi
+      .spyOn(generation, 'generateCommit')
+      .mockRejectedValue(new ClaudeCommitError('stop after preflight'))
+    const picker = vi
+      .spyOn(interactive, 'runInteractive')
+      .mockRejectedValue(new ClaudeCommitError('stop after preflight'))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const git = promisify(execFile)
+    try {
+      await git('git', ['init', '-q', root])
+      await writeFile(join(root, 'change.txt'), 'change\n')
+      await git('git', ['-C', root, 'add', 'change.txt'])
+      const path = join(root, 'config.json')
+      await writeFile(
+        path,
+        JSON.stringify({
+          models: { commits: 'fable' },
+          typesafe: { enable: true }
+        })
+      )
+      process.chdir(root)
+      expect(await run(['--config', path, '--no-spinner', ...(isInteractive ? ['-i'] : ['--dry-run'])])).toBe(1)
+      expect(prepared).toHaveBeenCalledOnce()
+      expect(key).toHaveBeenCalledOnce()
+      expect(isInteractive ? picker : generate).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.objectContaining({
+          commitStyle: 'repository style',
+          preparedDiff: prepared.mock.results[0]?.value,
+          typesafeKey: 'resolved-key'
+        })
+      )
+    } finally {
+      process.chdir(original)
+      streams.forEach((stream, index) => {
+        const descriptor = descriptors[index]
+        if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor)
+        else Reflect.deleteProperty(stream, 'isTTY')
+      })
+      prepared.mockRestore()
+      key.mockRestore()
+      setup.mockRestore()
+      generate.mockRestore()
+      picker.mockRestore()
+      stderr.mockRestore()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
   test.each([
     [true, false, true, true],
     [true, true, false, false],

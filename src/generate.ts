@@ -70,6 +70,8 @@ export interface GenerateProgress {
 
 export interface GenerateOptions {
   commitStyle?: string | null
+  preparedDiff?: ReturnType<typeof prepareCommitDiff>
+  typesafeKey?: string | null
   /** Number of candidate messages to produce (interactive mode uses > 1). */
   count?: number
   progress?: GenerateProgress
@@ -264,8 +266,8 @@ export async function generateCommit(
   const { count = 1, progress = {}, abortController, runner = runPrompt, typesafeFetch, env = process.env } = options
   // Resolve the key before any model is paid for: a check the user turned on
   // but cannot run is a configuration error, found best before the work.
-  const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
-  const { partition, ignored, filenames } = prepareCommitDiff(diff, config)
+  const typesafeKey = config.typesafe.enable ? (options.typesafeKey ?? resolveTypeSafeKey(config.typesafe, env)) : null
+  const { partition, ignored, filenames } = options.preparedDiff ?? prepareCommitDiff(diff, config)
   const styleTokens = options.commitStyle != null ? estimateDiffTokens(options.commitStyle, config.charsPerToken) : 0
   const models = config.filenamesOnly ? [config.models.final] : [config.models.summary, config.models.final]
   if (

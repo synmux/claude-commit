@@ -1,9 +1,11 @@
 import { PassThrough, Writable } from 'node:stream'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { S_RADIO_ACTIVE, S_RADIO_INACTIVE, S_STEP_ACTIVE, S_STEP_CANCEL, S_STEP_SUBMIT } from '@clack/prompts'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
+import { DEFAULT_CONFIG } from '../src/config.ts'
+import * as generation from '../src/generate.ts'
 import { describeCandidateCheck } from '../src/generate.ts'
-import { renderPicker, selectWithPrompt } from '../src/ui/interactive.ts'
+import { renderPicker, runInteractive, selectWithPrompt } from '../src/ui/interactive.ts'
 
 const first = 'feat(alpha): first candidate subject line\n\nBody one preview.'
 const second = 'fix(bravo): second candidate subject line\n\nBody two preview.'
@@ -11,6 +13,32 @@ const third = 'refactor(charlie): third candidate subject line\n\nBody three pre
 const messages = [first, second, third]
 
 const subject = (message: string): string => message.split('\n', 1)[0] ?? message
+
+test('interactive generation forwards prepared diff and resolved key', async () => {
+  const preparedDiff = generation.prepareCommitDiff(
+    'diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new',
+    DEFAULT_CONFIG
+  )
+  const generate = vi.spyOn(generation, 'generateCommit').mockRejectedValue(new Error('stop before picker'))
+  try {
+    await expect(
+      runInteractive('', DEFAULT_CONFIG, {
+        preparedDiff,
+        typesafeKey: 'resolved-key',
+        verbose: false,
+        spinner: false,
+        abortController: new AbortController()
+      })
+    ).rejects.toThrow('stop before picker')
+    expect(generate).toHaveBeenCalledWith(
+      '',
+      DEFAULT_CONFIG,
+      expect.objectContaining({ preparedDiff, typesafeKey: 'resolved-key' })
+    )
+  } finally {
+    generate.mockRestore()
+  }
+})
 
 /**
  * A stand-in for a terminal: a writable that remembers everything written
