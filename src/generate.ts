@@ -365,7 +365,10 @@ export async function generateCommit(
   // Format checks need no request, but they sit behind typesafe.enable like
   // every other check: with TypeSafe off, cco shows what it always showed.
   const formatWarnings = deduped.map((message): string[] =>
-    config.typesafe.enable && config.gitmoji && config.conventionalCommits && gitmojiConflictsWithType(message)
+    config.typesafe.enable &&
+    (config.gitmoji ?? options.commitStyle != null) &&
+    (config.conventionalCommits ?? options.commitStyle != null) &&
+    gitmojiConflictsWithType(message)
       ? ['gitmoji does not match the commit type']
       : []
   )

@@ -942,6 +942,63 @@ describe('gitmoji format check', () => {
   const enabled = { ...baseConfig.typesafe, enable: true }
   const env = { TYPESAFE_API_KEY: 'ts-key' }
 
+  test('checks actual emoji/type pairs when an active guide owns both settings', async () => {
+    const { fetch } = answeringJevFetch()
+    const result = await generateCommit(
+      textDiff,
+      { ...baseConfig, typesafe: enabled },
+      {
+        runner,
+        count: 2,
+        env,
+        typesafeFetch: fetch,
+        commitStyle: 'Use gitmoji Conventional Commits.'
+      }
+    )
+    expect(result.messages).toEqual([clashing[1], clashing[0]])
+    expect(result.warnings).toEqual([[], ['gitmoji does not match the commit type']])
+  })
+
+  test.each([
+    { gitmoji: false, conventionalCommits: null },
+    { gitmoji: null, conventionalCommits: false }
+  ])('explicit false disables style-owned format checking: %j', async (format) => {
+    const { fetch } = answeringJevFetch()
+    const result = await generateCommit(
+      textDiff,
+      { ...baseConfig, ...format, typesafe: enabled },
+      {
+        runner: singleRunner,
+        env,
+        typesafeFetch: fetch,
+        commitStyle: 'Use repository conventions.'
+      }
+    )
+    expect(result.warnings).toEqual([[]])
+  })
+
+  test.each(['🔧 Update defaults', 'feat: change defaults', 'Update defaults'])(
+    'style-owned format checking ignores candidates without both components: %s',
+    async (message) => {
+      const { fetch } = answeringJevFetch()
+      const result = await generateCommit(
+        textDiff,
+        { ...baseConfig, typesafe: enabled },
+        {
+          runner: async () => ({
+            text: '',
+            costUsd: 0,
+            structured: { messages: [message] }
+          }),
+          env,
+          typesafeFetch: fetch,
+          commitStyle: 'Use repository conventions.'
+        }
+      )
+      expect(result.warnings).toEqual([[]])
+    }
+  )
+
   test('with TypeSafe off, a clash changes nothing', async () => {
     const result = await generateCommit(textDiff, { ...baseConfig, ...formats }, { runner, count: 2 })
     expect(result.messages).toEqual(clashing)

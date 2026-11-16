@@ -102,7 +102,7 @@ export function extractMessages(structured: unknown): string[] | null {
  * and size-independent on purpose - a twenty-line fix next to thousands of
  * regenerated lines must still read as a fix, however dull the fix is.
  */
-function lowPriorityWeightingRules(config: Config): string[] {
+function lowPriorityWeightingRules(config: Config, hasStyle: boolean): string[] {
   const rules = [
     `The ${config.filenamesOnly ? 'file list' : 'summary'} is split into primary changes and low-priority changes (${LOW_PRIORITY_DESCRIPTION}). ` +
       'The primary changes are what this commit is about.',
@@ -114,9 +114,13 @@ function lowPriorityWeightingRules(config: Config): string[] {
   ]
   if (config.conventionalCommits) {
     rules.push('Choose the commit type and scope from the primary changes alone.')
+  } else if (hasStyle && config.conventionalCommits === null) {
+    rules.push('If COMMITS.md uses a Conventional Commits type and scope, choose them from the primary changes alone.')
   }
   if (config.gitmoji) {
     rules.push('Choose the gitmoji from the primary changes alone.')
+  } else if (hasStyle && config.gitmoji === null) {
+    rules.push('If COMMITS.md uses a gitmoji, choose it from the primary changes alone.')
   }
   return rules
 }
@@ -189,7 +193,7 @@ export function buildFinalSystem(
     )
   }
 
-  if (hasLowPriority) rules.push(...lowPriorityWeightingRules(config))
+  if (hasLowPriority) rules.push(...lowPriorityWeightingRules(config, hasStyle))
 
   if (config.multiline) {
     rules.push(
