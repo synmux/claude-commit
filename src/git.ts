@@ -99,7 +99,14 @@ export async function getRecentCommitMessages(): Promise<string[]> {
   const head = await runGit(['rev-parse', '--verify', '--quiet', 'HEAD'])
   if (head.exitCode === 1) return []
   if (head.exitCode !== 0) throw new GitError(head.stderr.trim() || 'Could not read commit history.')
-  const history = await git(['log', '--no-merges', '-100', '--format=%B%x00'])
+  const history = await git([
+    'log',
+    '--no-show-signature',
+    '--encoding=UTF-8',
+    '--no-merges',
+    '-100',
+    '--format=%B%x00'
+  ])
   return history
     .split('\0')
     .map((message) => message.trim())

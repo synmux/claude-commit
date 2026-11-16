@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -76,6 +76,24 @@ describe('recent commit history', () => {
       expect(history[1]).toBe('change 102\n\nBody 102\nTrailer: value')
       expect(history.join('\n')).not.toContain('merge not a style sample')
       expect(history).not.toContain('change 0\n\nBody 0\nTrailer: value')
+
+      const verifier = join(dir, 'verify-signature.sh')
+      const marker = join(dir, 'signature-checked')
+      await writeFile(verifier, `#!/bin/sh\ntouch "${marker}"\nexit 1\n`, {
+        mode: 0o755
+      })
+      await run(['config', 'gpg.program', verifier])
+      await run(['config', 'log.showSignature', 'true'])
+      await run(['config', 'i18n.logOutputEncoding', 'ISO-8859-1'])
+      const signed = await run(
+        ['hash-object', '-t', 'commit', '-w', '--stdin'],
+        `tree ${tree}\nparent ${merge}\nauthor cco <cco@example.invalid> 1700000105 +0000\n` +
+          'committer cco <cco@example.invalid> 1700000105 +0000\n' +
+          'gpgsig -----BEGIN PGP SIGNATURE-----\n dummy\n -----END PGP SIGNATURE-----\n\nfeat: café 😀\n'
+      )
+      await run(['update-ref', 'HEAD', signed])
+      expect((await getRecentCommitMessages())[0]).toBe('feat: café 😀')
+      await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' })
     } finally {
       process.chdir(original)
       await rm(dir, { recursive: true, force: true })
