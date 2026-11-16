@@ -162,9 +162,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@synmux/claude-commit': 'link:'
-
 importers:
 
   .:
@@ -178,9 +175,6 @@ importers:
       '@clack/prompts':
         specifier: ^1.8.1
         version: 1.8.1
-      '@synmux/claude-commit':
-        specifier: link:.
-        version: 'link:'
       '@typesafe-ai/sdk':
         specifier: ^0.7.0
         version: 0.7.0
