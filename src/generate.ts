@@ -69,6 +69,7 @@ export interface GenerateProgress {
 }
 
 export interface GenerateOptions {
+  commitStyle?: string | null
   /** Number of candidate messages to produce (interactive mode uses > 1). */
   count?: number
   progress?: GenerateProgress
@@ -147,6 +148,7 @@ export interface GenerateResult {
 const MIN_RETRY_CHUNK_TOKENS = 8_000
 
 interface PartitionSummaryOptions {
+  commitStyle?: string | null
   config: Config
   runner: typeof runPrompt
   progress: GenerateProgress
@@ -183,7 +185,7 @@ async function summarizePartition(
   const chunkTokens = clampChunkTokens(config.models.summary, config.maxChunkTokens)
   const chunks = splitDiffToFit(diff, chunkTokens, config.charsPerToken)
 
-  const summarySystem = buildSummarySystem(priority)
+  const summarySystem = buildSummarySystem(priority, options.commitStyle)
   const summaries: DiffSummary[] = []
   let costUsd = 0
 
@@ -268,6 +270,7 @@ export async function generateCommit(
       config,
       runner,
       progress,
+      commitStyle: options.commitStyle,
       ...(abortController ? { abortController } : {})
     }
     const primaryStage = await summarizePartition(partition.primary, 'primary', partitionOptions)
@@ -310,7 +313,7 @@ export async function generateCommit(
           : buildFinalUser(summaries, count, attempt.structured),
         {
           ...baseOpts,
-          system: buildFinalSystem(config, attempt.structured, hasLowPriority),
+          system: buildFinalSystem(config, attempt.structured, hasLowPriority, options.commitStyle),
           ...(attempt.structured
             ? {
                 outputFormat: {

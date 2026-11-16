@@ -32,6 +32,7 @@ import { askLine, editInEditor, type PromptIo } from './editor.ts'
 import { Spinner } from './spinner.ts'
 
 export interface InteractiveOptions {
+  commitStyle?: string | null
   verbose: boolean
   /** Whether to animate progress; the CLI decides from `--no-spinner` and the TTY. */
   spinner: boolean
@@ -49,6 +50,7 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
   let result: GenerateResult
   try {
     result = await generateCommit(diff, config, {
+      commitStyle: opts.commitStyle,
       count,
       progress: { onPhase: (label) => spinner.update(label) },
       abortController: opts.abortController

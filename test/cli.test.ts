@@ -1,12 +1,72 @@
-import { describe, expect, test } from 'vitest'
+import { execFile } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import { describe, expect, test, vi } from 'vitest'
+import * as agent from '../src/agent.ts'
 import {
   buildProgram,
   describeIgnoreStats,
   describeLowPriorityStats,
   flagsToConfig,
-  resolveInteractiveMode
+  resolveInteractiveMode,
+  run
 } from '../src/cli.ts'
 import { resolveConfig } from '../src/config.ts'
+
+describe('commit style flags', () => {
+  test('missing TypeSafe credentials fail before commit style model discovery', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cco-style-cli-'))
+    const original = process.cwd()
+    const git = promisify(execFile)
+    const catalog = vi.spyOn(agent, 'validateCommitStyleModel').mockRejectedValue(new Error('unexpected discovery'))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    vi.stubEnv('__CCO_MISSING_STYLE_TEST_KEY', undefined)
+    try {
+      await git('git', ['init', '-q', root])
+      await writeFile(join(root, 'change.txt'), 'change\n')
+      await git('git', ['-C', root, 'add', 'change.txt'])
+      await writeFile(
+        join(root, 'config.json'),
+        JSON.stringify({
+          models: { commits: 'fable' },
+          typesafe: { enable: true, env: '__CCO_MISSING_STYLE_TEST_KEY' }
+        })
+      )
+      process.chdir(root)
+      expect(await run(['--config', join(root, 'config.json'), '--dry-run', '--no-spinner'])).toBe(1)
+      expect(stderr.mock.calls.flat().join('')).toContain('$__CCO_MISSING_STYLE_TEST_KEY is not set')
+      expect(catalog).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(original)
+      catalog.mockRestore()
+      stderr.mockRestore()
+      vi.unstubAllEnvs()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('model opt-in and explicit negations override config', () => {
+    const program = buildProgram()
+    program.parse(['--model-commits', 'fable', '--no-conventional', '--no-gitmoji', '--no-multiline'], { from: 'user' })
+    const flags = flagsToConfig(program.opts())
+    expect(flags).toMatchObject({
+      models: { commits: 'fable' },
+      conventionalCommits: false,
+      gitmoji: false,
+      multiline: false
+    })
+  })
+  test('omitted flags do not turn null styles into explicit options', () => {
+    const program = buildProgram()
+    program.parse([], { from: 'user' })
+    const config = resolveConfig({}, flagsToConfig(program.opts()))
+    expect(config.conventionalCommits).toBeNull()
+    expect(config.gitmoji).toBeNull()
+    expect(config.multiline).toBeNull()
+  })
+})
 
 describe('filenames-only flags', () => {
   test.each(['-f', '--filenames-only'])('%s enables the mode', (flag) => {

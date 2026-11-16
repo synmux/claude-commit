@@ -9,6 +9,8 @@
  * through the Claude Agent SDK.
  */
 export interface ModelConfig {
+  /** Opt-in model for analyzing commit history. Defaults to null (disabled). */
+  commits: string | null
   /** Model used to read diffs and write summaries. Defaults to `sonnet`. */
   summary: string
   /** Model used to turn summaries into the final commit message. Defaults to `sonnet`. */
@@ -47,11 +49,11 @@ export interface TypeSafeConfig {
 /** Fully-resolved configuration after merging defaults, file config and CLI flags. */
 export interface Config {
   /** Format the subject line as a Conventional Commit (`type(scope): description`). */
-  conventionalCommits: boolean
+  conventionalCommits: boolean | null
   /** Prefix the subject line with a gitmoji. */
-  gitmoji: boolean
+  gitmoji: boolean | null
   /** Produce a multi-line commit (subject + body) instead of a single subject line. */
-  multiline: boolean
+  multiline: boolean | null
   /**
    * Template for the first line. `{message}` is replaced with the generated
    * subject. Useful for ticket prefixes, e.g. `"[PROJ-123] {message}"`.

@@ -31,6 +31,44 @@ index 111..222 100644
 -old line
 +new line`
 
+describe('commit style propagation', () => {
+  test.each([false, true])(
+    'every preparation/final/fallback call receives style (filenamesOnly=%s)',
+    async (filenamesOnly) => {
+      const systems: string[] = []
+      let summaries = 0
+      let finals = 0
+      const runner: Runner = async (_prompt, options) => {
+        systems.push(options.system)
+        if (options.system.includes('Do not write a commit message')) {
+          summaries++
+          return { text: 'Changed content', costUsd: 0 }
+        }
+        finals++
+        if (options.outputFormat) throw new ClaudeCommitError('structured unavailable')
+        return {
+          text: 'First subject\n===OPTION===\nSecond subject',
+          costUsd: 0
+        }
+      }
+      const diff = `${textDiff}\n${textDiff.replaceAll('a.txt', 'generated.lock')}`
+      const result = await generateCommit(
+        diff,
+        { ...baseConfig, filenamesOnly, lowPriorityPaths: ['*.lock'] },
+        {
+          runner,
+          count: 2,
+          commitStyle: 'Use the repository voice.'
+        }
+      )
+      expect(result.messages).toHaveLength(2)
+      expect(summaries).toBe(filenamesOnly ? 0 : 2)
+      expect(finals).toBe(2)
+      expect(systems.every((system) => system.includes('Use the repository voice.'))).toBe(true)
+    }
+  )
+})
+
 /** One summary-stage request as seen by the stub runner. */
 interface SummaryCall {
   prompt: string
@@ -289,7 +327,11 @@ describe('filenamesOnly', () => {
       `${skillDiff}\n${textDiff}`,
       {
         ...config,
-        models: { summary: 'summary-model', final: 'final-model' },
+        models: {
+          commits: null,
+          summary: 'summary-model',
+          final: 'final-model'
+        },
         maxChunkTokens: 1
       },
       {
@@ -362,7 +404,11 @@ describe('filenamesOnly', () => {
       textDiff,
       {
         ...config,
-        models: { summary: 'summary-model', final: 'final-model' }
+        models: {
+          commits: null,
+          summary: 'summary-model',
+          final: 'final-model'
+        }
       },
       {
         count: 2,
@@ -515,7 +561,10 @@ describe('chunk sizing', () => {
     const sonnetRun = await generateCommit(big, baseConfig, { runner })
     const haikuRun = await generateCommit(
       big,
-      { ...baseConfig, models: { summary: 'haiku', final: 'sonnet' } },
+      {
+        ...baseConfig,
+        models: { commits: null, summary: 'haiku', final: 'sonnet' }
+      },
       { runner }
     )
     expect(sonnetRun.chunkCount).toBe(1)

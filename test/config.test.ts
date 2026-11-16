@@ -39,6 +39,23 @@ describe('sanitizePartial', () => {
 })
 
 describe('default config', () => {
+  test('leaves style aspects and commit analysis unconfigured', () => {
+    expect(DEFAULT_CONFIG.models.commits).toBeNull()
+    for (const key of ['conventionalCommits', 'gitmoji', 'multiline'] as const) {
+      expect(DEFAULT_CONFIG[key]).toBeNull()
+      expect(sanitizePartial({ [key]: null })[key]).toBeNull()
+      expect(resolveConfig({ [key]: true }, { [key]: null })[key]).toBeNull()
+    }
+    expect(sanitizePartial({ models: { commits: ' fable ' } }).models).toEqual({
+      commits: 'fable'
+    })
+    expect(sanitizePartial({ models: { commits: '' } }).models).toBeUndefined()
+    expect(sanitizePartial({ models: { commits: null } }).models).toEqual({
+      commits: null
+    })
+    expect(resolveConfig({ models: { commits: 'fable' } }, { models: { commits: null } }).models.commits).toBeNull()
+  })
+
   test('does not allow API credentials by default', () => {
     expect(DEFAULT_CONFIG.allowApiKey).toBe(false)
   })
@@ -187,7 +204,7 @@ describe('resolveConfig precedence', () => {
     const cfg = resolveConfig({ gitmoji: true, multiline: true }, { multiline: false })
     expect(cfg.gitmoji).toBe(true) // from file
     expect(cfg.multiline).toBe(false) // flag overrides file
-    expect(cfg.conventionalCommits).toBe(false) // default
+    expect(cfg.conventionalCommits).toBeNull() // default
   })
 })
 
@@ -396,6 +413,7 @@ describe('model names', () => {
   test('each stage resolves independently', () => {
     const config = resolveConfig({ models: { summary: 'haiku' } }, {})
     expect(config.models).toEqual({
+      commits: null,
       summary: 'haiku',
       final: 'sonnet'
     })
