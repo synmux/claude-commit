@@ -66,7 +66,18 @@ export async function setupCommitStyle(options: CommitStyleOptions): Promise<str
     const temporary = join(options.repoRoot, `.COMMITS.md.${randomUUID()}.tmp`)
     try {
       await writeFile(temporary, style, { flag: 'wx' })
-      await link(temporary, path)
+      try {
+        await link(temporary, path)
+      } catch (error) {
+        if (
+          !['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS', 'EMLINK'].includes(
+            (error as NodeJS.ErrnoException).code ?? ''
+          )
+        ) {
+          throw error
+        }
+        await createStyleExclusively(path, style)
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
       const appeared = await readStyle(path)
@@ -83,6 +94,21 @@ export async function setupCommitStyle(options: CommitStyleOptions): Promise<str
   } catch (error) {
     if (error instanceof ClaudeCommitError) throw error
     throw new ClaudeCommitError(`Could not set up COMMITS.md: ${(error as Error).message}`)
+  }
+}
+
+async function createStyleExclusively(path: string, style: string): Promise<void> {
+  const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW)
+  try {
+    try {
+      await file.writeFile(style, 'utf8')
+      await file.sync()
+    } finally {
+      await file.close()
+    }
+  } catch (error) {
+    await unlink(path)
+    throw error
   }
 }
 

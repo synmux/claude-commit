@@ -50,8 +50,11 @@ therefore not staged or described by this run. Setup owns the full decision tree
    Keep messages newest-first, truncate a message that exceeds the remaining
    budget with `[Message truncated]`, then stop adding older messages. The
    analysis prompt explains that the history may be truncated.
-6. Create exclusively with `wx`. If a file appeared meanwhile, read it instead
-   of overwriting it. Never create an empty generated guide.
+6. Write a temporary file, then publish it with an exclusive hard link. On
+   filesystems without hard-link support, create the destination exclusively
+   with no-follow flags, write and fsync it, and remove it if writing fails.
+   Always remove the temporary file. If a file appeared meanwhile, read it
+   instead of overwriting it. Never create an empty generated guide.
 
 The guide is generation context, not a config-file key. Reading and generation
 failures are visible errors rather than silently dropping requested style.

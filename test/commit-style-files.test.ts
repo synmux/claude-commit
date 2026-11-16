@@ -38,6 +38,20 @@ function setup() {
   })
 }
 
+test.each(['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS'])(
+  'falls back to exclusive creation when hard links fail with %s',
+  async (code) => {
+    vi.mocked(link).mockRejectedValueOnce(Object.assign(new Error('unsupported link'), { code }))
+    expect(await setup()).toBe('# Style\n')
+    expect(await readFile(join(root, 'COMMITS.md'), 'utf8')).toBe('# Style\n')
+    expect(await readdir(root)).toEqual(['COMMITS.md'])
+    expect(open).toHaveBeenCalledWith(
+      join(root, 'COMMITS.md'),
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW
+    )
+  }
+)
+
 test('publishes a fully written guide through an exclusive hard link', async () => {
   vi.mocked(link).mockImplementationOnce(async (source, destination) => {
     expect(await readFile(source, 'utf8')).toBe('# Style\n')
@@ -48,6 +62,58 @@ test('publishes a fully written guide through an exclusive hard link', async () 
   })
   expect(await setup()).toBe('# Style\n')
   expect(await readdir(root)).toEqual(['COMMITS.md'])
+})
+
+test('fsyncs and closes an exclusively created fallback guide', async () => {
+  const handles: Awaited<ReturnType<typeof actual.open>>[] = []
+  vi.mocked(link).mockRejectedValueOnce(Object.assign(new Error('unsupported'), { code: 'ENOTSUP' }))
+  vi.mocked(open)
+    .mockImplementationOnce(actual.open)
+    .mockImplementationOnce(async (path, flags) => {
+      const handle = await actual.open(path, flags)
+      vi.spyOn(handle, 'sync')
+      vi.spyOn(handle, 'close')
+      handles.push(handle)
+      return handle
+    })
+  expect(await setup()).toBe('# Style\n')
+  expect(handles[0]?.sync).toHaveBeenCalledOnce()
+  expect(handles[0]?.close).toHaveBeenCalledOnce()
+})
+
+test.each(['writeFile', 'sync'] as const)('removes a partial fallback guide after %s fails', async (method) => {
+  vi.mocked(link).mockRejectedValueOnce(Object.assign(new Error('unsupported'), { code: 'EPERM' }))
+  vi.mocked(open)
+    .mockImplementationOnce(actual.open)
+    .mockImplementationOnce(async (path, flags) => {
+      const handle = await actual.open(path, flags)
+      vi.spyOn(handle, method).mockRejectedValueOnce(new Error('disk full'))
+      return handle
+    })
+  await expect(setup()).rejects.toThrow('disk full')
+  expect(await readdir(root)).toEqual([])
+})
+
+test('fallback never overwrites a guide that appears before exclusive creation', async () => {
+  vi.mocked(link).mockImplementationOnce(async (_source, destination) => {
+    await actual.writeFile(destination, 'concurrent guide')
+    throw Object.assign(new Error('unsupported'), { code: 'ENOSYS' })
+  })
+  expect(await setup()).toBe('concurrent guide')
+  expect(await readFile(join(root, 'COMMITS.md'), 'utf8')).toBe('concurrent guide')
+  expect(await readdir(root)).toEqual(['COMMITS.md'])
+})
+
+test('fallback refuses a symlink that appears before exclusive creation', async () => {
+  const target = join(root, 'target.md')
+  await actual.writeFile(target, 'keep target')
+  vi.mocked(link).mockImplementationOnce(async (_source, destination) => {
+    await actual.symlink(target, destination)
+    throw Object.assign(new Error('unsupported'), { code: 'EXDEV' })
+  })
+  await expect(setup()).rejects.toThrow('COMMITS.md must be a regular file')
+  expect(await readFile(target, 'utf8')).toBe('keep target')
+  expect(await readdir(root)).toEqual(['COMMITS.md', 'target.md'])
 })
 
 test('a failed partial write leaves neither a published guide nor a temporary file', async () => {
