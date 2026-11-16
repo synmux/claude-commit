@@ -58,7 +58,7 @@ const DUPLICATE_FROM = 0.85
  */
 const FOLLOWS_CUSTOM_BELOW = 0.2
 
-/** Use the custom-instruction threshold for repository-style adherence. */
+/** Reuses the custom-instruction threshold; repository-style adherence is not independently tuned. */
 const FOLLOWS_STYLE_BELOW = 0.2
 
 /**

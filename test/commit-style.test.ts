@@ -1,8 +1,10 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { runPrompt } from '../src/agent.ts'
 import { setupCommitStyle } from '../src/commit-style.ts'
+import { CONTEXT_RESERVE_TOKENS, contextWindowTokens } from '../src/tokens.ts'
 
 describe('commit style setup', () => {
   let root: string
@@ -22,7 +24,10 @@ describe('commit style setup', () => {
       hasTty: true,
       validateModel: vi.fn(async () => {}),
       readHistory: vi.fn(async () => ['✨ feat: new API\n\nExplain why.', 'fix: older change']),
-      runner: vi.fn(async () => ({ text: '# Style\nUse emoji.', costUsd: 0 })),
+      runner: vi.fn<typeof runPrompt>(async () => ({
+        text: '# Style\nUse emoji.',
+        costUsd: 0
+      })),
       ask: vi.fn(async () => true),
       onNote: vi.fn(),
       onPhase: vi.fn()
@@ -40,7 +45,10 @@ describe('commit style setup', () => {
     const opts = options()
     await writeFile(join(root, 'COMMITS.md'), 'existing')
     expect(await setupCommitStyle(opts)).toBe('existing')
-    expect(opts.validateModel).toHaveBeenCalledWith('fable', opts)
+    expect(opts.validateModel).toHaveBeenCalledWith('fable', {
+      allowApiKey: false,
+      abortController: undefined
+    })
     expect(opts.runner).not.toHaveBeenCalled()
     expect(opts.ask).not.toHaveBeenCalled()
     opts.validateModel.mockRejectedValueOnce(new Error('invalid model'))
@@ -57,11 +65,47 @@ describe('commit style setup', () => {
     await expect(readFile(join(root, 'COMMITS.md'))).rejects.toThrow()
   })
 
-  test('an existing empty file remains an intentional active guide', async () => {
+  test.each(['', ' \n\t '])('an existing blank guide is inactive and preserved: %j', async (content) => {
     const opts = options()
-    await writeFile(join(root, 'COMMITS.md'), '')
-    expect(await setupCommitStyle(opts)).toBe('')
+    await writeFile(join(root, 'COMMITS.md'), content)
+    expect(await setupCommitStyle(opts)).toBeNull()
+    expect(await readFile(join(root, 'COMMITS.md'), 'utf8')).toBe(content)
+    expect(opts.onNote).toHaveBeenCalledWith('COMMITS.md is empty; continuing without repository style.')
     expect(opts.runner).not.toHaveBeenCalled()
+    expect(opts.ask).not.toHaveBeenCalled()
+    expect(opts.readHistory).not.toHaveBeenCalled()
+  })
+
+  test('rejects a symlink to a regular guide', async () => {
+    const opts = options()
+    await writeFile(join(root, 'shared.md'), 'shared guide')
+    await symlink(join(root, 'shared.md'), join(root, 'COMMITS.md'))
+    await expect(setupCommitStyle(opts)).rejects.toThrow('COMMITS.md must be a regular file.')
+    expect(opts.runner).not.toHaveBeenCalled()
+  })
+
+  test.each(['haiku', 'fable'])('budgets %s history newest-first and marks truncation', async (model) => {
+    const opts = { ...options(), model }
+    const newest = 'feat: newest change'
+    const large = `fix: long body\n${'\u0000😀'.repeat(400_000)}`
+    opts.readHistory.mockResolvedValue([newest, large, 'oldest change'])
+    await setupCommitStyle(opts)
+    const prompt = opts.runner.mock.calls[0]?.[0]
+    expect(typeof prompt).toBe('string')
+    if (typeof prompt !== 'string') throw new Error('Analysis was not called')
+    const messages: string[] = JSON.parse(prompt.slice(prompt.indexOf('\n') + 1))
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toBe(newest)
+    expect(messages[1]).toMatch(/^fix: long body\n/)
+    expect(messages[1]).toMatch(/\[Message truncated\]$/)
+    expect(prompt).not.toContain('oldest change')
+    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThan(contextWindowTokens(model) - CONTEXT_RESERVE_TOKENS)
+    expect(opts.runner).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        system: expect.stringContaining('history may be truncated')
+      })
+    )
   })
 
   test('non-terminal skips with a note unless --yes is supplied', async () => {
@@ -85,6 +129,10 @@ describe('commit style setup', () => {
     expect(style).toBe('# Style\nUse emoji.\n')
     expect(await readFile(join(root, 'COMMITS.md'), 'utf8')).toBe(style)
     expect(opts.ask).not.toHaveBeenCalled()
+    expect(opts.validateModel).toHaveBeenCalledWith('fable', {
+      allowApiKey: true,
+      abortController: controller
+    })
     expect(opts.runner).toHaveBeenCalledWith(
       expect.stringContaining('Explain why.'),
       expect.objectContaining({
@@ -115,6 +163,17 @@ describe('commit style setup', () => {
     })
     expect(await setupCommitStyle(opts)).toBe('concurrent guide')
     expect(await readFile(join(root, 'COMMITS.md'), 'utf8')).toBe('concurrent guide')
+  })
+
+  test('an appearing blank guide is preserved and remains inactive', async () => {
+    const opts = options()
+    opts.runner.mockImplementationOnce(async () => {
+      await writeFile(join(root, 'COMMITS.md'), ' \n')
+      return { text: 'generated guide', costUsd: 0 }
+    })
+    expect(await setupCommitStyle(opts)).toBeNull()
+    expect(await readFile(join(root, 'COMMITS.md'), 'utf8')).toBe(' \n')
+    expect(opts.onNote).toHaveBeenLastCalledWith('COMMITS.md is empty; continuing without repository style.')
   })
 
   test('rejects non-files, empty analysis and model errors without writing', async () => {

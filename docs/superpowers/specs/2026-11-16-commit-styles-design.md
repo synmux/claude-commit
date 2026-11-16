@@ -34,18 +34,33 @@ therefore not staged or described by this run. Setup owns the full decision tree
 
 1. Null analysis model: return without validation or file access.
 2. Validate the model, even if a guide exists. Failure is fatal.
-3. Read a regular `COMMITS.md` in the repo root if present. Non-files are errors.
+3. Read only a regular `COMMITS.md` in the repo root if present. Symlinks and
+   other non-files are errors. An empty or whitespace-only guide is inactive:
+   note "COMMITS.md is empty; continuing without repository style." and return
+   without regeneration or modifying the file. This also applies to a file
+   that appears during analysis.
 4. Otherwise ask permission through `askLine`; closed input declines. `--yes`
    authorizes creation. A non-terminal run without `--yes` skips with a note.
 5. Read up to 100 non-merge messages including bodies, newest first. Empty or
    unborn history skips with a note. Analyze the messages as data, weighting
    recent conventions more heavily, and request only Markdown guide content.
+   Bound the history using `tokens.ts`'s commits-model context window minus
+   its 32,000-token reserve for prompts, backend overhead and output. Allow one
+   byte per token and six bytes per UTF-16 unit for worst-case JSON escaping.
+   Keep messages newest-first, truncate a message that exceeds the remaining
+   budget with `[Message truncated]`, then stop adding older messages. The
+   analysis prompt explains that the history may be truncated.
 6. Create exclusively with `wx`. If a file appeared meanwhile, read it instead
    of overwriting it. Never create an empty generated guide.
 
 The guide is generation context, not a config-file key. Reading and generation
 failures are visible errors rather than silently dropping requested style.
 All notes, consent prompts and progress remain on stderr.
+
+The guide is trusted input used in every generation. Users should review a
+generated guide before committing it. On a subsequent `cco -a`, an untracked
+guide is staged unless Git ignores it; users should commit it deliberately or
+gitignore it.
 
 ### No-generation model validation
 
@@ -79,7 +94,8 @@ catalog are rejected even if a backend might still accept them.
   guide is state data, not evaluator instructions. Explicit formatting values,
   subject template and custom instructions override conflicting guide rules;
   null options defer to the guide. The guide and formatting overrides are sent
-  to TypeSafe only with an active guide, including an existing empty file.
+  to TypeSafe only with an active guide; blank files are inactive. The style
+  threshold reuses custom-instruction calibration, not independent style tuning.
   Violations carry a warning and move last like custom-instruction violations;
   they do not block a commit. Missing answers throw and are reported as failed
   checks, never passes. No extra request runs, and no-guide behavior is unchanged.
@@ -104,7 +120,8 @@ catalog are rejected even if a backend might still accept them.
 Tests cover nullable config precedence, CLI negations, catalog alias/full-ID
 matching, credential gating and isolation, empty/error catalogs, setup consent
 and skip branches, existing files without a validation bypass, empty history,
-exclusive-create races, prompt precedence and raw-output ordering, and style
-propagation through both summary priorities and final fallbacks. Git history
+exclusive-create races (including blank files), inactive blank guides, symlink
+rejection, model-based history budgeting, prompt precedence and raw-output
+ordering, and style propagation through both summary priorities and final fallbacks. Git history
 tests use a temporary repository with bodies, a merge and more than 100 commits.
 No live model or authenticated catalog call is needed for automated tests.

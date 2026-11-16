@@ -287,18 +287,29 @@ An invalid model stops the run even when `COMMITS.md` already exists. A catalog
 failure is reported as an inability to verify, never as a successful validation.
 Catalog discovery sends no generation prompt and preserves the credential gate.
 
-cco then uses `COMMITS.md` in the repository root as mandatory commit-writing
-instructions. If it is missing, cco asks permission to analyze the latest 100
-non-merge commit messages, including bodies, and create a Markdown style guide.
+cco reads only a regular `COMMITS.md` file in the repository root; symlinks are
+rejected. An empty or whitespace-only file is kept but disables repository style
+for the run, with a note; it is not regenerated. Otherwise, cco uses the file as
+mandatory commit-writing instructions. If it is missing, cco asks permission to
+analyze the latest 100 non-merge commit messages, including bodies, and create a
+Markdown style guide.
 `--yes` authorizes creation without asking. Without a terminal and without
 `--yes`, cco prints a note and continues without repository style. Declining or
 closing the prompt also continues without style. Empty history produces a note
-and no file. Analysis uses normal Claude usage; subsequent runs reuse the file.
-Review and edit the guide to refine the conventions. A file that appears during
-analysis is never overwritten.
+and no file. Analysis input is budgeted against the configured model's context
+window, retaining the newest messages first and marking truncated messages.
+Older messages beyond the budget are omitted. Analysis uses normal Claude usage;
+subsequent runs reuse the file. A file that appears during analysis is never
+overwritten.
+
+`COMMITS.md` is trusted input: its instructions are fed into every generation.
+Review a generated guide before committing it, and edit it to remove unwanted
+instructions or refine the conventions.
 
 Setup happens after optional `-a` staging and staged-diff capture, so a newly
-created guide is not included in the current commit. Add it yourself when ready.
+created guide is not included in the current commit. A subsequent `cco -a` will
+stage an untracked `COMMITS.md` unless Git ignores it. Commit it deliberately or
+add it to `.gitignore`.
 Both interactive and non-interactive generation use the guide, including
 filenames-only mode; summaries receive it as context, while every candidate
 must follow it.
