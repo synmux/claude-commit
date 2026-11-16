@@ -136,13 +136,15 @@ function activeStyle(style: string, onNote: CommitStyleOptions['onNote']): strin
 
 async function readStyle(path: string): Promise<string | null> {
   try {
-    if (constants.O_NOFOLLOW === undefined) {
-      // Without O_NOFOLLOW, a symlink replacement can race between lstat and open.
-      if ((await lstat(path)).isSymbolicLink()) throw new ClaudeCommitError('COMMITS.md must be a regular file.')
-    }
+    const pathStat = constants.O_NOFOLLOW === undefined ? await lstat(path, { bigint: true }) : null
+    if (pathStat?.isSymbolicLink()) throw new ClaudeCommitError('COMMITS.md must be a regular file.')
     const file = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | constants.O_NONBLOCK)
     try {
-      if (!(await file.stat()).isFile()) throw new ClaudeCommitError('COMMITS.md must be a regular file.')
+      const stat = await file.stat({ bigint: true })
+      // Without O_NOFOLLOW, detect lstat-to-open path swaps by file identity.
+      if (!stat.isFile() || (pathStat !== null && (stat.dev !== pathStat.dev || stat.ino !== pathStat.ino))) {
+        throw new ClaudeCommitError('COMMITS.md must be a regular file.')
+      }
       return await file.readFile('utf8')
     } finally {
       await file.close()

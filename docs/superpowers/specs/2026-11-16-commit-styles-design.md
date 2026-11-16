@@ -36,8 +36,10 @@ therefore not staged or described by this run. Setup owns the full decision tree
 2. Validate the model, even if a guide exists. Failure is fatal.
 3. Read only a regular `COMMITS.md` in the repo root if present. Symlinks and
    other non-files are errors. Without `O_NOFOLLOW` (such as on Windows), check
-   with `lstat` before opening; a path replacement between those operations can
-   bypass symlink rejection. Always check the opened handle is a regular file.
+   with `lstat` before opening, then compare its device/inode identity with the
+   opened handle using bigint stats. A mismatch detects a path swap in the
+   race window and is rejected before reading. Always check the opened handle
+   is a regular file.
    An empty or whitespace-only guide is inactive:
    note "COMMITS.md is empty; continuing without repository style." and return
    without regeneration or modifying the file. This also applies to a file

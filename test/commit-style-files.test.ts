@@ -61,6 +61,31 @@ test('rejects a symlink before opening when O_NOFOLLOW is unavailable', async ()
   expect(open).not.toHaveBeenCalled()
 })
 
+test.each(['symlink', 'regular file'])(
+  'rejects a swap to a %s between lstat and open without O_NOFOLLOW',
+  async (kind) => {
+    const path = join(root, 'COMMITS.md')
+    const target = join(root, 'target.md')
+    await actual.writeFile(path, '# Original guide')
+    await actual.writeFile(target, '# Replacement guide')
+    Reflect.set(constants, 'O_NOFOLLOW', undefined)
+    let close: ReturnType<typeof vi.spyOn> | undefined
+    let read: ReturnType<typeof vi.spyOn> | undefined
+    vi.mocked(open).mockImplementationOnce(async (file, flags) => {
+      await actual.rename(path, `${path}.old`)
+      if (kind === 'symlink') await actual.symlink(target, path)
+      else await actual.rename(target, path)
+      const handle = await actual.open(file, flags)
+      close = vi.spyOn(handle, 'close')
+      read = vi.spyOn(handle, 'readFile')
+      return handle
+    })
+    await expect(setup()).rejects.toThrow('COMMITS.md must be a regular file.')
+    expect(close).toHaveBeenCalledOnce()
+    expect(read).not.toHaveBeenCalled()
+  }
+)
+
 test('creates exclusively without O_NOFOLLOW when hard links and the flag are unavailable', async () => {
   Reflect.set(constants, 'O_NOFOLLOW', undefined)
   vi.mocked(link).mockRejectedValueOnce(Object.assign(new Error('unsupported'), { code: 'ENOTSUP' }))
