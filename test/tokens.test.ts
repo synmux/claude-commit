@@ -4,29 +4,9 @@ import {
   clampChunkTokens,
   contextWindowTokens,
   estimateDiffTokens,
-  estimateTokens,
   isOpaqueLine,
-  OPAQUE_CHARS_PER_TOKEN,
-  tokensToChars
+  OPAQUE_CHARS_PER_TOKEN
 } from '../src/tokens.ts'
-
-describe('token estimation', () => {
-  test('estimateTokens divides by the ratio and rounds up', () => {
-    expect(estimateTokens('', 4)).toBe(0)
-    expect(estimateTokens('abcd', 4)).toBe(1)
-    expect(estimateTokens('abcde', 4)).toBe(2)
-  })
-
-  test('tokensToChars inverts the ratio', () => {
-    expect(tokensToChars(100, 3.5)).toBe(350)
-    expect(tokensToChars(0, 4)).toBe(0)
-  })
-
-  test('rejects a non-positive ratio', () => {
-    expect(() => estimateTokens('x', 0)).toThrow()
-    expect(() => estimateTokens('x', -1)).toThrow()
-  })
-})
 
 describe('contextWindowTokens', () => {
   test('bare aliases resolve to current-generation 1M models', () => {
@@ -108,7 +88,7 @@ describe('estimateDiffTokens', () => {
   test('armor-heavy content estimates far above a plain chars ratio', () => {
     const armor = Array.from({ length: 100 }, () => armorLine).join('\n')
     const classified = estimateDiffTokens(armor, 3.5)
-    const plain = estimateTokens(armor, 3.5)
+    const plain = Math.ceil(armor.length / 3.5)
     expect(classified).toBeGreaterThan(plain * 3)
   })
 
