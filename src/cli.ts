@@ -142,9 +142,9 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
     cfg.interactiveCount = Math.max(1, opts.count)
   }
   const models: Partial<ModelConfig> = {}
-  if (opts.modelSummary) models.summary = opts.modelSummary
-  if (opts.modelFinal) models.final = opts.modelFinal
-  if (opts.modelCommits) models.commits = opts.modelCommits
+  if (opts.modelSummary?.trim()) models.summary = opts.modelSummary.trim()
+  if (opts.modelFinal?.trim()) models.final = opts.modelFinal.trim()
+  if (opts.modelCommits?.trim()) models.commits = opts.modelCommits.trim()
   if (Object.keys(models).length) cfg.models = models
   return cfg
 }

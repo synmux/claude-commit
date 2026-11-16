@@ -66,6 +66,23 @@ describe('commit style flags', () => {
     expect(config.gitmoji).toBeNull()
     expect(config.multiline).toBeNull()
   })
+
+  test.each(['', ' \t\n '])('blank model flags preserve lower-layer models: %j', (value) => {
+    const program = buildProgram()
+    program.parse(['--model-summary', value, '--model-final', value, '--model-commits', value], { from: 'user' })
+    const flags = flagsToConfig(program.opts())
+    expect(flags.models).toBeUndefined()
+    const models = { summary: 'sonnet', final: 'haiku', commits: 'fable' }
+    expect(resolveConfig({ models }, flags).models).toEqual(models)
+  })
+
+  test('model flags trim surrounding whitespace', () => {
+    const program = buildProgram()
+    program.parse(['--model-summary', ' sonnet ', '--model-final', '\thaiku\n', '--model-commits', ' fable '], {
+      from: 'user'
+    })
+    expect(flagsToConfig(program.opts()).models).toEqual({ summary: 'sonnet', final: 'haiku', commits: 'fable' })
+  })
 })
 
 describe('filenames-only flags', () => {
