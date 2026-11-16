@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import type { runPrompt } from '../src/agent.ts'
 import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
 import { describeCheckNotices, generateCommit } from '../src/generate.ts'
+import { availableContextTokens, estimateDiffTokens } from '../src/tokens.ts'
 import type { Config, ModelResult } from '../src/types.ts'
 import { answeringJevFetch, fakeJevFetch, jevAnswers } from './typesafe-fixtures.ts'
 
@@ -134,6 +135,63 @@ const promptTooLong = () =>
   )
 
 describe('generateCommit', () => {
+  test.each([
+    { summary: 'haiku', final: 'sonnet', filenamesOnly: false },
+    { summary: 'sonnet', final: 'haiku', filenamesOnly: false },
+    { summary: 'haiku', final: 'haiku', filenamesOnly: true }
+  ])('rejects a guide that fills a used model before any call: %j', async ({ summary, final, filenamesOnly }) => {
+    const runner = vi.fn<Runner>()
+    const config = {
+      ...baseConfig,
+      models: { summary, final, commits: null },
+      filenamesOnly
+    }
+    await expect(
+      generateCommit(textDiff, config, {
+        runner,
+        commitStyle: 'x'.repeat(168_000)
+      })
+    ).rejects.toThrow(/Shorten COMMITS.md/)
+    expect(runner).not.toHaveBeenCalled()
+  })
+
+  test('guide tokens reduce the summary chunk budget', async () => {
+    const commitStyle = 'x'.repeat(140_000)
+    const config = {
+      ...baseConfig,
+      models: { ...baseConfig.models, summary: 'haiku' },
+      maxChunkTokens: 100_000
+    }
+    const { runner, summaryPrompts } = stubRunner()
+    const result = await generateCommit(armorDiff(1_000), config, {
+      runner,
+      commitStyle
+    })
+    const budget = availableContextTokens('haiku', estimateDiffTokens(commitStyle, config.charsPerToken))
+    expect(result.chunkCount).toBeGreaterThan(1)
+    for (const prompt of summaryPrompts) {
+      expect(estimateDiffTokens(prompt, config.charsPerToken)).toBeLessThan(budget + 500)
+    }
+  })
+
+  test('checks final evidence against the room remaining after the guide', async () => {
+    const runner = vi.fn<Runner>(async () => ({
+      text: 'summary '.repeat(2_000),
+      costUsd: 0
+    }))
+    const config = {
+      ...baseConfig,
+      models: { ...baseConfig.models, final: 'haiku' }
+    }
+    await expect(
+      generateCommit(textDiff, config, {
+        runner,
+        commitStyle: 'x'.repeat(167_000)
+      })
+    ).rejects.toThrow(/final prompt.*Shorten COMMITS.md/)
+    expect(runner).toHaveBeenCalledOnce()
+  })
+
   test('small text diff: one summary, one final call, one message', async () => {
     const { runner, summaryPrompts } = stubRunner()
     const result = await generateCommit(textDiff, baseConfig, { runner })

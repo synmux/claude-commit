@@ -57,7 +57,7 @@ import {
   MESSAGES_SCHEMA,
   parseOptions
 } from './prompts.ts'
-import { clampChunkTokens } from './tokens.ts'
+import { availableContextTokens, clampChunkTokens, estimateDiffTokens } from './tokens.ts'
 import type { ChangePriority, Config, DiffSummary } from './types.ts'
 import { type CandidateEvidence, checkCandidates, orderFlaggedLast, resolveTypeSafeKey } from './typesafe.ts'
 
@@ -149,6 +149,7 @@ const MIN_RETRY_CHUNK_TOKENS = 8_000
 
 interface PartitionSummaryOptions {
   commitStyle?: string | null
+  styleTokens: number
   config: Config
   runner: typeof runPrompt
   progress: GenerateProgress
@@ -182,7 +183,7 @@ async function summarizePartition(
   // Chunks are sized by a content-classified token estimate: opaque content
   // (age/gpg armor, binary patches) measures near 1 char/token, so a plain
   // chars-based budget underestimates armor-heavy diffs more than threefold.
-  const chunkTokens = clampChunkTokens(config.models.summary, config.maxChunkTokens)
+  const chunkTokens = clampChunkTokens(config.models.summary, config.maxChunkTokens, options.styleTokens)
   const chunks = splitDiffToFit(diff, chunkTokens, config.charsPerToken)
 
   const summarySystem = buildSummarySystem(priority, options.commitStyle)
@@ -265,6 +266,12 @@ export async function generateCommit(
   // but cannot run is a configuration error, found best before the work.
   const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
   const { partition, ignored, filenames } = prepareCommitDiff(diff, config)
+  const styleTokens = options.commitStyle != null ? estimateDiffTokens(options.commitStyle, config.charsPerToken) : 0
+  const models = config.filenamesOnly ? [config.models.final] : [config.models.summary, config.models.final]
+  if (options.commitStyle != null && models.some((model) => availableContextTokens(model, styleTokens) <= 0)) {
+    throw new ClaudeCommitError('COMMITS.md leaves no room for generation input. Shorten COMMITS.md and try again.')
+  }
+  const finalBudget = availableContextTokens(config.models.final, styleTokens)
   const summaries: DiffSummary[] = []
   let costUsd = 0
   if (!filenames) {
@@ -275,6 +282,7 @@ export async function generateCommit(
       runner,
       progress,
       commitStyle: options.commitStyle,
+      styleTokens,
       ...(abortController ? { abortController } : {})
     }
     const primaryStage = await summarizePartition(partition.primary, 'primary', partitionOptions)
@@ -310,25 +318,28 @@ export async function generateCommit(
   let messages: string[] | null = null
   let lastError: unknown
   for (const attempt of attempts) {
-    try {
-      const result = await runner(
-        filenames
-          ? buildFilenamesUser(filenames, count, attempt.structured)
-          : buildFinalUser(summaries, count, attempt.structured),
-        {
-          ...baseOpts,
-          system: buildFinalSystem(config, attempt.structured, hasLowPriority, options.commitStyle),
-          ...(attempt.structured
-            ? {
-                outputFormat: {
-                  type: 'json_schema' as const,
-                  schema: MESSAGES_SCHEMA
-                }
-              }
-            : {}),
-          ...(!attempt.structured && progress.onText ? { onText: progress.onText } : {})
-        }
+    const prompt = filenames
+      ? buildFilenamesUser(filenames, count, attempt.structured)
+      : buildFinalUser(summaries, count, attempt.structured)
+    if (options.commitStyle != null && estimateDiffTokens(prompt, config.charsPerToken) > finalBudget) {
+      throw new ClaudeCommitError(
+        'The final prompt exceeds the space left by COMMITS.md. Shorten COMMITS.md and try again.'
       )
+    }
+    try {
+      const result = await runner(prompt, {
+        ...baseOpts,
+        system: buildFinalSystem(config, attempt.structured, hasLowPriority, options.commitStyle),
+        ...(attempt.structured
+          ? {
+              outputFormat: {
+                type: 'json_schema' as const,
+                schema: MESSAGES_SCHEMA
+              }
+            }
+          : {}),
+        ...(!attempt.structured && progress.onText ? { onText: progress.onText } : {})
+      })
       costUsd += result.costUsd
       messages = attempt.structured
         ? extractMessages(result.structured)
