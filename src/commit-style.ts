@@ -1,4 +1,5 @@
-import { lstat, readFile, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { link, lstat, readFile, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { runPrompt, validateCommitStyleModel } from './agent.ts'
@@ -61,14 +62,20 @@ export async function setupCommitStyle(options: CommitStyleOptions): Promise<str
     if (options.abortController?.signal.aborted) throw new ClaudeCommitError('Generation was cancelled.')
     if (!result.text.trim()) throw new ClaudeCommitError('Commit style analysis returned an empty guide.')
     const style = `${result.text.trim()}\n`
+    const temporary = join(options.repoRoot, `.COMMITS.md.${randomUUID()}.tmp`)
     try {
-      await writeFile(path, style, { flag: 'wx' })
+      await writeFile(temporary, style, { flag: 'wx' })
+      await link(temporary, path)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
       const appeared = await readStyle(path)
       if (appeared === null) throw error
       options.onNote?.('COMMITS.md appeared during analysis; leaving it unchanged.')
       return activeStyle(appeared, options.onNote)
+    } finally {
+      await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error
+      })
     }
     options.onNote?.('Created COMMITS.md from commit history. Review it to refine future commit messages.')
     return style
