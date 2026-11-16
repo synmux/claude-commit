@@ -268,7 +268,10 @@ export async function generateCommit(
   const { partition, ignored, filenames } = prepareCommitDiff(diff, config)
   const styleTokens = options.commitStyle != null ? estimateDiffTokens(options.commitStyle, config.charsPerToken) : 0
   const models = config.filenamesOnly ? [config.models.final] : [config.models.summary, config.models.final]
-  if (options.commitStyle != null && models.some((model) => availableContextTokens(model, styleTokens) <= 0)) {
+  if (
+    options.commitStyle != null &&
+    models.some((model) => availableContextTokens(model, styleTokens) < MIN_RETRY_CHUNK_TOKENS)
+  ) {
     throw new ClaudeCommitError('COMMITS.md leaves no room for generation input. Shorten COMMITS.md and try again.')
   }
   const finalBudget = availableContextTokens(config.models.final, styleTokens)

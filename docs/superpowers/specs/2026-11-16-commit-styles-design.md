@@ -92,6 +92,10 @@ catalog are rejected even if a backend might still accept them.
 - `generate.ts` carries style through both summary priorities, structured and
   plain final attempts, multiple candidates and filenames-only generation.
 - Interactive generation carries the same option rather than rebuilding it.
+- A guide must leave at least 8,000 input tokens after the context reserve for
+  both summary and final models. Filenames-only mode checks only the final
+  model. Smaller budgets fail before generation with a request to shorten
+  `COMMITS.md`, rather than producing many tiny summary calls.
 - When TypeSafe is enabled, its existing request adds a `follows_style` Noul
   question per candidate, using the custom-instruction threshold of 0.2. The
   guide is state data, not evaluator instructions. Explicit formatting values,

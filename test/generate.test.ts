@@ -139,6 +139,55 @@ describe('generateCommit', () => {
     { summary: 'haiku', final: 'sonnet', filenamesOnly: false },
     { summary: 'sonnet', final: 'haiku', filenamesOnly: false },
     { summary: 'haiku', final: 'haiku', filenamesOnly: true }
+  ])('rejects unusably small guide budgets before model calls: %j', async (settings) => {
+    const runner = vi.fn<Runner>(async () => {
+      throw new Error('model must not run')
+    })
+    const config = {
+      ...baseConfig,
+      models: settings,
+      filenamesOnly: settings.filenamesOnly
+    }
+    await expect(
+      generateCommit(textDiff, config, {
+        runner,
+        commitStyle: 'x'.repeat(167_000)
+      })
+    ).rejects.toThrow(/COMMITS.md leaves no room.*Shorten COMMITS.md/)
+    expect(runner).not.toHaveBeenCalled()
+  })
+
+  test('filenames-only mode ignores the unused summary budget', async () => {
+    const { runner } = stubRunner()
+    const config = {
+      ...baseConfig,
+      filenamesOnly: true,
+      models: { summary: 'haiku', final: 'sonnet' }
+    }
+    const result = await generateCommit(textDiff, config, {
+      runner,
+      commitStyle: 'x'.repeat(167_000)
+    })
+    expect(result.chunkCount).toBe(0)
+    expect(result.messages).toEqual(['fix: stubbed message'])
+  })
+
+  test('accepts the usable guide budget floor', async () => {
+    const { runner } = stubRunner()
+    const config = {
+      ...baseConfig,
+      models: { summary: 'haiku', final: 'haiku' }
+    }
+    const result = await generateCommit(textDiff, config, {
+      runner,
+      commitStyle: 'x'.repeat(159_999)
+    })
+    expect(result.messages).toEqual(['fix: stubbed message'])
+  })
+  test.each([
+    { summary: 'haiku', final: 'sonnet', filenamesOnly: false },
+    { summary: 'sonnet', final: 'haiku', filenamesOnly: false },
+    { summary: 'haiku', final: 'haiku', filenamesOnly: true }
   ])('rejects a guide that fills a used model before any call: %j', async ({ summary, final, filenamesOnly }) => {
     const runner = vi.fn<Runner>()
     const config = {
@@ -176,7 +225,7 @@ describe('generateCommit', () => {
 
   test('checks final evidence against the room remaining after the guide', async () => {
     const runner = vi.fn<Runner>(async () => ({
-      text: 'summary '.repeat(2_000),
+      text: 'summary '.repeat(5_000),
       costUsd: 0
     }))
     const config = {
@@ -186,7 +235,7 @@ describe('generateCommit', () => {
     await expect(
       generateCommit(textDiff, config, {
         runner,
-        commitStyle: 'x'.repeat(167_000)
+        commitStyle: 'x'.repeat(159_000)
       })
     ).rejects.toThrow(/final prompt.*Shorten COMMITS.md/)
     expect(runner).toHaveBeenCalledOnce()
