@@ -1,5 +1,100 @@
-import { describe, expect, test } from 'vitest'
-import { buildQueryOptions, buildSubprocessEnv, presentCredentialVars } from '../src/agent.ts'
+import type { query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { buildQueryOptions, buildSubprocessEnv, presentCredentialVars, validateCommitStyleModel } from '../src/agent.ts'
+
+describe('commit style model catalog', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  function catalog(
+    entries = [
+      {
+        value: 'fable',
+        resolvedModel: 'claude-fable-5',
+        displayName: 'Fable',
+        description: ''
+      }
+    ]
+  ) {
+    const close = vi.fn()
+    const supportedModels = vi.fn(async () => entries)
+    const runner = vi.fn(
+      (_params: Parameters<typeof query>[0]) => ({ supportedModels, close }) as unknown as ReturnType<typeof query>
+    )
+    return { runner, close, supportedModels }
+  }
+
+  test.each(['fable', 'claude-fable-5'])('accepts %s without yielding a user turn', async (model) => {
+    const stub = catalog()
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-key')
+    vi.stubEnv('ANTHROPIC_AUTH_TOKEN', 'test-token')
+    const controller = new AbortController()
+    await validateCommitStyleModel(model, { allowApiKey: false, abortController: controller }, stub.runner)
+    const params = stub.runner.mock.calls[0]?.[0] ?? expect.unreachable('expected catalog discovery')
+    expect(params.options?.model).toBeUndefined()
+    expect(params.options?.env?.ANTHROPIC_API_KEY).toBeUndefined()
+    expect(params.options?.env?.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
+    expect(params.options).toMatchObject({
+      tools: [],
+      skills: [],
+      plugins: [],
+      mcpServers: {},
+      strictMcpConfig: true,
+      settingSources: [],
+      abortController: controller
+    })
+    const next = await (params.prompt as AsyncIterable<SDKUserMessage>)[Symbol.asyncIterator]().next()
+    expect(next.done).toBe(true)
+    expect(stub.close).toHaveBeenCalledOnce()
+  })
+
+  test('preserves explicit API credential permission', async () => {
+    const stub = catalog()
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-key')
+    await validateCommitStyleModel('fable', { allowApiKey: true }, stub.runner)
+    expect(stub.runner).toHaveBeenCalledOnce()
+    expect(stub.runner.mock.calls[0]?.[0].options?.env).toBeUndefined()
+  })
+
+  test('rejects unknown, prefix and empty catalogs, listing available values', async () => {
+    const stub = catalog()
+    await expect(validateCommitStyleModel('claude-fable', { allowApiKey: false }, stub.runner)).rejects.toThrow(
+      'Available models: fable'
+    )
+    expect(stub.close).toHaveBeenCalledOnce()
+    await expect(validateCommitStyleModel('fable', { allowApiKey: false }, catalog([]).runner)).rejects.toThrow(
+      'not a valid model'
+    )
+  })
+
+  test('catalog failures cannot look like model validation success', async () => {
+    const stub = catalog()
+    stub.supportedModels.mockRejectedValueOnce(new Error('not logged in'))
+    await expect(validateCommitStyleModel('fable', { allowApiKey: false }, stub.runner)).rejects.toThrow(
+      'Cannot verify models.commits: not logged in'
+    )
+    expect(stub.close).toHaveBeenCalledOnce()
+  })
+
+  test('catalog cancellation is not reported as a verification failure', async () => {
+    const stub = catalog()
+    const controller = new AbortController()
+    stub.supportedModels.mockImplementationOnce(async () => {
+      controller.abort()
+      throw new Error('lookup aborted')
+    })
+    await expect(
+      validateCommitStyleModel(
+        'fable',
+        {
+          allowApiKey: false,
+          abortController: controller
+        },
+        stub.runner
+      )
+    ).rejects.toThrow(/^Generation was cancelled\.$/)
+    expect(stub.close).toHaveBeenCalledOnce()
+  })
+})
 
 /** `buildSubprocessEnv` for a case that must produce an env, as a non-optional value. */
 function builtEnv(opts: Parameters<typeof buildSubprocessEnv>[0]): Record<string, string | undefined> {

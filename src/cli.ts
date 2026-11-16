@@ -4,18 +4,22 @@
  */
 import { Command } from 'commander'
 import { presentCredentialVars } from './agent.ts'
+import { setupCommitStyle } from './commit-style.ts'
 import { loadFileConfig, resolveConfig } from './config.ts'
 import { ClaudeCommitError } from './errors.ts'
 import {
   describeCandidateCheck,
   describeCheckNotices,
+  type GenerateOptions,
   type GenerateResult,
   generateCommit,
   type IgnoreStats,
-  type LowPriorityStats
+  type LowPriorityStats,
+  prepareCommitDiff
 } from './generate.ts'
 import { commit, getRepoRoot, getStagedDiff, getStagedStat, isGitRepo, stageAll } from './git.ts'
 import type { ModelConfig, PartialConfig } from './types.ts'
+import { resolveTypeSafeKey } from './typesafe.ts'
 import { color } from './ui/colors.ts'
 import { confirmCommit, editInEditor } from './ui/editor.ts'
 import { playParty } from './ui/party.ts'
@@ -35,6 +39,7 @@ interface CliOptions {
   all?: boolean
   modelSummary?: string
   modelFinal?: string
+  modelCommits?: string
   dryRun?: boolean
   yes?: boolean
   spinner?: boolean
@@ -62,7 +67,9 @@ export function buildProgram(): Command {
     .option('-n, --count <n>', 'number of options to generate in interactive mode', (v) => parseInt(v, 10))
     .option('-a, --all', 'stage all changes (git add -A) before committing')
     .option('-c, --conventional', 'format as a Conventional Commit')
+    .option('--no-conventional', 'override repository style without Conventional Commits')
     .option('-g, --gitmoji', 'prefix the subject with a gitmoji')
+    .option('--no-gitmoji', 'override repository style without a gitmoji')
     .option('-m, --multiline', 'write a multi-line commit (subject + body)')
     .option('--no-multiline', 'write only a single-line subject')
     .option('-t, --template <tpl>', 'template for the first line, e.g. "[PROJ-1] {message}"')
@@ -70,6 +77,7 @@ export function buildProgram(): Command {
     .option('-f, --filenames-only', 'skip summarisation and use only filenames (faster, less useful messages)')
     .option('--model-summary <model>', 'model used to summarize the diff')
     .option('--model-final <model>', 'model used to write the final message')
+    .option('--model-commits <model>', 'enable repository commit styles with this analysis model (recommended: fable)')
     .option(
       '--skip-armored',
       'omit armored/encoded lines (age/gpg armor, base64 blobs) from the ' +
@@ -136,8 +144,9 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
     cfg.interactiveCount = Math.max(1, opts.count)
   }
   const models: Partial<ModelConfig> = {}
-  if (opts.modelSummary) models.summary = opts.modelSummary
-  if (opts.modelFinal) models.final = opts.modelFinal
+  if (opts.modelSummary?.trim()) models.summary = opts.modelSummary.trim()
+  if (opts.modelFinal?.trim()) models.final = opts.modelFinal.trim()
+  if (opts.modelCommits?.trim()) models.commits = opts.modelCommits.trim()
   if (Object.keys(models).length) cfg.models = models
   return cfg
 }
@@ -241,16 +250,46 @@ export async function run(argv: string[]): Promise<number> {
     if (interactiveMode === 'no-tty-error') {
       throw new ClaudeCommitError('Interactive mode (-i) requires an interactive terminal.')
     }
+    const preparedDiff = prepareCommitDiff(diff, config)
+    const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe) : null
+
+    const styleSpinner = new Spinner(useSpinner, config.spinner)
+    let commitStyle: string | null
+    try {
+      commitStyle = await setupCommitStyle({
+        repoRoot,
+        model: config.models.commits,
+        allowApiKey: config.allowApiKey,
+        yes: Boolean(opts.yes),
+        hasTty: Boolean(process.stdin.isTTY && process.stderr.isTTY),
+        abortController,
+        onPhase: (label) => styleSpinner.start(label),
+        onNote: (message) => {
+          styleSpinner.stop()
+          process.stderr.write(color('90', message) + '\n')
+        }
+      })
+    } finally {
+      styleSpinner.stop()
+    }
+
     if (interactiveMode === 'interactive') {
       const { runInteractive } = await import('./ui/interactive.ts')
       return await runInteractive(diff, config, {
+        commitStyle,
+        preparedDiff,
+        typesafeKey,
         verbose,
         spinner: useSpinner,
         abortController
       })
     }
 
-    return await runNonInteractive(diff, config, opts, verbose, useSpinner, abortController)
+    return await runNonInteractive(diff, config, opts, verbose, useSpinner, abortController, {
+      commitStyle,
+      preparedDiff,
+      typesafeKey
+    })
   } catch (err) {
     if (err instanceof ClaudeCommitError) {
       process.stderr.write(`${color('31', 'error:')} ${err.message}\n`)
@@ -268,7 +307,8 @@ async function runNonInteractive(
   opts: CliOptions,
   verbose: boolean,
   useSpinner: boolean,
-  abortController: AbortController
+  abortController: AbortController,
+  preflight: Pick<GenerateOptions, 'commitStyle' | 'preparedDiff' | 'typesafeKey'>
 ): Promise<number> {
   const spinner = new Spinner(useSpinner, config.spinner)
 
@@ -276,6 +316,7 @@ async function runNonInteractive(
   let result: GenerateResult
   try {
     result = await generateCommit(diff, config, {
+      ...preflight,
       progress: { onPhase: (label) => spinner.update(label) },
       abortController
     })

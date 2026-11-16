@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  availableContextTokens,
   CONTEXT_RESERVE_TOKENS,
   clampChunkTokens,
   contextWindowTokens,
@@ -98,6 +99,11 @@ describe('estimateDiffTokens', () => {
 })
 
 describe('clampChunkTokens', () => {
+  test('reserves additional system context before clamping chunks', () => {
+    expect(clampChunkTokens('haiku', 100_000, 100_000)).toBe(68_000)
+    expect(availableContextTokens('haiku', 168_000)).toBe(0)
+    expect(availableContextTokens('haiku', 200_000)).toBe(-32_000)
+  })
   test('leaves the default budget alone on a 1M-context model', () => {
     expect(clampChunkTokens('sonnet', 600_000)).toBe(600_000)
   })

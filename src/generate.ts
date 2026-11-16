@@ -57,7 +57,7 @@ import {
   MESSAGES_SCHEMA,
   parseOptions
 } from './prompts.ts'
-import { clampChunkTokens } from './tokens.ts'
+import { availableContextTokens, clampChunkTokens, estimateDiffTokens } from './tokens.ts'
 import type { ChangePriority, Config, DiffSummary } from './types.ts'
 import { type CandidateEvidence, checkCandidates, orderFlaggedLast, resolveTypeSafeKey } from './typesafe.ts'
 
@@ -69,6 +69,9 @@ export interface GenerateProgress {
 }
 
 export interface GenerateOptions {
+  commitStyle?: string | null
+  preparedDiff?: ReturnType<typeof prepareCommitDiff>
+  typesafeKey?: string | null
   /** Number of candidate messages to produce (interactive mode uses > 1). */
   count?: number
   progress?: GenerateProgress
@@ -147,6 +150,8 @@ export interface GenerateResult {
 const MIN_RETRY_CHUNK_TOKENS = 8_000
 
 interface PartitionSummaryOptions {
+  commitStyle?: string | null
+  styleTokens: number
   config: Config
   runner: typeof runPrompt
   progress: GenerateProgress
@@ -180,10 +185,10 @@ async function summarizePartition(
   // Chunks are sized by a content-classified token estimate: opaque content
   // (age/gpg armor, binary patches) measures near 1 char/token, so a plain
   // chars-based budget underestimates armor-heavy diffs more than threefold.
-  const chunkTokens = clampChunkTokens(config.models.summary, config.maxChunkTokens)
+  const chunkTokens = clampChunkTokens(config.models.summary, config.maxChunkTokens, options.styleTokens)
   const chunks = splitDiffToFit(diff, chunkTokens, config.charsPerToken)
 
-  const summarySystem = buildSummarySystem(priority)
+  const summarySystem = buildSummarySystem(priority, options.commitStyle)
   const summaries: DiffSummary[] = []
   let costUsd = 0
 
@@ -219,17 +224,8 @@ async function summarizePartition(
   return { summaries, costUsd }
 }
 
-/** Run the full pipeline over a staged diff. */
-export async function generateCommit(
-  diff: string,
-  config: Config,
-  options: GenerateOptions = {}
-): Promise<GenerateResult> {
-  const { count = 1, progress = {}, abortController, runner = runPrompt, typesafeFetch, env = process.env } = options
-  // Resolve the key before any model is paid for: a check the user turned on
-  // but cannot run is a configuration error, found best before the work.
-  const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
-
+/** Prepare and validate the effective diff before any model work or style setup. */
+export function prepareCommitDiff(diff: string, config: Config) {
   // Ignore first: dropped sections cost nothing downstream. Unlike a
   // low-priority partition, an ignored one has nowhere to be promoted to,
   // so matching every file is a dead end rather than a special case.
@@ -255,19 +251,43 @@ export async function generateCommit(
         lowPriority: diffPaths(partition.lowPriority)
       }
     : undefined
+  if (filenames && filenames.primary.length + filenames.lowPriority.length === 0) {
+    throw new ClaudeCommitError('There are no staged filenames to describe.')
+  }
+  return { partition, ignored, filenames }
+}
+
+/** Run the full pipeline over a staged diff. */
+export async function generateCommit(
+  diff: string,
+  config: Config,
+  options: GenerateOptions = {}
+): Promise<GenerateResult> {
+  const { count = 1, progress = {}, abortController, runner = runPrompt, typesafeFetch, env = process.env } = options
+  // Resolve the key before any model is paid for: a check the user turned on
+  // but cannot run is a configuration error, found best before the work.
+  const typesafeKey = config.typesafe.enable ? (options.typesafeKey ?? resolveTypeSafeKey(config.typesafe, env)) : null
+  const { partition, ignored, filenames } = options.preparedDiff ?? prepareCommitDiff(diff, config)
+  const styleTokens = options.commitStyle != null ? estimateDiffTokens(options.commitStyle, config.charsPerToken) : 0
+  const models = config.filenamesOnly ? [config.models.final] : [config.models.summary, config.models.final]
+  if (
+    options.commitStyle != null &&
+    models.some((model) => availableContextTokens(model, styleTokens) < MIN_RETRY_CHUNK_TOKENS)
+  ) {
+    throw new ClaudeCommitError('COMMITS.md leaves no room for generation input. Shorten COMMITS.md and try again.')
+  }
+  const finalBudget = availableContextTokens(config.models.final, styleTokens)
   const summaries: DiffSummary[] = []
   let costUsd = 0
-  if (filenames) {
-    if (filenames.primary.length + filenames.lowPriority.length === 0) {
-      throw new ClaudeCommitError('There are no staged filenames to describe.')
-    }
-  } else {
+  if (!filenames) {
     // Stage 1: primary first, then low priority. filenamesOnly bypasses
     // chunking and summary calls entirely.
     const partitionOptions: PartitionSummaryOptions = {
       config,
       runner,
       progress,
+      commitStyle: options.commitStyle,
+      styleTokens,
       ...(abortController ? { abortController } : {})
     }
     const primaryStage = await summarizePartition(partition.primary, 'primary', partitionOptions)
@@ -303,25 +323,28 @@ export async function generateCommit(
   let messages: string[] | null = null
   let lastError: unknown
   for (const attempt of attempts) {
-    try {
-      const result = await runner(
-        filenames
-          ? buildFilenamesUser(filenames, count, attempt.structured)
-          : buildFinalUser(summaries, count, attempt.structured),
-        {
-          ...baseOpts,
-          system: buildFinalSystem(config, attempt.structured, hasLowPriority),
-          ...(attempt.structured
-            ? {
-                outputFormat: {
-                  type: 'json_schema' as const,
-                  schema: MESSAGES_SCHEMA
-                }
-              }
-            : {}),
-          ...(!attempt.structured && progress.onText ? { onText: progress.onText } : {})
-        }
+    const prompt = filenames
+      ? buildFilenamesUser(filenames, count, attempt.structured)
+      : buildFinalUser(summaries, count, attempt.structured)
+    if (options.commitStyle != null && estimateDiffTokens(prompt, config.charsPerToken) > finalBudget) {
+      throw new ClaudeCommitError(
+        'The final prompt exceeds the space left by COMMITS.md. Shorten COMMITS.md and try again.'
       )
+    }
+    try {
+      const result = await runner(prompt, {
+        ...baseOpts,
+        system: buildFinalSystem(config, attempt.structured, hasLowPriority, options.commitStyle),
+        ...(attempt.structured
+          ? {
+              outputFormat: {
+                type: 'json_schema' as const,
+                schema: MESSAGES_SCHEMA
+              }
+            }
+          : {}),
+        ...(!attempt.structured && progress.onText ? { onText: progress.onText } : {})
+      })
       costUsd += result.costUsd
       messages = attempt.structured
         ? extractMessages(result.structured)
@@ -347,7 +370,10 @@ export async function generateCommit(
   // Format checks need no request, but they sit behind typesafe.enable like
   // every other check: with TypeSafe off, cco shows what it always showed.
   const formatWarnings = deduped.map((message): string[] =>
-    config.typesafe.enable && config.gitmoji && config.conventionalCommits && gitmojiConflictsWithType(message)
+    config.typesafe.enable &&
+    (config.gitmoji ?? options.commitStyle != null) &&
+    (config.conventionalCommits ?? options.commitStyle != null) &&
+    gitmojiConflictsWithType(message)
       ? ['gitmoji does not match the commit type']
       : []
   )
@@ -362,7 +388,16 @@ export async function generateCommit(
       const checked = await checkCandidates(deduped, evidence, {
         apiKey: typesafeKey,
         settings: config.typesafe,
-        rules: { customPrompt: config.customPrompt },
+        rules: {
+          customPrompt: config.customPrompt,
+          commitStyle: options.commitStyle,
+          styleOverrides: {
+            conventionalCommits: config.conventionalCommits,
+            gitmoji: config.gitmoji,
+            multiline: config.multiline,
+            template: config.template
+          }
+        },
         priorWarnings: formatWarnings,
         ...(typesafeFetch ? { fetch: typesafeFetch } : {}),
         ...(abortController ? { signal: abortController.signal } : {})

@@ -17,22 +17,29 @@ git.ts ─▶ diff.ts (ignore, partition, chunk) ─▶ generate.ts ─▶ agent
                 paths.ts, tokens.ts             prompts.ts, config.ts
 ```
 
-| Module            | Owns                                                                          |
-| ----------------- | ----------------------------------------------------------------------------- |
-| `src/agent.ts`    | `runPrompt` - the one call seam; holds Claude's Agent SDK                     |
-| `src/diff.ts`     | Splitting, chunk packing, `applyIgnorePatterns`, `partitionDiff`              |
-| `src/paths.ts`    | The gitignore-style matcher shared by `lowPriorityPaths` and `ignore`         |
-| `src/tokens.ts`   | Token estimation and context-window budgeting                                 |
-| `src/config.ts`   | The layered config (defaults < global < package.json < project < flags)       |
-| `src/typesafe.ts` | The optional Jev candidate check: questions, ranking, `@typesafe-ai/sdk` call |
-| `src/prompts.ts`  | Every prompt: summary, final, filenames-only and multi-option builders        |
-| `src/gitmoji.ts`  | The gitmoji guide and the gitmoji-to-type fit check                           |
-| `src/git.ts`      | `spawn("git", ...)`: staged diff, stat, `git commit -F -`                     |
-| `src/ui/`         | Clack picker, readline prompts and `$EDITOR` (`editor.ts`), `ora` spinner     |
+| Module                | Owns                                                                                |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| `src/agent.ts`        | `runPrompt` - the one call seam; holds Claude's Agent SDK                           |
+| `src/commit-style.ts` | Opt-in COMMITS.md consent, history analysis and exclusive file creation             |
+| `src/diff.ts`         | Splitting, chunk packing, `applyIgnorePatterns`, `partitionDiff`                    |
+| `src/paths.ts`        | The gitignore-style matcher shared by `lowPriorityPaths` and `ignore`               |
+| `src/tokens.ts`       | Token estimation and context-window budgeting                                       |
+| `src/config.ts`       | The layered config (defaults < global < package.json < project < flags)             |
+| `src/typesafe.ts`     | The optional Jev candidate check: questions, ranking, `@typesafe-ai/sdk` call       |
+| `src/prompts.ts`      | Every prompt: summary, final, filenames-only and multi-option builders              |
+| `src/gitmoji.ts`      | The gitmoji guide and the gitmoji-to-type fit check                                 |
+| `src/git.ts`          | `spawn("git", ...)`: staged diff, stat, recent non-merge history, `git commit -F -` |
+| `src/ui/`             | Clack picker, readline prompts and `$EDITOR` (`editor.ts`), `ora` spinner           |
 
 Design records for each non-obvious feature live in
 `docs/superpowers/specs/`. Read the relevant one before changing that
 feature - they record what was rejected and why.
+
+For commit-style changes, read `docs/superpowers/specs/2026-11-16-commit-styles-design.md`.
+`models.commits` defaults to null (off). Setup runs after staging and diff capture;
+validate the model before reading COMMITS.md. Carry style as generation context,
+not config. Null formatting options defer to an active guide; without a guide
+they retain the legacy false behavior. Never send a user turn during model discovery.
 
 Three behaviours are load-bearing and easy to break:
 

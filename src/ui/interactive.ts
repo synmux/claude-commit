@@ -24,14 +24,20 @@ import {
   S_STEP_CANCEL,
   S_STEP_SUBMIT
 } from '@clack/prompts'
-import { describeCandidateCheck, describeCheckNotices, type GenerateResult, generateCommit } from '../generate.ts'
+import {
+  describeCandidateCheck,
+  describeCheckNotices,
+  type GenerateOptions,
+  type GenerateResult,
+  generateCommit
+} from '../generate.ts'
 import { commit } from '../git.ts'
 import type { Config } from '../types.ts'
 import { color } from './colors.ts'
 import { askLine, editInEditor, type PromptIo } from './editor.ts'
 import { Spinner } from './spinner.ts'
 
-export interface InteractiveOptions {
+export interface InteractiveOptions extends Pick<GenerateOptions, 'commitStyle' | 'preparedDiff' | 'typesafeKey'> {
   verbose: boolean
   /** Whether to animate progress; the CLI decides from `--no-spinner` and the TTY. */
   spinner: boolean
@@ -49,6 +55,9 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
   let result: GenerateResult
   try {
     result = await generateCommit(diff, config, {
+      commitStyle: opts.commitStyle,
+      preparedDiff: opts.preparedDiff,
+      typesafeKey: opts.typesafeKey,
       count,
       progress: { onPhase: (label) => spinner.update(label) },
       abortController: opts.abortController

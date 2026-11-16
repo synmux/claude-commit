@@ -1,19 +1,20 @@
 {
   "allowApiKey": false,
   "charsPerToken": 3.5,
-  "conventionalCommits": true,
+  "conventionalCommits": null,
   "customPrompt": null,
   "filenamesOnly": false,
-  "gitmoji": true,
+  "gitmoji": null,
   "interactive": false,
   "interactiveCount": 10,
   "lowPriorityPaths": [".agents/**", ".claude/**", "bun.lock", ".serena"],
   "maxChunkTokens": 750000,
   "models": {
+    "commits": null,
     "summary": "opus",
     "final": "opus"
   },
-  "multiline": true,
+  "multiline": null,
   "skipArmored": true,
   "spinner": "pong",
   "template": null

@@ -38,8 +38,13 @@ export const CONTEXT_RESERVE_TOKENS = 32_000
  * always fits the given model's context window. The configured
  * `maxChunkTokens` remains the user-facing cap; this only ever lowers it.
  */
-export function clampChunkTokens(model: string, maxChunkTokens: number): number {
-  return Math.max(1, Math.min(maxChunkTokens, contextWindowTokens(model) - CONTEXT_RESERVE_TOKENS))
+export function clampChunkTokens(model: string, maxChunkTokens: number, promptTokens = 0): number {
+  return Math.max(1, Math.min(maxChunkTokens, availableContextTokens(model, promptTokens)))
+}
+
+/** Input room after response headroom, scaffolding and additional system context. */
+export function availableContextTokens(model: string, promptTokens = 0): number {
+  return contextWindowTokens(model) - CONTEXT_RESERVE_TOKENS - promptTokens
 }
 
 /**

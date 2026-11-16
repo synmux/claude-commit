@@ -1,12 +1,233 @@
-import { describe, expect, test } from 'vitest'
+import { execFile } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import { describe, expect, test, vi } from 'vitest'
+import * as agent from '../src/agent.ts'
 import {
   buildProgram,
   describeIgnoreStats,
   describeLowPriorityStats,
   flagsToConfig,
-  resolveInteractiveMode
+  resolveInteractiveMode,
+  run
 } from '../src/cli.ts'
+import * as commitStyle from '../src/commit-style.ts'
 import { resolveConfig } from '../src/config.ts'
+import { ClaudeCommitError } from '../src/errors.ts'
+import * as generation from '../src/generate.ts'
+import * as typesafe from '../src/typesafe.ts'
+import * as interactive from '../src/ui/interactive.ts'
+
+describe('commit style flags', () => {
+  test.each([false, true])('passes preflight results into generation (interactive=%s)', async (isInteractive) => {
+    const root = await mkdtemp(join(tmpdir(), 'cco-preflight-reuse-'))
+    const original = process.cwd()
+    const streams = [process.stdin, process.stdout]
+    const descriptors = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'))
+    streams.forEach((stream) => {
+      Object.defineProperty(stream, 'isTTY', {
+        configurable: true,
+        value: true
+      })
+    })
+    const prepared = vi.spyOn(generation, 'prepareCommitDiff')
+    const key = vi.spyOn(typesafe, 'resolveTypeSafeKey').mockReturnValue('resolved-key')
+    const setup = vi.spyOn(commitStyle, 'setupCommitStyle').mockResolvedValue('repository style')
+    const generate = vi
+      .spyOn(generation, 'generateCommit')
+      .mockRejectedValue(new ClaudeCommitError('stop after preflight'))
+    const picker = vi
+      .spyOn(interactive, 'runInteractive')
+      .mockRejectedValue(new ClaudeCommitError('stop after preflight'))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const git = promisify(execFile)
+    try {
+      await git('git', ['init', '-q', root])
+      await writeFile(join(root, 'change.txt'), 'change\n')
+      await git('git', ['-C', root, 'add', 'change.txt'])
+      const path = join(root, 'config.json')
+      await writeFile(
+        path,
+        JSON.stringify({
+          models: { commits: 'fable' },
+          typesafe: { enable: true }
+        })
+      )
+      process.chdir(root)
+      expect(await run(['--config', path, '--no-spinner', ...(isInteractive ? ['-i'] : ['--dry-run'])])).toBe(1)
+      expect(prepared).toHaveBeenCalledOnce()
+      expect(key).toHaveBeenCalledOnce()
+      expect(isInteractive ? picker : generate).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.objectContaining({
+          commitStyle: 'repository style',
+          preparedDiff: prepared.mock.results[0]?.value,
+          typesafeKey: 'resolved-key'
+        })
+      )
+    } finally {
+      process.chdir(original)
+      streams.forEach((stream, index) => {
+        const descriptor = descriptors[index]
+        if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor)
+        else Reflect.deleteProperty(stream, 'isTTY')
+      })
+      prepared.mockRestore()
+      key.mockRestore()
+      setup.mockRestore()
+      generate.mockRestore()
+      picker.mockRestore()
+      stderr.mockRestore()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+  test.each([
+    [true, false, true, true],
+    [true, true, false, false],
+    [false, true, true, false]
+  ])('consent TTYs use stdin=%s and stderr, not stdout=%s (stderr=%s)', async (input, output, error, expected) => {
+    const root = await mkdtemp(join(tmpdir(), 'cco-style-tty-'))
+    const original = process.cwd()
+    const streams = [process.stdin, process.stdout, process.stderr]
+    const descriptors = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'))
+    streams.forEach((stream, index) => {
+      Object.defineProperty(stream, 'isTTY', {
+        configurable: true,
+        value: [input, output, error][index]
+      })
+    })
+    const setup = vi.spyOn(commitStyle, 'setupCommitStyle').mockRejectedValue(new ClaudeCommitError('stop at setup'))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const git = promisify(execFile)
+    try {
+      await git('git', ['init', '-q', root])
+      await writeFile(join(root, 'change.txt'), 'change\n')
+      await git('git', ['-C', root, 'add', 'change.txt'])
+      await writeFile(join(root, 'config.json'), '{}')
+      process.chdir(root)
+      expect(await run(['--config', join(root, 'config.json'), '--dry-run', '--no-spinner'])).toBe(1)
+      expect(setup).toHaveBeenCalledWith(expect.objectContaining({ hasTty: expected }))
+    } finally {
+      process.chdir(original)
+      streams.forEach((stream, index) => {
+        const descriptor = descriptors[index]
+        if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor)
+        else Reflect.deleteProperty(stream, 'isTTY')
+      })
+      setup.mockRestore()
+      stderr.mockRestore()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test.each([
+    { args: ['-i'], ignore: [], error: 'requires an interactive terminal' },
+    { args: ['--dry-run'], ignore: ['change.txt'], error: '"ignore" pattern' }
+  ])('rejects $error before style discovery', async ({ args, ignore, error }) => {
+    const root = await mkdtemp(join(tmpdir(), 'cco-style-preflight-'))
+    const original = process.cwd()
+    const tty = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY')
+    Object.defineProperty(process.stdin, 'isTTY', {
+      configurable: true,
+      value: false
+    })
+    const git = promisify(execFile)
+    const catalog = vi.spyOn(agent, 'validateCommitStyleModel').mockRejectedValue(new Error('unexpected discovery'))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    try {
+      await git('git', ['init', '-q', root])
+      await writeFile(join(root, 'change.txt'), 'change\n')
+      await git('git', ['-C', root, 'add', 'change.txt'])
+      await writeFile(join(root, 'config.json'), JSON.stringify({ models: { commits: 'fable' }, ignore }))
+      process.chdir(root)
+      expect(await run(['--config', join(root, 'config.json'), '--no-spinner', ...args])).toBe(1)
+      expect(stderr.mock.calls.flat().join('')).toContain(error)
+      expect(catalog).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(original)
+      if (tty) Object.defineProperty(process.stdin, 'isTTY', tty)
+      else Reflect.deleteProperty(process.stdin, 'isTTY')
+      catalog.mockRestore()
+      stderr.mockRestore()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('missing TypeSafe credentials fail before commit style model discovery', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cco-style-cli-'))
+    const original = process.cwd()
+    const git = promisify(execFile)
+    const catalog = vi.spyOn(agent, 'validateCommitStyleModel').mockRejectedValue(new Error('unexpected discovery'))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    vi.stubEnv('__CCO_MISSING_STYLE_TEST_KEY', undefined)
+    try {
+      await git('git', ['init', '-q', root])
+      await writeFile(join(root, 'change.txt'), 'change\n')
+      await git('git', ['-C', root, 'add', 'change.txt'])
+      await writeFile(
+        join(root, 'config.json'),
+        JSON.stringify({
+          models: { commits: 'fable' },
+          typesafe: { enable: true, env: '__CCO_MISSING_STYLE_TEST_KEY' }
+        })
+      )
+      process.chdir(root)
+      expect(await run(['--config', join(root, 'config.json'), '--dry-run', '--no-spinner'])).toBe(1)
+      expect(stderr.mock.calls.flat().join('')).toContain('$__CCO_MISSING_STYLE_TEST_KEY is not set')
+      expect(catalog).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(original)
+      catalog.mockRestore()
+      stderr.mockRestore()
+      vi.unstubAllEnvs()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('model opt-in and explicit negations override config', () => {
+    const program = buildProgram()
+    program.parse(['--model-commits', 'fable', '--no-conventional', '--no-gitmoji', '--no-multiline'], { from: 'user' })
+    const flags = flagsToConfig(program.opts())
+    expect(flags).toMatchObject({
+      models: { commits: 'fable' },
+      conventionalCommits: false,
+      gitmoji: false,
+      multiline: false
+    })
+  })
+  test('omitted flags do not turn null styles into explicit options', () => {
+    const program = buildProgram()
+    program.parse([], { from: 'user' })
+    const config = resolveConfig({}, flagsToConfig(program.opts()))
+    expect(config.conventionalCommits).toBeNull()
+    expect(config.gitmoji).toBeNull()
+    expect(config.multiline).toBeNull()
+  })
+
+  test.each(['', ' \t\n '])('blank model flags preserve lower-layer models: %j', (value) => {
+    const program = buildProgram()
+    program.parse(['--model-summary', value, '--model-final', value, '--model-commits', value], { from: 'user' })
+    const flags = flagsToConfig(program.opts())
+    expect(flags.models).toBeUndefined()
+    const models = { summary: 'sonnet', final: 'haiku', commits: 'fable' }
+    expect(resolveConfig({ models }, flags).models).toEqual(models)
+  })
+
+  test('model flags trim surrounding whitespace', () => {
+    const program = buildProgram()
+    program.parse(['--model-summary', ' sonnet ', '--model-final', '\thaiku\n', '--model-commits', ' fable '], {
+      from: 'user'
+    })
+    expect(flagsToConfig(program.opts()).models).toEqual({
+      summary: 'sonnet',
+      final: 'haiku',
+      commits: 'fable'
+    })
+  })
+})
 
 describe('filenames-only flags', () => {
   test.each(['-f', '--filenames-only'])('%s enables the mode', (flag) => {

@@ -205,6 +205,22 @@ describe('buildFinalSystem with low-priority changes', () => {
     expect(full).not.toContain('Output only the single subject line')
   })
 
+  test('conditionally keeps primary-change safeguards when a guide owns formatting', () => {
+    const system = buildFinalSystem(DEFAULT_CONFIG, false, true, 'Use repository conventions.')
+    expect(system).toContain('If COMMITS.md uses a Conventional Commits type')
+    expect(system).toContain('If COMMITS.md uses a gitmoji')
+    expect(system).toMatch(/type[^.]*primary changes alone/)
+    expect(system).toMatch(/gitmoji[^.]*primary changes alone/)
+    const disabled = buildFinalSystem(
+      { ...DEFAULT_CONFIG, conventionalCommits: false, gitmoji: false },
+      false,
+      true,
+      'Use repository conventions.'
+    )
+    expect(disabled).not.toContain('If COMMITS.md uses')
+    expect(buildFinalSystem(DEFAULT_CONFIG, false, true)).not.toContain('If COMMITS.md uses')
+  })
+
   test('the weighting rule comes after the subject rules and before the body rule', () => {
     const sys = buildFinalSystem(fullConfig, false, true)
     const subjectRule = sys.indexOf('Conventional Commit')

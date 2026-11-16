@@ -13,7 +13,13 @@
  * settings (see {@link buildQueryOptions}) - so the request contains nothing
  * beyond the prompt we build.
  */
-import { type Options, query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import {
+  type ModelInfo,
+  type Options,
+  query,
+  type SDKMessage,
+  type SDKUserMessage
+} from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeCommitError } from './errors.ts'
 import type { ModelResult, RunPromptOptions } from './types.ts'
 
@@ -121,6 +127,50 @@ export function buildQueryOptions(opts: RunPromptOptions, subprocessEnv?: Record
     ...(opts.onStderr ? { stderr: opts.onStderr } : {}),
     ...(subprocessEnv ? { env: subprocessEnv } : {}),
     ...(opts.outputFormat ? { outputFormat: opts.outputFormat } : {})
+  }
+}
+
+export async function validateCommitStyleModel(
+  model: string,
+  opts: { allowApiKey: boolean; abortController?: AbortController },
+  queryRunner: typeof query = query
+): Promise<void> {
+  let releaseInput: (() => void) | undefined
+  const heldInput = new Promise<void>((resolve) => {
+    releaseInput = resolve
+  })
+  const input: AsyncIterable<SDKUserMessage> = {
+    [Symbol.asyncIterator]: () => ({
+      next: async () => {
+        await heldInput
+        return { done: true, value: undefined }
+      }
+    })
+  }
+  const env = buildSubprocessEnv({
+    baseEnv: process.env,
+    allowApiKey: opts.allowApiKey
+  })
+  const options = buildQueryOptions({ model: '', system: '', ...opts }, env)
+  delete options.model
+  let session: ReturnType<typeof query> | undefined
+  let models: ModelInfo[]
+  try {
+    session = queryRunner({ prompt: input, options })
+    models = await session.supportedModels()
+  } catch (error) {
+    if (opts.abortController?.signal.aborted) {
+      throw new ClaudeCommitError('Generation was cancelled.')
+    }
+    throw new ClaudeCommitError(`Cannot verify models.commits: ${(error as Error).message}`)
+  } finally {
+    releaseInput?.()
+    session?.close()
+  }
+  if (!models.some((entry) => entry.value === model || entry.resolvedModel === model)) {
+    throw new ClaudeCommitError(
+      `models.commits "${model}" is not a valid model. Fix or remove it. Available models: ${models.map((entry) => entry.value).join(', ') || '(none)'}.`
+    )
   }
 }
 

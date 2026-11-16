@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import type { runPrompt } from '../src/agent.ts'
 import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
-import { describeCheckNotices, generateCommit } from '../src/generate.ts'
+import { describeCheckNotices, generateCommit, prepareCommitDiff } from '../src/generate.ts'
+import { availableContextTokens, estimateDiffTokens } from '../src/tokens.ts'
 import type { Config, ModelResult } from '../src/types.ts'
 import { answeringJevFetch, fakeJevFetch, jevAnswers } from './typesafe-fixtures.ts'
 
@@ -30,6 +31,44 @@ index 111..222 100644
  context
 -old line
 +new line`
+
+describe('commit style propagation', () => {
+  test.each([false, true])(
+    'every preparation/final/fallback call receives style (filenamesOnly=%s)',
+    async (filenamesOnly) => {
+      const systems: string[] = []
+      let summaries = 0
+      let finals = 0
+      const runner: Runner = async (_prompt, options) => {
+        systems.push(options.system)
+        if (options.system.includes('Do not write a commit message')) {
+          summaries++
+          return { text: 'Changed content', costUsd: 0 }
+        }
+        finals++
+        if (options.outputFormat) throw new ClaudeCommitError('structured unavailable')
+        return {
+          text: 'First subject\n===OPTION===\nSecond subject',
+          costUsd: 0
+        }
+      }
+      const diff = `${textDiff}\n${textDiff.replaceAll('a.txt', 'generated.lock')}`
+      const result = await generateCommit(
+        diff,
+        { ...baseConfig, filenamesOnly, lowPriorityPaths: ['*.lock'] },
+        {
+          runner,
+          count: 2,
+          commitStyle: 'Use the repository voice.'
+        }
+      )
+      expect(result.messages).toHaveLength(2)
+      expect(summaries).toBe(filenamesOnly ? 0 : 2)
+      expect(finals).toBe(2)
+      expect(systems.every((system) => system.includes('Use the repository voice.'))).toBe(true)
+    }
+  )
+})
 
 /** One summary-stage request as seen by the stub runner. */
 interface SummaryCall {
@@ -96,6 +135,137 @@ const promptTooLong = () =>
   )
 
 describe('generateCommit', () => {
+  test.each([
+    { summary: 'haiku', final: 'sonnet', filenamesOnly: false },
+    { summary: 'sonnet', final: 'haiku', filenamesOnly: false },
+    { summary: 'haiku', final: 'haiku', filenamesOnly: true }
+  ])('rejects unusably small guide budgets before model calls: %j', async (settings) => {
+    const runner = vi.fn<Runner>(async () => {
+      throw new Error('model must not run')
+    })
+    const config = {
+      ...baseConfig,
+      models: settings,
+      filenamesOnly: settings.filenamesOnly
+    }
+    await expect(
+      generateCommit(textDiff, config, {
+        runner,
+        commitStyle: 'x'.repeat(167_000)
+      })
+    ).rejects.toThrow(/COMMITS.md leaves no room.*Shorten COMMITS.md/)
+    expect(runner).not.toHaveBeenCalled()
+  })
+
+  test('reuses prepared diff and resolved key without reading either input again', async () => {
+    const config = {
+      ...baseConfig,
+      typesafe: { ...baseConfig.typesafe, enable: true }
+    }
+    const { runner } = stubRunner()
+    const { fetch } = answeringJevFetch()
+    const options = {
+      runner,
+      typesafeFetch: fetch,
+      preparedDiff: prepareCommitDiff(textDiff, config),
+      typesafeKey: 'ts-key',
+      env: new Proxy(
+        {},
+        {
+          get() {
+            throw new Error('key resolved twice')
+          }
+        }
+      )
+    }
+    const result = await generateCommit('', config, options)
+    expect(result.messages).toEqual(['fix: stubbed message'])
+  })
+
+  test('filenames-only mode ignores the unused summary budget', async () => {
+    const { runner } = stubRunner()
+    const config = {
+      ...baseConfig,
+      filenamesOnly: true,
+      models: { summary: 'haiku', final: 'sonnet' }
+    }
+    const result = await generateCommit(textDiff, config, {
+      runner,
+      commitStyle: 'x'.repeat(167_000)
+    })
+    expect(result.chunkCount).toBe(0)
+    expect(result.messages).toEqual(['fix: stubbed message'])
+  })
+
+  test('accepts the usable guide budget floor', async () => {
+    const { runner } = stubRunner()
+    const config = {
+      ...baseConfig,
+      models: { summary: 'haiku', final: 'haiku' }
+    }
+    const result = await generateCommit(textDiff, config, {
+      runner,
+      commitStyle: 'x'.repeat(159_999)
+    })
+    expect(result.messages).toEqual(['fix: stubbed message'])
+  })
+  test.each([
+    { summary: 'haiku', final: 'sonnet', filenamesOnly: false },
+    { summary: 'sonnet', final: 'haiku', filenamesOnly: false },
+    { summary: 'haiku', final: 'haiku', filenamesOnly: true }
+  ])('rejects a guide that fills a used model before any call: %j', async ({ summary, final, filenamesOnly }) => {
+    const runner = vi.fn<Runner>()
+    const config = {
+      ...baseConfig,
+      models: { summary, final, commits: null },
+      filenamesOnly
+    }
+    await expect(
+      generateCommit(textDiff, config, {
+        runner,
+        commitStyle: 'x'.repeat(168_000)
+      })
+    ).rejects.toThrow(/Shorten COMMITS.md/)
+    expect(runner).not.toHaveBeenCalled()
+  })
+
+  test('guide tokens reduce the summary chunk budget', async () => {
+    const commitStyle = 'x'.repeat(140_000)
+    const config = {
+      ...baseConfig,
+      models: { ...baseConfig.models, summary: 'haiku' },
+      maxChunkTokens: 100_000
+    }
+    const { runner, summaryPrompts } = stubRunner()
+    const result = await generateCommit(armorDiff(1_000), config, {
+      runner,
+      commitStyle
+    })
+    const budget = availableContextTokens('haiku', estimateDiffTokens(commitStyle, config.charsPerToken))
+    expect(result.chunkCount).toBeGreaterThan(1)
+    for (const prompt of summaryPrompts) {
+      expect(estimateDiffTokens(prompt, config.charsPerToken)).toBeLessThan(budget + 500)
+    }
+  })
+
+  test('checks final evidence against the room remaining after the guide', async () => {
+    const runner = vi.fn<Runner>(async () => ({
+      text: 'summary '.repeat(5_000),
+      costUsd: 0
+    }))
+    const config = {
+      ...baseConfig,
+      models: { ...baseConfig.models, final: 'haiku' }
+    }
+    await expect(
+      generateCommit(textDiff, config, {
+        runner,
+        commitStyle: 'x'.repeat(159_000)
+      })
+    ).rejects.toThrow(/final prompt.*Shorten COMMITS.md/)
+    expect(runner).toHaveBeenCalledOnce()
+  })
+
   test('small text diff: one summary, one final call, one message', async () => {
     const { runner, summaryPrompts } = stubRunner()
     const result = await generateCommit(textDiff, baseConfig, { runner })
@@ -289,7 +459,11 @@ describe('filenamesOnly', () => {
       `${skillDiff}\n${textDiff}`,
       {
         ...config,
-        models: { summary: 'summary-model', final: 'final-model' },
+        models: {
+          commits: null,
+          summary: 'summary-model',
+          final: 'final-model'
+        },
         maxChunkTokens: 1
       },
       {
@@ -362,7 +536,11 @@ describe('filenamesOnly', () => {
       textDiff,
       {
         ...config,
-        models: { summary: 'summary-model', final: 'final-model' }
+        models: {
+          commits: null,
+          summary: 'summary-model',
+          final: 'final-model'
+        }
       },
       {
         count: 2,
@@ -515,7 +693,10 @@ describe('chunk sizing', () => {
     const sonnetRun = await generateCommit(big, baseConfig, { runner })
     const haikuRun = await generateCommit(
       big,
-      { ...baseConfig, models: { summary: 'haiku', final: 'sonnet' } },
+      {
+        ...baseConfig,
+        models: { commits: null, summary: 'haiku', final: 'sonnet' }
+      },
       { runner }
     )
     expect(sonnetRun.chunkCount).toBe(1)
@@ -612,13 +793,21 @@ describe('TypeSafe candidate check', () => {
     })
   })
 
-  test('a missing key fails before any model is called', async () => {
-    const { runner, calls } = threeOptionRunner()
-    await expect(generateCommit(textDiff, typesafeConfig, { runner, count: 3, env: {} })).rejects.toThrow(
-      /TYPESAFE_API_KEY/
-    )
-    expect(calls).toHaveLength(0)
-  })
+  test.each([null, 'Use repository conventions.'])(
+    'a missing key fails before any model is called (style=%s)',
+    async (commitStyle) => {
+      const { runner, calls } = threeOptionRunner()
+      await expect(
+        generateCommit(textDiff, typesafeConfig, {
+          runner,
+          count: 3,
+          env: {},
+          commitStyle
+        })
+      ).rejects.toThrow(/TYPESAFE_API_KEY/)
+      expect(calls).toHaveLength(0)
+    }
+  )
 
   test('reads the key from the variable "typesafe.env" names', async () => {
     const { runner } = threeOptionRunner()
@@ -636,23 +825,27 @@ describe('TypeSafe candidate check', () => {
     expect(requests[0]?.headers.get('authorization')).toBe('Bearer alt')
   })
 
-  test('a failed check keeps the model order and says why', async () => {
-    const { runner } = threeOptionRunner()
-    const { fetch } = fakeJevFetch(() => ({
-      status: 401,
-      json: { error: 'invalid key' }
-    }))
-    const result = await generateCommit(textDiff, typesafeConfig, {
-      runner,
-      count: 3,
-      env,
-      typesafeFetch: fetch
-    })
+  test.each([null, 'Use repository conventions.'])(
+    'a failed check keeps the model order and says why (style=%s)',
+    async (commitStyle) => {
+      const { runner } = threeOptionRunner()
+      const { fetch } = fakeJevFetch(() => ({
+        status: 401,
+        json: { error: 'invalid key' }
+      }))
+      const result = await generateCommit(textDiff, typesafeConfig, {
+        runner,
+        count: 3,
+        env,
+        typesafeFetch: fetch,
+        commitStyle
+      })
 
-    expect(result.messages).toEqual(candidates)
-    expect(result.warnings).toEqual([[], [], []])
-    expect(result.candidateCheck?.status).toBe('failed')
-  })
+      expect(result.messages).toEqual(candidates)
+      expect(result.warnings).toEqual([[], [], []])
+      expect(result.candidateCheck?.status).toBe('failed')
+    }
+  )
 
   test('checks a single non-interactive message too', async () => {
     const { runner } = threeOptionRunner()
@@ -676,14 +869,15 @@ describe('TypeSafe candidate check', () => {
     expect(calls).toHaveLength(0)
   })
 
-  test('does not run when disabled', async () => {
+  test.each([null, 'Use repository conventions.'])('does not run when disabled (style=%s)', async (commitStyle) => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch()
     const disabled = await generateCommit(textDiff, baseConfig, {
       runner,
       count: 3,
       env: {},
-      typesafeFetch: fetch
+      typesafeFetch: fetch,
+      commitStyle
     })
 
     expect(requests).toHaveLength(0)
@@ -730,6 +924,65 @@ describe('TypeSafe candidate check', () => {
     expect(result.warnings.at(-1)).toEqual(['ignores your custom instructions'])
   })
 
+  test.each([
+    [1, false],
+    [3, false],
+    [1, true],
+    [3, true]
+  ] as const)('checks active style in the same request (count=%s, filenamesOnly=%s)', async (count, filenamesOnly) => {
+    const { runner } = threeOptionRunner()
+    const { fetch, requests } = answeringJevFetch({ c0_follows_style: 0.05 })
+    const config: Config = {
+      ...typesafeConfig,
+      filenamesOnly,
+      conventionalCommits: false,
+      gitmoji: null,
+      multiline: true,
+      template: '[PROJ] {message}',
+      customPrompt: 'Mention the ticket.'
+    }
+    const result = await generateCommit(textDiff, config, {
+      runner,
+      count,
+      env,
+      typesafeFetch: fetch,
+      commitStyle: 'Use past tense and no body.'
+    })
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.body.state.repository_style).toBe('Use past tense and no body.')
+    expect(requests[0]?.body.state.style_overrides).toEqual({
+      conventionalCommits: false,
+      gitmoji: null,
+      multiline: true,
+      template: '[PROJ] {message}'
+    })
+    expect(requests[0]?.body.state.custom_instructions).toBe('Mention the ticket.')
+    expect(result.candidateCheck?.status).toBe('checked')
+    expect(result.warnings.some((warnings) => warnings.includes('ignores COMMITS.md instructions'))).toBe(true)
+  })
+
+  test('a missing style answer reports a failed check, never a pass', async () => {
+    const { runner } = threeOptionRunner()
+    const { fetch } = fakeJevFetch((body) => {
+      const answers = jevAnswers(body.questions)
+      delete answers.c0_follows_style
+      return { status: 200, json: { model: 'jev-1.13.0', answers } }
+    })
+    const result = await generateCommit(textDiff, typesafeConfig, {
+      runner,
+      count: 3,
+      env,
+      typesafeFetch: fetch,
+      commitStyle: 'Use past tense.'
+    })
+    expect(result.candidateCheck).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('c0_follows_style')
+    })
+    expect(result.messages).toEqual(candidates)
+    expect(result.warnings).toEqual([[], [], []])
+  })
+
   test('checks filenames-only candidates against the file list', async () => {
     const { runner } = threeOptionRunner()
     const { fetch, requests } = answeringJevFetch()
@@ -762,6 +1015,63 @@ describe('gitmoji format check', () => {
   const formats = { gitmoji: true, conventionalCommits: true }
   const enabled = { ...baseConfig.typesafe, enable: true }
   const env = { TYPESAFE_API_KEY: 'ts-key' }
+
+  test('checks actual emoji/type pairs when an active guide owns both settings', async () => {
+    const { fetch } = answeringJevFetch()
+    const result = await generateCommit(
+      textDiff,
+      { ...baseConfig, typesafe: enabled },
+      {
+        runner,
+        count: 2,
+        env,
+        typesafeFetch: fetch,
+        commitStyle: 'Use gitmoji Conventional Commits.'
+      }
+    )
+    expect(result.messages).toEqual([clashing[1], clashing[0]])
+    expect(result.warnings).toEqual([[], ['gitmoji does not match the commit type']])
+  })
+
+  test.each([
+    { gitmoji: false, conventionalCommits: null },
+    { gitmoji: null, conventionalCommits: false }
+  ])('explicit false disables style-owned format checking: %j', async (format) => {
+    const { fetch } = answeringJevFetch()
+    const result = await generateCommit(
+      textDiff,
+      { ...baseConfig, ...format, typesafe: enabled },
+      {
+        runner: singleRunner,
+        env,
+        typesafeFetch: fetch,
+        commitStyle: 'Use repository conventions.'
+      }
+    )
+    expect(result.warnings).toEqual([[]])
+  })
+
+  test.each(['🔧 Update defaults', 'feat: change defaults', 'Update defaults'])(
+    'style-owned format checking ignores candidates without both components: %s',
+    async (message) => {
+      const { fetch } = answeringJevFetch()
+      const result = await generateCommit(
+        textDiff,
+        { ...baseConfig, typesafe: enabled },
+        {
+          runner: async () => ({
+            text: '',
+            costUsd: 0,
+            structured: { messages: [message] }
+          }),
+          env,
+          typesafeFetch: fetch,
+          commitStyle: 'Use repository conventions.'
+        }
+      )
+      expect(result.warnings).toEqual([[]])
+    }
+  )
 
   test('with TypeSafe off, a clash changes nothing', async () => {
     const result = await generateCommit(textDiff, { ...baseConfig, ...formats }, { runner, count: 2 })

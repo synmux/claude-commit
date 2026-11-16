@@ -15,15 +15,16 @@ import type { Config, ModelConfig, PartialConfig, TypeSafeConfig } from './types
 import { DEFAULT_SPINNER, isSpinnerName } from './ui/spinner.ts'
 
 export const DEFAULT_CONFIG: Config = {
-  conventionalCommits: false,
-  gitmoji: false,
-  multiline: false,
+  conventionalCommits: null,
+  gitmoji: null,
+  multiline: null,
   template: null,
   customPrompt: null,
   interactive: false,
   interactiveCount: 3,
   spinner: DEFAULT_SPINNER,
   models: {
+    commits: null,
     summary: 'sonnet',
     final: 'sonnet'
   },
@@ -119,6 +120,9 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   bool('conventionalCommits')
   bool('gitmoji')
   bool('multiline')
+  for (const key of ['conventionalCommits', 'gitmoji', 'multiline'] as const) {
+    if (obj[key] === null) out[key] = null
+  }
   bool('interactive')
   bool('skipArmored')
   bool('filenamesOnly')
@@ -154,6 +158,8 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   if (obj.models && typeof obj.models === 'object') {
     const m = obj.models as Record<string, unknown>
     const models: Partial<ModelConfig> = {}
+    if (m.commits === null) models.commits = null
+    else if (typeof m.commits === 'string' && m.commits.trim() !== '') models.commits = m.commits.trim()
     // A blank model name is not an override, it is a mistake: leaving the
     // key unset keeps the layer below, which is a working model.
     if (typeof m.summary === 'string' && m.summary.trim() !== '') {

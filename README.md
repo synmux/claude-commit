@@ -113,6 +113,8 @@ error or is killed by a signal aborts the commit too.
 | `-f, --filenames-only`                   | Skip summarisation and send only filenames to the final model                              |
 | `--model-summary <model>`                | Model used to summarize the diff (default `sonnet`)                                        |
 | `--model-final <model>`                  | Model used to write the message (default `sonnet`)                                         |
+| `--model-commits <model>`                | Enable repository commit styles; model used to analyze history (recommended `fable`)       |
+| `--no-conventional` / `--no-gitmoji`     | Explicitly disable these conventions, including when COMMITS.md requests them              |
 | `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff          |
 | `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                    |
 | `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                            |
@@ -190,6 +192,7 @@ it was written from, then:
 - flags a subject about low-priority changes when the primary changes are
   elsewhere
 - flags an option that ignores your `customPrompt`, when one is set
+- flags an option that ignores an active `COMMITS.md`, respecting explicit formatting overrides
 - drops an option that says the same thing as one above it
 - warns when the staged changes look like more than one commit, so you
   can split them before committing
@@ -214,8 +217,9 @@ another variable, set `"typesafe.env"`, for example
 `"env": "__TYPESAFE_API_KEY"`. If the check is on and the key is missing,
 cco stops before it calls any model.
 
-When on, cco sends the summaries (or file paths) and the candidate
-messages to TypeSafe. It never sends diff content. The check is off by
+When on, cco sends the summaries (or file paths), candidate messages, custom
+instructions, and any active `COMMITS.md` with its explicit overrides to
+TypeSafe. It never sends diff content. The check is off by
 default for that reason. It adds one request to every run, interactive
 or not.
 
@@ -249,6 +253,7 @@ keys are valid at every level:
   "interactiveCount": 3,
   "spinner": "material",
   "models": {
+    "commits": null,
     "summary": "sonnet",
     "final": "sonnet"
   },
@@ -267,6 +272,65 @@ keys are valid at every level:
   "allowApiKey": false
 }
 ```
+
+### Repository commit styles
+
+Set `"models": { "commits": "fable" }` (or pass `--model-commits fable`) to
+emulate this repository's commit conventions. `models.commits` defaults to
+`null`, which disables the feature even if a `COMMITS.md` exists. `fable` is
+the recommended analysis model, not the default. A higher configuration layer
+can set the model back to `null` to disable it; blank model strings are ignored.
+
+With the feature enabled, cco first validates the model against the Agent SDK's
+available model catalog, accepting an exact alias or its resolved full model ID.
+An invalid model stops the run even when `COMMITS.md` already exists. A catalog
+failure is reported as an inability to verify, never as a successful validation.
+Catalog discovery sends no generation prompt and preserves the credential gate.
+
+cco reads only a regular `COMMITS.md` file in the repository root; symlinks are
+rejected. On platforms without `O_NOFOLLOW` (such as Windows), a symlink check
+precedes opening; comparing device/inode identity on the opened handle detects
+path swaps in the race window before reading.
+An empty or whitespace-only file is kept but disables repository style
+for the run, with a note; it is not regenerated. Otherwise, cco uses the file as
+mandatory commit-writing instructions. If it is missing, cco asks permission to
+analyze the latest 100 non-merge commit messages, including bodies, and create a
+Markdown style guide.
+`--yes` authorizes creation without asking. Without a terminal and without
+`--yes`, cco prints a note and continues without repository style. Declining or
+closing the prompt also continues without style. Empty history produces a note
+and no file. Analysis input is budgeted against the configured model's context
+window, retaining the newest messages first and marking truncated messages.
+Older messages beyond the budget are omitted. Analysis uses normal Claude usage;
+subsequent runs reuse the file. A file that appears during analysis is never
+overwritten.
+
+`COMMITS.md` is trusted input: its instructions are fed into every generation.
+Review a generated guide before committing it, and edit it to remove unwanted
+instructions or refine the conventions.
+
+Setup happens after optional `-a` staging and staged-diff capture, so a newly
+created guide is not included in the current commit. A subsequent `cco -a` will
+stage an untracked `COMMITS.md` unless Git ignores it. Commit it deliberately or
+add it to `.gitignore`.
+Both interactive and non-interactive generation use the guide, including
+filenames-only mode; summaries receive it as context, while every candidate
+must follow it.
+
+`conventionalCommits`, `gitmoji`, and `multiline` default to `null` (unset).
+With an active guide, null leaves that aspect entirely to `COMMITS.md`;
+explicit `true` or `false` from any config layer or CLI flag overrides the guide.
+Use `--no-conventional`, `--no-gitmoji`, or `--no-multiline` for explicit false.
+Templates and custom prompts also override conflicting guide instructions.
+Without an active guide, null behaves like the previous false default: a plain,
+imperative, capitalized, single-line subject. Existing explicit options keep
+their behavior. When `typesafe.enable` is true, the existing TypeSafe request
+also checks each candidate against the active guide. Explicit formatting values,
+templates and custom prompts take precedence there too; null values defer to
+the guide. The guide and those overrides are sent to TypeSafe as check data.
+Violations are flagged like ignored custom instructions, not automatically
+rejected. Missing answers or API failures are reported as failed checks; a
+missing key remains an error. Without an active guide, TypeSafe is unchanged.
 
 `typesafe` configures the [candidate check](#typesafe-candidate-check).
 `env` names the variable that holds the API key. `model` is pinned because
