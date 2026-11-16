@@ -159,6 +159,9 @@ export async function validateCommitStyleModel(
     session = queryRunner({ prompt: input, options })
     models = await session.supportedModels()
   } catch (error) {
+    if (opts.abortController?.signal.aborted) {
+      throw new ClaudeCommitError('Generation was cancelled.')
+    }
     throw new ClaudeCommitError(`Cannot verify models.commits: ${(error as Error).message}`)
   } finally {
     releaseInput?.()

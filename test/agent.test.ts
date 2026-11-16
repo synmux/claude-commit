@@ -74,6 +74,26 @@ describe('commit style model catalog', () => {
     )
     expect(stub.close).toHaveBeenCalledOnce()
   })
+
+  test('catalog cancellation is not reported as a verification failure', async () => {
+    const stub = catalog()
+    const controller = new AbortController()
+    stub.supportedModels.mockImplementationOnce(async () => {
+      controller.abort()
+      throw new Error('lookup aborted')
+    })
+    await expect(
+      validateCommitStyleModel(
+        'fable',
+        {
+          allowApiKey: false,
+          abortController: controller
+        },
+        stub.runner
+      )
+    ).rejects.toThrow(/^Generation was cancelled\.$/)
+    expect(stub.close).toHaveBeenCalledOnce()
+  })
 })
 
 /** `buildSubprocessEnv` for a case that must produce an env, as a non-optional value. */
