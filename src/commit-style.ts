@@ -8,7 +8,7 @@ import { ClaudeCommitError } from './errors.ts'
 import { getRecentCommitMessages } from './git.ts'
 import { buildCommitStyleSystem, buildCommitStyleUser } from './prompts.ts'
 import { CONTEXT_RESERVE_TOKENS, contextWindowTokens } from './tokens.ts'
-import { askLine } from './ui/editor.ts'
+import { askLine, type PromptIo } from './ui/editor.ts'
 
 interface CommitStyleOptions {
   repoRoot: string
@@ -46,7 +46,7 @@ export async function setupCommitStyle(options: CommitStyleOptions): Promise<str
         options.onNote?.('No COMMITS.md found; skipping commit styles without a terminal or --yes.')
         return null
       }
-      if (!(await (options.ask ?? askPermission)())) return null
+      if (!(await (options.ask ?? (() => askCommitStylePermission(options.abortController)))())) return null
     }
     const history = await readHistory()
     if (history.length === 0) {
@@ -126,12 +126,28 @@ async function readStyle(path: string): Promise<string | null> {
   }
 }
 
-async function askPermission(): Promise<boolean> {
-  const rl = createInterface({ input: process.stdin, output: process.stderr })
+export async function askCommitStylePermission(abortController?: AbortController, io: PromptIo = {}): Promise<boolean> {
+  if (abortController?.signal.aborted) throw new ClaudeCommitError('Generation was cancelled.')
+  const rl = createInterface({
+    input: io.input ?? process.stdin,
+    output: io.output ?? process.stderr
+  })
+  let interrupted = false
+  const onAbort = () => rl.close()
+  const onSigint = () => {
+    interrupted = true
+    abortController?.abort()
+    rl.close()
+  }
+  rl.on('SIGINT', onSigint)
+  abortController?.signal.addEventListener('abort', onAbort, { once: true })
   try {
     const answer = await askLine(rl, "No COMMITS.md found. Create it from this repo's commit history? [Y/n] ")
+    if (interrupted || abortController?.signal.aborted) throw new ClaudeCommitError('Generation was cancelled.')
     return answer !== null && ['', 'y', 'yes'].includes(answer.trim().toLowerCase())
   } finally {
+    rl.off('SIGINT', onSigint)
+    abortController?.signal.removeEventListener('abort', onAbort)
     rl.close()
   }
 }
