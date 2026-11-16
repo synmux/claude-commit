@@ -13,7 +13,8 @@ import {
   type GenerateResult,
   generateCommit,
   type IgnoreStats,
-  type LowPriorityStats
+  type LowPriorityStats,
+  prepareCommitDiff
 } from './generate.ts'
 import { commit, getRepoRoot, getStagedDiff, getStagedStat, isGitRepo, stageAll } from './git.ts'
 import type { ModelConfig, PartialConfig } from './types.ts'
@@ -239,6 +240,16 @@ export async function run(argv: string[]): Promise<number> {
       )
     }
 
+    const interactiveMode = resolveInteractiveMode({
+      configInteractive: config.interactive,
+      interactiveFlag: opts.interactive,
+      dryRun: Boolean(opts.dryRun),
+      hasTty: Boolean(process.stdin.isTTY && process.stdout.isTTY)
+    })
+    if (interactiveMode === 'no-tty-error') {
+      throw new ClaudeCommitError('Interactive mode (-i) requires an interactive terminal.')
+    }
+    prepareCommitDiff(diff, config)
     if (config.models.commits !== null && config.typesafe.enable) resolveTypeSafeKey(config.typesafe)
 
     const styleSpinner = new Spinner(useSpinner, config.spinner)
@@ -261,15 +272,6 @@ export async function run(argv: string[]): Promise<number> {
       styleSpinner.stop()
     }
 
-    const interactiveMode = resolveInteractiveMode({
-      configInteractive: config.interactive,
-      interactiveFlag: opts.interactive,
-      dryRun: Boolean(opts.dryRun),
-      hasTty: Boolean(process.stdin.isTTY && process.stdout.isTTY)
-    })
-    if (interactiveMode === 'no-tty-error') {
-      throw new ClaudeCommitError('Interactive mode (-i) requires an interactive terminal.')
-    }
     if (interactiveMode === 'interactive') {
       const { runInteractive } = await import('./ui/interactive.ts')
       return await runInteractive(diff, config, {

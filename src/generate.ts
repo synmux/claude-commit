@@ -221,17 +221,8 @@ async function summarizePartition(
   return { summaries, costUsd }
 }
 
-/** Run the full pipeline over a staged diff. */
-export async function generateCommit(
-  diff: string,
-  config: Config,
-  options: GenerateOptions = {}
-): Promise<GenerateResult> {
-  const { count = 1, progress = {}, abortController, runner = runPrompt, typesafeFetch, env = process.env } = options
-  // Resolve the key before any model is paid for: a check the user turned on
-  // but cannot run is a configuration error, found best before the work.
-  const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
-
+/** Prepare and validate the effective diff before any model work or style setup. */
+export function prepareCommitDiff(diff: string, config: Config) {
   // Ignore first: dropped sections cost nothing downstream. Unlike a
   // low-priority partition, an ignored one has nowhere to be promoted to,
   // so matching every file is a dead end rather than a special case.
@@ -257,13 +248,26 @@ export async function generateCommit(
         lowPriority: diffPaths(partition.lowPriority)
       }
     : undefined
+  if (filenames && filenames.primary.length + filenames.lowPriority.length === 0) {
+    throw new ClaudeCommitError('There are no staged filenames to describe.')
+  }
+  return { partition, ignored, filenames }
+}
+
+/** Run the full pipeline over a staged diff. */
+export async function generateCommit(
+  diff: string,
+  config: Config,
+  options: GenerateOptions = {}
+): Promise<GenerateResult> {
+  const { count = 1, progress = {}, abortController, runner = runPrompt, typesafeFetch, env = process.env } = options
+  // Resolve the key before any model is paid for: a check the user turned on
+  // but cannot run is a configuration error, found best before the work.
+  const typesafeKey = config.typesafe.enable ? resolveTypeSafeKey(config.typesafe, env) : null
+  const { partition, ignored, filenames } = prepareCommitDiff(diff, config)
   const summaries: DiffSummary[] = []
   let costUsd = 0
-  if (filenames) {
-    if (filenames.primary.length + filenames.lowPriority.length === 0) {
-      throw new ClaudeCommitError('There are no staged filenames to describe.')
-    }
-  } else {
+  if (!filenames) {
     // Stage 1: primary first, then low priority. filenamesOnly bypasses
     // chunking and summary calls entirely.
     const partitionOptions: PartitionSummaryOptions = {

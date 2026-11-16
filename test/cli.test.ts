@@ -16,6 +16,39 @@ import {
 import { resolveConfig } from '../src/config.ts'
 
 describe('commit style flags', () => {
+  test.each([
+    { args: ['-i'], ignore: [], error: 'requires an interactive terminal' },
+    { args: ['--dry-run'], ignore: ['change.txt'], error: '"ignore" pattern' }
+  ])('rejects $error before style discovery', async ({ args, ignore, error }) => {
+    const root = await mkdtemp(join(tmpdir(), 'cco-style-preflight-'))
+    const original = process.cwd()
+    const tty = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY')
+    Object.defineProperty(process.stdin, 'isTTY', {
+      configurable: true,
+      value: false
+    })
+    const git = promisify(execFile)
+    const catalog = vi.spyOn(agent, 'validateCommitStyleModel').mockRejectedValue(new Error('unexpected discovery'))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    try {
+      await git('git', ['init', '-q', root])
+      await writeFile(join(root, 'change.txt'), 'change\n')
+      await git('git', ['-C', root, 'add', 'change.txt'])
+      await writeFile(join(root, 'config.json'), JSON.stringify({ models: { commits: 'fable' }, ignore }))
+      process.chdir(root)
+      expect(await run(['--config', join(root, 'config.json'), '--no-spinner', ...args])).toBe(1)
+      expect(stderr.mock.calls.flat().join('')).toContain(error)
+      expect(catalog).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(original)
+      if (tty) Object.defineProperty(process.stdin, 'isTTY', tty)
+      else Reflect.deleteProperty(process.stdin, 'isTTY')
+      catalog.mockRestore()
+      stderr.mockRestore()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('missing TypeSafe credentials fail before commit style model discovery', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cco-style-cli-'))
     const original = process.cwd()
@@ -81,7 +114,11 @@ describe('commit style flags', () => {
     program.parse(['--model-summary', ' sonnet ', '--model-final', '\thaiku\n', '--model-commits', ' fable '], {
       from: 'user'
     })
-    expect(flagsToConfig(program.opts()).models).toEqual({ summary: 'sonnet', final: 'haiku', commits: 'fable' })
+    expect(flagsToConfig(program.opts()).models).toEqual({
+      summary: 'sonnet',
+      final: 'haiku',
+      commits: 'fable'
+    })
   })
 })
 
