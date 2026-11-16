@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { link, lstat, readFile, unlink, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { link, open, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { runPrompt, validateCommitStyleModel } from './agent.ts'
@@ -109,9 +110,17 @@ function activeStyle(style: string, onNote: CommitStyleOptions['onNote']): strin
 
 async function readStyle(path: string): Promise<string | null> {
   try {
-    if (!(await lstat(path)).isFile()) throw new ClaudeCommitError('COMMITS.md must be a regular file.')
-    return await readFile(path, 'utf8')
+    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    try {
+      if (!(await file.stat()).isFile()) throw new ClaudeCommitError('COMMITS.md must be a regular file.')
+      return await file.readFile('utf8')
+    } finally {
+      await file.close()
+    }
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ELOOP') {
+      throw new ClaudeCommitError('COMMITS.md must be a regular file.')
+    }
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
     throw error
   }
