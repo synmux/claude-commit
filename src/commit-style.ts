@@ -98,7 +98,7 @@ export async function setupCommitStyle(options: CommitStyleOptions): Promise<str
 }
 
 async function createStyleExclusively(path: string, style: string): Promise<void> {
-  const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW)
+  const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollowFlag())
   try {
     try {
       await file.writeFile(style, 'utf8')
@@ -110,6 +110,13 @@ async function createStyleExclusively(path: string, style: string): Promise<void
     await unlink(path)
     throw error
   }
+}
+
+function noFollowFlag(): number {
+  if (constants.O_NOFOLLOW === undefined) {
+    throw new ClaudeCommitError('Cannot safely access COMMITS.md: O_NOFOLLOW is unavailable on this platform.')
+  }
+  return constants.O_NOFOLLOW
 }
 
 function budgetHistory(messages: string[], model: string): string[] {
@@ -136,7 +143,7 @@ function activeStyle(style: string, onNote: CommitStyleOptions['onNote']): strin
 
 async function readStyle(path: string): Promise<string | null> {
   try {
-    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    const file = await open(path, constants.O_RDONLY | noFollowFlag() | constants.O_NONBLOCK)
     try {
       if (!(await file.stat()).isFile()) throw new ClaudeCommitError('COMMITS.md must be a regular file.')
       return await file.readFile('utf8')

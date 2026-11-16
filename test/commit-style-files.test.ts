@@ -5,6 +5,11 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { setupCommitStyle } from '../src/commit-style.ts'
 
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return { ...actual, constants: { ...actual.constants } }
+})
+
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()
   return {
@@ -17,11 +22,13 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
 let root: string
+const noFollow = constants.O_NOFOLLOW
 beforeEach(async () => {
   vi.clearAllMocks()
   root = await mkdtemp(join(tmpdir(), 'cco-style-files-'))
 })
 afterEach(async () => {
+  Reflect.set(constants, 'O_NOFOLLOW', noFollow)
   await rm(root, { recursive: true, force: true })
 })
 
@@ -37,6 +44,23 @@ function setup() {
     runner: async () => ({ text: '# Style', costUsd: 0 })
   })
 }
+
+test('fails closed before opening a guide when O_NOFOLLOW is unavailable', async () => {
+  await actual.writeFile(join(root, 'COMMITS.md'), '# Existing guide')
+  Reflect.set(constants, 'O_NOFOLLOW', undefined)
+  await expect(setup()).rejects.toThrow('O_NOFOLLOW is unavailable')
+  expect(open).not.toHaveBeenCalled()
+})
+
+test('fails closed in exclusive-create fallback when O_NOFOLLOW is unavailable', async () => {
+  vi.mocked(link).mockImplementationOnce(async () => {
+    Reflect.set(constants, 'O_NOFOLLOW', undefined)
+    throw Object.assign(new Error('unsupported'), { code: 'ENOTSUP' })
+  })
+  await expect(setup()).rejects.toThrow('O_NOFOLLOW is unavailable')
+  expect(open).toHaveBeenCalledOnce()
+  expect(await readdir(root)).toEqual([])
+})
 
 test.each(['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'ENOSYS'])(
   'falls back to exclusive creation when hard links fail with %s',
