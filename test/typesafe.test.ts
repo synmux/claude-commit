@@ -212,6 +212,23 @@ describe('repository style instructions', () => {
     }
   })
 
+  test('preserves raw layout alongside existing fields only with an active guide', () => {
+    const candidates = ['Add cache\n\nExplain the cache.\n', 'Add cache\nExplain the cache.\n']
+    const request = buildCandidateRequest(candidates, summaries, rules)
+    expect(request.state.candidates).toEqual(
+      candidates.map((raw) => ({
+        subject: 'Add cache',
+        body: 'Explain the cache.',
+        raw
+      }))
+    )
+    expect(request.questions.c0_follows_style?.instructions).toContain('.raw')
+    expect(buildCandidateRequest(candidates, summaries).state.candidates).toEqual([
+      { subject: 'Add cache', body: 'Explain the cache.' },
+      { subject: 'Add cache', body: 'Explain the cache.' }
+    ])
+  })
+
   test.each([undefined, null])('no guide preserves the exact existing request (%s)', (commitStyle) => {
     expect(buildCandidateRequest(messages, summaries, { ...rules, commitStyle })).toEqual(
       buildCandidateRequest(messages, summaries, {
