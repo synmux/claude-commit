@@ -319,12 +319,22 @@ describe('generateCommit', () => {
         throw promptTooLong()
       }
     })
+    // Unique lines, so a dropped or repeated one cannot hide behind a duplicate.
+    const lines = Array.from({ length: 1_000 }, (_, index) => `+${'Ab9Xy'.repeat(12)}${String(index).padStart(6, '0')}`)
+    const diff = [
+      'diff --git a/secret.age b/secret.age',
+      '--- a/secret.age',
+      '+++ b/secret.age',
+      '@@ -0,0 +1,1000 @@',
+      ...lines
+    ].join('\n')
     const config: Config = { ...baseConfig, maxChunkTokens: 20_000 }
-    const result = await generateCommit(armorDiff(1_000), config, { runner })
+    const result = await generateCommit(diff, config, { runner })
     expect(rejected).toBe(true)
     expect(result.messages).toEqual(['fix: stubbed message'])
-    const delivered = summaryPrompts.join('\n')
-    expect(delivered.split(armorLine(0).slice(1)).length - 1).toBe(100)
+    // Every line reached the model exactly once across the successful calls.
+    const delivered = summaryPrompts.flatMap((prompt) => prompt.split('\n')).filter((line) => line.includes('Ab9Xy'))
+    expect(delivered).toEqual(lines)
   })
 
   test('other model errors propagate unchanged', async () => {

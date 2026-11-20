@@ -166,6 +166,9 @@ index aaa..bbb 100644
       expect(piece.startsWith(header)).toBe(true)
       expect(piece.length).toBeLessThanOrEqual(budget)
     }
+    // Every body line survives, once and in order.
+    const bodyOf = (piece: string) => piece.slice(header.length + 1).split('\n')
+    expect(pieces.flatMap(bodyOf)).toEqual(bodyOf(tail))
   })
 
   test('keeps an unsplittable binary section whole even if oversized', () => {
