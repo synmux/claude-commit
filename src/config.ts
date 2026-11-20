@@ -12,7 +12,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { isArmorAlphabet } from './diff.ts'
 import { ClaudeCommitError } from './errors.ts'
-import type { ArmorAlphabet, Config, ModelConfig, PartialConfig, TypeSafeConfig } from './types.ts'
+import type { Config, ModelConfig, PartialConfig, TypeSafeConfig } from './types.ts'
 import { DEFAULT_SPINNER, isSpinnerName } from './ui/spinner.ts'
 
 export const DEFAULT_CONFIG: Config = {
@@ -171,10 +171,15 @@ export function sanitizePartial(raw: unknown): PartialConfig {
     out.ignore = cleanPatternList(obj.ignore)
   }
   if (Array.isArray(obj.armorAlphabets)) {
-    const known = obj.armorAlphabets.filter(
-      (entry): entry is ArmorAlphabet => typeof entry === 'string' && isArmorAlphabet(entry)
-    )
-    out.armorAlphabets = [...new Set(known)]
+    const known = obj.armorAlphabets
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(isArmorAlphabet)
+    // `[]` deliberately redacts nothing, but a list of only typos is a
+    // mistake, not that choice: keep the layer below, as for other values.
+    if (known.length > 0 || obj.armorAlphabets.length === 0) {
+      out.armorAlphabets = [...new Set(known)]
+    }
   }
 
   if (obj.models && typeof obj.models === 'object') {

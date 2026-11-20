@@ -121,6 +121,19 @@ describe('armorAlphabets', () => {
     expect(sanitizePartial({ armorAlphabets: 'base64' }).armorAlphabets).toBeUndefined()
   })
 
+  test('matches names regardless of case and surrounding space', () => {
+    expect(sanitizePartial({ armorAlphabets: ['Base64', ' HEX '] }).armorAlphabets).toEqual(['base64', 'hex'])
+  })
+
+  test('a list with no recognised name is a mistake: the layer below is kept', () => {
+    expect(sanitizePartial({ armorAlphabets: ['b85'] }).armorAlphabets).toBeUndefined()
+    const fileConfig = mergePartial(
+      sanitizePartial({ armorAlphabets: ['base64', 'base85'] }),
+      sanitizePartial({ armorAlphabets: ['b85'] })
+    )
+    expect(resolveConfig(fileConfig, {}).armorAlphabets).toEqual(['base64', 'base85'])
+  })
+
   test('an explicit empty list is kept and replaces the inherited one', () => {
     expect(sanitizePartial({ armorAlphabets: [] }).armorAlphabets).toEqual([])
     expect(resolveConfig({ armorAlphabets: ['hex'] }, {}).armorAlphabets).toEqual(['hex'])
