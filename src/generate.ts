@@ -239,7 +239,9 @@ export function prepareCommitDiff(diff: string, config: Config) {
   }
 
   const effectiveDiff =
-    config.skipArmored && !config.filenamesOnly ? redactOpaqueRuns(ignoreResult.diff) : ignoreResult.diff
+    config.skipArmored && !config.filenamesOnly
+      ? redactOpaqueRuns(ignoreResult.diff, config.armorAlphabets)
+      : ignoreResult.diff
   const partition = partitionDiff(effectiveDiff, createPathMatcher(config.lowPriorityPaths))
   if (partition.primary.trim() === '') {
     throw new ClaudeCommitError('There are no staged changes to summarize.')

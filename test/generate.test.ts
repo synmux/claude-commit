@@ -464,6 +464,18 @@ describe('generateCommit', () => {
     expect(summaryPrompts[0]).not.toContain('Ab9Xy')
     expect(summaryPrompts[0]).toContain('a/secret.age')
   })
+
+  test('armorAlphabets decides which runs skipArmored drops', async () => {
+    const { runner, summaryPrompts } = stubRunner()
+    const config: Config = {
+      ...baseConfig,
+      skipArmored: true,
+      armorAlphabets: ['hex']
+    }
+    await generateCommit(armorDiff(400), config, { runner })
+    expect(summaryPrompts.join('\n')).not.toContain('armored/encoded lines omitted')
+    expect(summaryPrompts.join('\n')).toContain('Ab9Xy')
+  })
 })
 
 describe('filenamesOnly', () => {

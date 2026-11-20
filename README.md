@@ -266,6 +266,7 @@ keys are valid at every level:
   "charsPerToken": 3.5,
   "filenamesOnly": false,
   "skipArmored": false,
+  "armorAlphabets": ["base64"],
   "textconv": false,
   "lowPriorityPaths": [],
   "ignore": [],
@@ -374,6 +375,28 @@ this is the recommended setting for encrypted-file repos - for example a
 every `chezmoi re-add` re-encrypts nondeterministically and produces megabytes
 of churned armor. Drop a `.claude-commit.json` with `{ "skipArmored": true }`
 in the repo root to enable it per-repo.
+
+Only lines written in an encoding alphabet are dropped, so a run of long URLs
+or space-free prose (Japanese, Chinese) is never mistaken for armor. A line is
+redacted when it is at least 40 characters of one alphabet listed in
+`armorAlphabets` and sits in a run of three or more such lines. Pick the
+alphabets for what your repo stores:
+
+| Alphabet           | Characters                                   | Use it for                                                                                                    |
+| ------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `base64` (default) | `A-Z`, `a-z`, `0-9`, `+`, `/`, `=`, `-`, `_` | age, gpg and PEM armor, SSH keys and base64 blobs: chezmoi with age, `.asc` files, certificates               |
+| `base85`           | git's binary-patch set (RFC 1924)            | git binary patches inside committed `.patch` files                                                            |
+| `hex`              | `0-9`, `a-f`, `A-F`                          | hex dumps, hex-encoded keys and compiled bytecode, when you want only those dropped (`base64` covers hex too) |
+
+```json
+{ "skipArmored": true, "armorAlphabets": ["base64", "base85"] }
+```
+
+Add `base85` only if you commit patch files. Its alphabet includes most
+punctuation, so a long line of dense code with no space, `.`, `,`, `:` or
+quote can match it. An empty list drops nothing. Token estimates for chunking
+still treat any long space-free line as dense; that only over-reserves room, so
+it never loses content.
 
 ### Textconv drivers
 

@@ -95,6 +95,26 @@ describe('textconv', () => {
   })
 })
 
+describe('armorAlphabets', () => {
+  test('defaults to base64', () => {
+    expect(DEFAULT_CONFIG.armorAlphabets).toEqual(['base64'])
+  })
+
+  test('keeps known alphabets once each and drops anything else', () => {
+    expect(sanitizePartial({ armorAlphabets: ['hex', 'base85', 'hex', 'rot13', 7] }).armorAlphabets).toEqual([
+      'hex',
+      'base85'
+    ])
+    expect(sanitizePartial({ armorAlphabets: 'base64' }).armorAlphabets).toBeUndefined()
+  })
+
+  test('an explicit empty list is kept and replaces the inherited one', () => {
+    expect(sanitizePartial({ armorAlphabets: [] }).armorAlphabets).toEqual([])
+    expect(resolveConfig({ armorAlphabets: ['hex'] }, {}).armorAlphabets).toEqual(['hex'])
+    expect(resolveConfig({ armorAlphabets: ['hex'] }, { armorAlphabets: [] }).armorAlphabets).toEqual([])
+  })
+})
+
 describe('skipArmored', () => {
   test('sanitizes to booleans only and defaults to false', () => {
     expect(sanitizePartial({ skipArmored: true }).skipArmored).toBe(true)

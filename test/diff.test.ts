@@ -257,8 +257,11 @@ describe('splitDiffToFit', () => {
 })
 
 describe('redactOpaqueRuns', () => {
+  const base64 = ['base64'] as const
+  const run = (line: string, lines = 3) => Array.from({ length: lines }, () => line).join('\n')
+
   test('replaces an armor run with a counting marker and keeps structure', () => {
-    const redacted = redactOpaqueRuns(armorFile(50))
+    const redacted = redactOpaqueRuns(armorFile(50), base64)
     expect(redacted).toContain('[cco: 50 armored/encoded lines omitted]')
     expect(redacted).toContain('diff --git a/secret.age b/secret.age')
     expect(redacted).toContain('@@ -1,50 +1,50 @@')
@@ -267,17 +270,48 @@ describe('redactOpaqueRuns', () => {
 
   test('keeps runs shorter than three lines (a lone URL or hash is content)', () => {
     const diff = `${fileA}\n+https://example.com/some/rather/long/path/that/matters?token=abcdef`
-    expect(redactOpaqueRuns(diff)).toBe(diff)
+    expect(redactOpaqueRuns(diff, base64)).toBe(diff)
   })
 
   test('leaves plain text diffs untouched', () => {
     const diff = `${fileA}\n${fileB}`
-    expect(redactOpaqueRuns(diff)).toBe(diff)
+    expect(redactOpaqueRuns(diff, base64)).toBe(diff)
   })
 
   test('shrinks an armor-heavy diff below any real budget', () => {
-    const redacted = redactOpaqueRuns(armorFile(5_000))
+    const redacted = redactOpaqueRuns(armorFile(5_000), base64)
     expect(estimateDiffTokens(redacted, 3.5)).toBeLessThan(200)
+  })
+
+  test('keeps long space-free lines that are not an encoding', () => {
+    const prose = run('+これは空白を含まない日本語の文章でありトークン化の検証のために十分な長さを持っている行です')
+    const urls = run('+https://example.com/docs/reference/api/v2/endpoints/users/settings/notifications')
+    const diff = `${fileA}\n${prose}\n${urls}`
+    expect(redactOpaqueRuns(diff, ['base64', 'base85', 'hex'])).toBe(diff)
+  })
+
+  test('redacts only runs written in a chosen alphabet', () => {
+    const hex = run(`+${'0123456789abcdef'.repeat(4)}`)
+    expect(redactOpaqueRuns(hex, ['hex'])).toBe('[cco: 3 armored/encoded lines omitted]')
+    // Armor uses letters beyond a-f, so a hex-only setting keeps it.
+    const armor = armorFile(5)
+    expect(redactOpaqueRuns(armor, ['hex'])).toBe(armor)
+  })
+
+  test('redacts a binary patch body only under base85', () => {
+    const body = run(`z${'cmV+#kd!@$X%e&Y(Z)*;<=>?^_{|}~'.repeat(2)}`)
+    expect(redactOpaqueRuns(body, base64)).toBe(body)
+    expect(redactOpaqueRuns(body, ['base85'])).toBe('[cco: 3 armored/encoded lines omitted]')
+  })
+
+  test('redacts armor from a file with CRLF line endings', () => {
+    const crlf = run(`+${'Ab9Xy'.repeat(13)}\r`)
+    expect(redactOpaqueRuns(crlf, base64)).toBe('[cco: 3 armored/encoded lines omitted]')
+  })
+
+  test('redacts nothing with an empty alphabet list', () => {
+    const armor = armorFile(5)
+    expect(redactOpaqueRuns(armor, [])).toBe(armor)
   })
 })
 

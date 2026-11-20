@@ -10,8 +10,9 @@
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { isArmorAlphabet } from './diff.ts'
 import { ClaudeCommitError } from './errors.ts'
-import type { Config, ModelConfig, PartialConfig, TypeSafeConfig } from './types.ts'
+import type { ArmorAlphabet, Config, ModelConfig, PartialConfig, TypeSafeConfig } from './types.ts'
 import { DEFAULT_SPINNER, isSpinnerName } from './ui/spinner.ts'
 
 export const DEFAULT_CONFIG: Config = {
@@ -32,6 +33,7 @@ export const DEFAULT_CONFIG: Config = {
   charsPerToken: 3.5,
   filenamesOnly: false,
   skipArmored: false,
+  armorAlphabets: ['base64'],
   textconv: false,
   lowPriorityPaths: [],
   ignore: [],
@@ -98,13 +100,15 @@ export function mergeConfig(base: Config, override: PartialConfig): Config {
   const typesafe: TypeSafeConfig = { ...base.typesafe, ...override.typesafe }
   const lowPriorityPaths = [...(override.lowPriorityPaths ?? base.lowPriorityPaths)]
   const ignore = [...(override.ignore ?? base.ignore)]
+  const armorAlphabets = [...(override.armorAlphabets ?? base.armorAlphabets)]
   const merged: Config = {
     ...base,
     ...override,
     models,
     typesafe,
     lowPriorityPaths,
-    ignore
+    ignore,
+    armorAlphabets
   }
   return merged
 }
@@ -155,6 +159,12 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   }
   if (Array.isArray(obj.ignore)) {
     out.ignore = cleanPatternList(obj.ignore)
+  }
+  if (Array.isArray(obj.armorAlphabets)) {
+    const known = obj.armorAlphabets.filter(
+      (entry): entry is ArmorAlphabet => typeof entry === 'string' && isArmorAlphabet(entry)
+    )
+    out.armorAlphabets = [...new Set(known)]
   }
 
   if (obj.models && typeof obj.models === 'object') {
@@ -299,6 +309,8 @@ export function mergePartial(base: PartialConfig, override: PartialConfig): Part
   if (lowPriorityPaths) out.lowPriorityPaths = [...lowPriorityPaths]
   const ignore = override.ignore ?? base.ignore
   if (ignore) out.ignore = [...ignore]
+  const armorAlphabets = override.armorAlphabets ?? base.armorAlphabets
+  if (armorAlphabets) out.armorAlphabets = [...armorAlphabets]
   return out
 }
 
