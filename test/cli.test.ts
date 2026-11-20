@@ -24,7 +24,8 @@ describe('commit style flags', () => {
   test.each([false, true])('passes preflight results into generation (interactive=%s)', async (isInteractive) => {
     const root = await mkdtemp(join(tmpdir(), 'cco-preflight-reuse-'))
     const original = process.cwd()
-    const streams = [process.stdin, process.stdout]
+    // A prompt-capable terminal: stdin and stderr (stdout plays no part).
+    const streams = [process.stdin, process.stderr]
     const descriptors = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'))
     streams.forEach((stream) => {
       Object.defineProperty(stream, 'isTTY', {

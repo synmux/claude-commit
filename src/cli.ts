@@ -21,7 +21,7 @@ import { commit, getRepoRoot, getStagedDiff, getStagedStat, isGitRepo, stageAll 
 import type { ModelConfig, PartialConfig } from './types.ts'
 import { resolveTypeSafeKey } from './typesafe.ts'
 import { color } from './ui/colors.ts'
-import { confirmCommit, editInEditor } from './ui/editor.ts'
+import { canPrompt, confirmCommit, editInEditor } from './ui/editor.ts'
 import { playParty } from './ui/party.ts'
 import { Spinner, spinnerEnabled } from './ui/spinner.ts'
 import { getVersion } from './utils.ts'
@@ -250,7 +250,7 @@ export async function run(argv: string[]): Promise<number> {
       configInteractive: config.interactive,
       interactiveFlag: opts.interactive,
       dryRun: Boolean(opts.dryRun),
-      hasTty: Boolean(process.stdin.isTTY && process.stdout.isTTY)
+      hasTty: canPrompt()
     })
     if (interactiveMode === 'no-tty-error') {
       throw new ClaudeCommitError('Interactive mode (-i) requires an interactive terminal.')
@@ -266,7 +266,7 @@ export async function run(argv: string[]): Promise<number> {
         model: config.models.commits,
         allowApiKey: config.allowApiKey,
         yes: Boolean(opts.yes),
-        hasTty: Boolean(process.stdin.isTTY && process.stderr.isTTY),
+        hasTty: canPrompt(),
         abortController,
         onPhase: (label) => styleSpinner.start(label),
         onNote: (message) => {
@@ -368,8 +368,7 @@ async function runNonInteractive(
     return 0
   }
 
-  const canPrompt = process.stdin.isTTY && process.stdout.isTTY
-  if (!opts.yes && canPrompt) {
+  if (!opts.yes && canPrompt()) {
     printMessage(message)
     const choice = await confirmCommit()
     if (choice === 'no') {

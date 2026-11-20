@@ -138,8 +138,12 @@ cco --dry-run | cat      # print a message without committing (no picker, pipe-s
 git commit -F <(cco -d)  # use the message with your own git invocation
 ```
 
-In a pipe (no TTY) there is no spinner and no confirmation prompt - `cco` just
-generates and commits (or prints, with `--dry-run`).
+Every prompt (the confirmation, the picker and the `COMMITS.md` question)
+reads stdin and draws on stderr, so `cco` prompts whenever both are terminals.
+Redirecting stdout does not change that: `cco > run.log` still asks before
+committing. Without a terminal on stdin or stderr, as in CI or when piping
+input in, there is no prompt and no spinner - `cco` just generates and commits
+(or prints, with `--dry-run`).
 
 ## Filenames-only mode
 

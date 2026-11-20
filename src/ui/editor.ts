@@ -72,6 +72,23 @@ export interface PromptIo {
   output?: Writable
 }
 
+/** The process streams whose terminal status decides whether cco can prompt. */
+export interface PromptStreams {
+  stdin: { isTTY?: boolean }
+  stderr: { isTTY?: boolean }
+}
+
+/**
+ * Whether cco can ask the user anything. Every prompt - the commit
+ * confirmation, the picker, the COMMITS.md question - reads stdin and draws
+ * on stderr, so both must be terminals. stdout plays no part: it carries
+ * `--dry-run` output and may be piped or redirected while the user is still
+ * at the keyboard.
+ */
+export function canPrompt(streams: PromptStreams = process): boolean {
+  return Boolean(streams.stdin.isTTY && streams.stderr.isTTY)
+}
+
 /**
  * Ask one question. Resolves `null` if the interface closes first: in a
  * terminal readline owns Ctrl-C (it is in raw mode, so no SIGINT reaches
