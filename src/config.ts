@@ -32,6 +32,7 @@ export const DEFAULT_CONFIG: Config = {
   charsPerToken: 3.5,
   filenamesOnly: false,
   skipArmored: false,
+  textconv: false,
   lowPriorityPaths: [],
   ignore: [],
   typesafe: {
@@ -125,6 +126,7 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   }
   bool('interactive')
   bool('skipArmored')
+  bool('textconv')
   bool('filenamesOnly')
   bool('allowApiKey')
 

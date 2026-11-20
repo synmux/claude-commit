@@ -199,6 +199,33 @@ describe('staged-change readers', () => {
     })
   })
 
+  test('getStagedDiff skips textconv drivers unless asked to run them', async () => {
+    // A decrypting driver (git-crypt, transcrypt, sops) is a textconv: its
+    // output is plaintext, and by default it must not reach the model.
+    const dir = await mkdtemp(join(tmpdir(), 'cco-textconv-'))
+    const originalCwd = process.cwd()
+    try {
+      await gitIn(dir, 'init', '-q')
+      await writeFile(join(dir, 'decrypt.sh'), '#!/bin/sh\necho "DECRYPTED PLAINTEXT"\ncat "$1"\n', { mode: 0o755 })
+      await gitIn(dir, 'config', 'diff.decrypt.textconv', join(dir, 'decrypt.sh'))
+      await writeFile(join(dir, '.gitattributes'), '*.enc diff=decrypt\n')
+      await writeFile(join(dir, 'secret.enc'), 'ciphertext\n')
+      await gitIn(dir, 'add', '.gitattributes', 'secret.enc')
+      process.chdir(dir)
+
+      const withoutTextconv = await getStagedDiff()
+      expect(withoutTextconv).toContain('+++ b/secret.enc')
+      expect(withoutTextconv).toContain('+ciphertext')
+      expect(withoutTextconv).not.toContain('DECRYPTED')
+      expect(await getStagedStat()).toContain('secret.enc')
+
+      expect(await getStagedDiff({ textconv: true })).toContain('+DECRYPTED PLAINTEXT')
+    } finally {
+      process.chdir(originalCwd)
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   test('getStagedFiles and getStagedStat cover the whole staged set from a subdirectory', async () => {
     await withStagedRepo(async () => {
       const files = await getStagedFiles()

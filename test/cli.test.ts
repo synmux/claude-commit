@@ -229,6 +229,33 @@ describe('commit style flags', () => {
   })
 })
 
+describe('textconv flags', () => {
+  const parse = (args: string[]) => {
+    const program = buildProgram()
+    program.parse(args, { from: 'user' })
+    return flagsToConfig(program.opts())
+  }
+
+  test('--no-textconv has the effect of "textconv": false', () => {
+    const flags = parse(['--no-textconv'])
+    expect(flags.textconv).toBe(false)
+    expect(resolveConfig({ textconv: true }, flags).textconv).toBe(false)
+  })
+
+  test('--textconv has the effect of "textconv": true', () => {
+    const flags = parse(['--textconv'])
+    expect(flags.textconv).toBe(true)
+    expect(resolveConfig({ textconv: false }, flags).textconv).toBe(true)
+  })
+
+  test('omitting both keeps the configured setting', () => {
+    const flags = parse([])
+    expect(flags.textconv).toBeUndefined()
+    expect(resolveConfig({ textconv: true }, flags).textconv).toBe(true)
+    expect(resolveConfig({}, flags).textconv).toBe(false)
+  })
+})
+
 describe('filenames-only flags', () => {
   test.each(['-f', '--filenames-only'])('%s enables the mode', (flag) => {
     const program = buildProgram()

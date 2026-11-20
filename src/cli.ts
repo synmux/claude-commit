@@ -46,6 +46,8 @@ interface CliOptions {
   config?: string
   verbose?: boolean
   skipArmored?: boolean
+  /** `true` for `--textconv`, `false` for `--no-textconv`, unset otherwise. */
+  textconv?: boolean
   filenamesOnly?: boolean
   /** `false` when `--no-low-priority-paths` was passed (Commander's negated-flag shape). */
   lowPriorityPaths?: boolean
@@ -83,6 +85,8 @@ export function buildProgram(): Command {
       'omit armored/encoded lines (age/gpg armor, base64 blobs) from the ' +
         'summarized diff; recommended for chezmoi-style encrypted repos'
     )
+    .option('--textconv', 'let git run textconv diff drivers (sends their output, e.g. decrypted files, to the model)')
+    .option('--no-textconv', 'never run textconv diff drivers, even when "textconv" is set in config')
     .option(
       '--no-low-priority-paths',
       'ignore the "lowPriorityPaths" config for this run, so every change ' + 'weighs the same'
@@ -134,6 +138,7 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
   if (opts.template !== undefined) cfg.template = opts.template
   if (opts.prompt !== undefined) cfg.customPrompt = opts.prompt
   if (opts.skipArmored !== undefined) cfg.skipArmored = opts.skipArmored
+  if (opts.textconv !== undefined) cfg.textconv = opts.textconv
   if (opts.filenamesOnly !== undefined) cfg.filenamesOnly = opts.filenamesOnly
   // A negated flag arrives as `false`; an empty list overrides any
   // configured patterns because lists replace rather than merge.
@@ -232,7 +237,7 @@ export async function run(argv: string[]): Promise<number> {
 
     if (opts.all) await stageAll()
 
-    const diff = await getStagedDiff()
+    const diff = await getStagedDiff({ textconv: config.textconv })
     if (diff.trim() === '') {
       throw new ClaudeCommitError(
         opts.all
@@ -380,7 +385,7 @@ async function runNonInteractive(
     }
   }
 
-  const stat = verbose ? await getStagedStat().catch(() => '') : ''
+  const stat = verbose ? await getStagedStat({ textconv: config.textconv }).catch(() => '') : ''
   await commit(message)
   spinner.succeed('Committed')
   process.stderr.write(color('90', firstLine(message)) + '\n')

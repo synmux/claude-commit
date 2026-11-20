@@ -101,6 +101,15 @@ export interface Config {
    */
   skipArmored: boolean
   /**
+   * Let git run `textconv` drivers (`diff.<driver>.textconv` for a
+   * gitattributes `diff=<driver>`) when reading the staged diff. Off by
+   * default: git-crypt, transcrypt and sops register decrypting drivers, and
+   * their output - plaintext secrets - would be sent to the model. Turn it on
+   * when your drivers only make binary formats readable (documents, images,
+   * databases) and you want the model to see that text.
+   */
+  textconv: boolean
+  /**
    * Gitignore-style patterns for paths whose changes matter less than the
    * rest of the commit: generated docs, lockfiles, vendored snapshots, build
    * output. Diff sections under these paths are summarised separately and

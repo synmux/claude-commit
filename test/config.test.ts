@@ -79,6 +79,22 @@ describe('filenamesOnly', () => {
   })
 })
 
+describe('textconv', () => {
+  test('is off by default and accepts only booleans', () => {
+    expect(DEFAULT_CONFIG.textconv).toBe(false)
+    expect(sanitizePartial({ textconv: true }).textconv).toBe(true)
+    expect(sanitizePartial({ textconv: false }).textconv).toBe(false)
+    for (const invalid of ['true', 1, null, {}]) {
+      expect(sanitizePartial({ textconv: invalid }).textconv).toBeUndefined()
+    }
+  })
+
+  test('a higher layer can turn an inherited setting off', () => {
+    expect(resolveConfig({ textconv: true }, {}).textconv).toBe(true)
+    expect(resolveConfig({ textconv: true }, { textconv: false }).textconv).toBe(false)
+  })
+})
+
 describe('skipArmored', () => {
   test('sanitizes to booleans only and defaults to false', () => {
     expect(sanitizePartial({ skipArmored: true }).skipArmored).toBe(true)

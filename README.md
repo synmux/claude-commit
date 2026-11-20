@@ -116,6 +116,7 @@ error or is killed by a signal aborts the commit too.
 | `--model-commits <model>`                | Enable repository commit styles; model used to analyze history (recommended `fable`)       |
 | `--no-conventional` / `--no-gitmoji`     | Explicitly disable these conventions, including when COMMITS.md requests them              |
 | `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff          |
+| `--textconv` / `--no-textconv`           | Let git run [textconv drivers](#textconv-drivers), or never run them (the default)         |
 | `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                    |
 | `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                            |
 | `--typesafe` / `--no-typesafe`           | Check and rank interactive options with TypeSafe, or skip the check when enabled in config |
@@ -261,6 +262,7 @@ keys are valid at every level:
   "charsPerToken": 3.5,
   "filenamesOnly": false,
   "skipArmored": false,
+  "textconv": false,
   "lowPriorityPaths": [],
   "ignore": [],
   "typesafe": {
@@ -368,6 +370,36 @@ this is the recommended setting for encrypted-file repos - for example a
 every `chezmoi re-add` re-encrypts nondeterministically and produces megabytes
 of churned armor. Drop a `.claude-commit.json` with `{ "skipArmored": true }`
 in the repo root to enable it per-repo.
+
+### Textconv drivers
+
+A gitattributes `diff=<driver>` line plus a `diff.<driver>.textconv` command
+tells git to run that command on both versions of a file and diff its output
+instead of the stored bytes. `cco` does not run these drivers unless you ask.
+`"textconv": false` is the default, and `--no-textconv` does the same for one
+run, overriding a config layer that turns it on. `"textconv": true` or
+`--textconv` lets git run them.
+
+Why you might want it off (the default):
+
+- **Decrypting drivers.** git-crypt, transcrypt and sops set up textconv
+  drivers so that `git diff` shows plaintext. With textconv on, `cco` would
+  send that plaintext to Claude, and the summaries written from it to TypeSafe
+  when the [candidate check](#typesafe-candidate-check) is on. With it off, the
+  model sees what git stores: ciphertext, which `skipArmored` can drop, or
+  `Binary files ... differ`.
+- **Cost.** A driver runs for both versions of every matching staged file on
+  every `cco` run, and whatever it prints is paid for as tokens.
+
+Why you might want it on:
+
+- **Drivers that make binary formats readable**, such as `pandoc` for `.docx`,
+  `exiftool` for images or `sqlite3 .dump` for databases. Without them the
+  model sees only `Binary files a/x and b/x differ` and can describe the change
+  by its filename alone.
+
+The setting changes only what `cco` reads. `git diff` and `git log -p` in your
+terminal still use your drivers.
 
 ### Low-priority paths
 
