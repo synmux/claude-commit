@@ -208,6 +208,16 @@ export async function runPrompt(
   let assistantError: string | undefined
   // A `success` result with `is_error` carries the API error text, not an answer.
   let errorResultText: string | undefined
+  // The error the stream reported, if any. It outranks a later SDK failure:
+  // after an error result the CLI exits non-zero, and the SDK's message for
+  // that may drop both the advice for a known code and "Prompt is too long".
+  const reportedFailure = (): ClaudeCommitError | undefined => {
+    if (assistantError) return new ClaudeCommitError(describeAssistantError(assistantError, errorResultText))
+    if (errorResultText !== undefined) {
+      return new ClaudeCommitError(`Model run failed: ${errorResultText || 'the API reported an error'}`)
+    }
+    return undefined
+  }
 
   try {
     const response = queryRunner({ prompt, options })
@@ -254,15 +264,11 @@ export async function runPrompt(
     if (opts.abortController?.signal.aborted) {
       throw new ClaudeCommitError('Generation was cancelled.')
     }
-    throw new ClaudeCommitError(`Failed to call the Claude Agent SDK: ${(err as Error).message}`)
+    throw reportedFailure() ?? new ClaudeCommitError(`Failed to call the Claude Agent SDK: ${(err as Error).message}`)
   }
 
-  if (assistantError) {
-    throw new ClaudeCommitError(describeAssistantError(assistantError, errorResultText))
-  }
-  if (errorResultText !== undefined) {
-    throw new ClaudeCommitError(`Model run failed: ${errorResultText || 'the API reported an error'}`)
-  }
+  const failure = reportedFailure()
+  if (failure) throw failure
   if (resultText === null) {
     throw new ClaudeCommitError('The model returned no result.')
   }

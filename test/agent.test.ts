@@ -60,6 +60,40 @@ describe('runPrompt', () => {
     expect(isPromptTooLongError(failure)).toBe(true)
   })
 
+  /** A `query` stand-in that yields `messages`, then fails as the SDK does on a non-zero CLI exit. */
+  function sdkStreamThenThrow(messages: unknown[], failure: Error) {
+    return vi.fn(
+      (_params: Parameters<typeof query>[0]) =>
+        (async function* () {
+          yield* messages
+          throw failure
+        })() as unknown as ReturnType<typeof query>
+    )
+  }
+  const assistantError = (code: string, text: string) => ({
+    type: 'assistant',
+    error: code,
+    parent_tool_use_id: null,
+    message: { content: [{ type: 'text', text }] }
+  })
+
+  test('an oversized prompt stays recognisable when the CLI then exits non-zero', async () => {
+    const stream = sdkStreamThenThrow(
+      [assistantError('invalid_request', 'Prompt is too long'), errorResult('Prompt is too long')],
+      new Error('Claude Code process exited with code 1')
+    )
+    const failure = await runPrompt('prompt', options, stream).catch((error: unknown) => error)
+    expect(isPromptTooLongError(failure)).toBe(true)
+  })
+
+  test('a known error code keeps its advice when the CLI then exits non-zero', async () => {
+    const stream = sdkStreamThenThrow(
+      [assistantError('authentication_failed', 'Invalid API key'), errorResult('Invalid API key')],
+      new Error('Claude Code returned an error result: Invalid API key')
+    )
+    await expect(runPrompt('prompt', options, stream)).rejects.toThrow(/claude login/)
+  })
+
   test('an error result is never returned as the model text', async () => {
     const stream = sdkStream([errorResult('API Error: 500 Internal server error')])
     await expect(runPrompt('prompt', options, stream)).rejects.toThrow(/API Error: 500/)
