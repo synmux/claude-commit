@@ -64,8 +64,13 @@ export function buildSubprocessEnv(opts: SubprocessEnvOptions): Record<string, s
   return env
 }
 
-/** Map a known SDK assistant error code to a friendlier, actionable message. */
-function describeAssistantError(code: string): string {
+/**
+ * Map a known SDK assistant error code to a friendlier, actionable message.
+ * An unrecognised code - `invalid_request` among them - keeps the CLI's own
+ * error text as `detail`, since that is the only place "Prompt is too long"
+ * survives for the overflow retry to see.
+ */
+function describeAssistantError(code: string, detail?: string): string {
   switch (code) {
     case 'authentication_failed':
     case 'oauth_org_not_allowed':
@@ -85,7 +90,7 @@ function describeAssistantError(code: string): string {
     case 'max_output_tokens':
       return 'The model hit its output limit before finishing.'
     default:
-      return `Model request failed (${code}).`
+      return detail ? `Model request failed (${code}): ${detail}` : `Model request failed (${code}).`
   }
 }
 
@@ -180,11 +185,16 @@ export async function validateCommitStyleModel(
  *
  * This is the single seam every caller uses; `generate.ts` accepts a
  * replacement of exactly this shape so the pipeline can be tested without a
- * model.
+ * model. `queryRunner` stands in for the SDK's `query` in this module's own
+ * tests.
  *
  * Throws {@link ClaudeCommitError} on any model/authentication/quota failure.
  */
-export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise<ModelResult> {
+export async function runPrompt(
+  prompt: string,
+  opts: RunPromptOptions,
+  queryRunner: typeof query = query
+): Promise<ModelResult> {
   const subprocessEnv = buildSubprocessEnv({
     baseEnv: process.env,
     allowApiKey: opts.allowApiKey ?? false
@@ -196,9 +206,11 @@ export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise
   let model: string | undefined
   let structured: unknown
   let assistantError: string | undefined
+  // A `success` result with `is_error` carries the API error text, not an answer.
+  let errorResultText: string | undefined
 
   try {
-    const response = query({ prompt, options })
+    const response = queryRunner({ prompt, options })
     for await (const message of response as AsyncIterable<SDKMessage>) {
       switch (message.type) {
         case 'stream_event': {
@@ -222,7 +234,9 @@ export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise
           // The served model is the (only) key of modelUsage, when present.
           const usedModels = Object.keys(message.modelUsage ?? {})
           if (usedModels.length > 0) model = usedModels[0]
-          if (message.subtype === 'success') {
+          if (message.subtype === 'success' && message.is_error) {
+            errorResultText = message.result.trim()
+          } else if (message.subtype === 'success') {
             resultText = message.result
             structured = message.structured_output
           } else {
@@ -244,7 +258,10 @@ export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise
   }
 
   if (assistantError) {
-    throw new ClaudeCommitError(describeAssistantError(assistantError))
+    throw new ClaudeCommitError(describeAssistantError(assistantError, errorResultText))
+  }
+  if (errorResultText !== undefined) {
+    throw new ClaudeCommitError(`Model run failed: ${errorResultText || 'the API reported an error'}`)
   }
   if (resultText === null) {
     throw new ClaudeCommitError('The model returned no result.')

@@ -1,6 +1,70 @@
 import type { query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { buildQueryOptions, buildSubprocessEnv, presentCredentialVars, validateCommitStyleModel } from '../src/agent.ts'
+import {
+  buildQueryOptions,
+  buildSubprocessEnv,
+  presentCredentialVars,
+  runPrompt,
+  validateCommitStyleModel
+} from '../src/agent.ts'
+import { isPromptTooLongError } from '../src/errors.ts'
+
+describe('runPrompt', () => {
+  /** A `query` stand-in whose stream yields `messages` and then ends cleanly. */
+  function sdkStream(messages: unknown[]) {
+    return vi.fn(
+      (_params: Parameters<typeof query>[0]) =>
+        (async function* () {
+          yield* messages
+        })() as unknown as ReturnType<typeof query>
+    )
+  }
+  const options = { model: 'haiku', system: 'system prompt' }
+  const errorResult = (text: string) => ({
+    type: 'result',
+    subtype: 'success',
+    is_error: true,
+    result: text,
+    total_cost_usd: 0,
+    modelUsage: {}
+  })
+
+  test('returns the text of a successful run', async () => {
+    const stream = sdkStream([
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: ' fix: x \n',
+        total_cost_usd: 0.5,
+        modelUsage: {}
+      }
+    ])
+    expect(await runPrompt('prompt', options, stream)).toEqual({
+      text: 'fix: x',
+      costUsd: 0.5
+    })
+  })
+
+  test('an oversized prompt stays recognisable when the stream ends cleanly', async () => {
+    const stream = sdkStream([
+      {
+        type: 'assistant',
+        error: 'invalid_request',
+        parent_tool_use_id: null,
+        message: { content: [{ type: 'text', text: 'Prompt is too long' }] }
+      },
+      errorResult('Prompt is too long')
+    ])
+    const failure = await runPrompt('prompt', options, stream).catch((error: unknown) => error)
+    expect(isPromptTooLongError(failure)).toBe(true)
+  })
+
+  test('an error result is never returned as the model text', async () => {
+    const stream = sdkStream([errorResult('API Error: 500 Internal server error')])
+    await expect(runPrompt('prompt', options, stream)).rejects.toThrow(/API Error: 500/)
+  })
+})
 
 describe('commit style model catalog', () => {
   afterEach(() => vi.unstubAllEnvs())
