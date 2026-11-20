@@ -56,6 +56,11 @@ describe('isOpaqueLine', () => {
     expect(isOpaqueLine(` ${armor}`)).toBe(true)
   })
 
+  test('recognises a run from a file with CRLF line endings', () => {
+    expect(isOpaqueLine(`+${armor}\r`)).toBe(true)
+    expect(estimateDiffTokens(`+${armor}\r`, 3.5)).toBe(estimateDiffTokens(`+${armor}`, 3.5) + 1)
+  })
+
   test('rejects short runs and anything containing whitespace', () => {
     expect(isOpaqueLine('+QWx')).toBe(false)
     expect(isOpaqueLine('+const value = compute(input);')).toBe(false)
