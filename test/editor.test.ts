@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, test } from 'vitest'
-import { canPrompt, confirmCommit, editInEditor } from '../src/ui/editor.ts'
+import { canPrompt, confirmCommit, editInEditor, editorStdio } from '../src/ui/editor.ts'
 import { selectWithReadline } from '../src/ui/interactive.ts'
 
 /** Streams standing in for stdin/stderr; `tty` makes readline treat them as a terminal. */
@@ -32,6 +32,16 @@ describe('editInEditor', () => {
     // was open: the editor dies from the signal with the file untouched.
     process.env.GIT_EDITOR = `exec sh -c 'kill -TERM $$'`
     await expect(editInEditor('original')).rejects.toThrow(/SIGTERM.*nothing was committed/i)
+  })
+})
+
+describe('editorStdio', () => {
+  test('the editor shares the terminal when stdout is one', () => {
+    expect(editorStdio({ isTTY: true })).toEqual(['inherit', 'inherit', 'inherit'])
+  })
+
+  test('the editor draws on stderr when stdout is redirected, so `cco > log` is not edited blind', () => {
+    expect(editorStdio({ isTTY: false })).toEqual(['inherit', 2, 'inherit'])
   })
 })
 

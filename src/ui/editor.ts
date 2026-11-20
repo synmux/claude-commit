@@ -48,7 +48,7 @@ function runEditor(editor: string, file: string): Promise<void> {
     // does rather than naively splitting on whitespace. The file path is our
     // own (tmpdir + UUID), so double-quoting it is safe.
     const child = spawn(`${editor} "${file}"`, {
-      stdio: 'inherit',
+      stdio: editorStdio(process.stdout),
       shell: true
     })
     child.on('error', reject)
@@ -62,6 +62,16 @@ function runEditor(editor: string, file: string): Promise<void> {
       else reject(new Error(`Editor exited with code ${code}`))
     })
   })
+}
+
+/**
+ * The editor's stdio: the terminal, except that its screen goes to stderr
+ * (fd 2) when stdout is redirected. `cco > run.log` still prompts (see
+ * {@link canPrompt}, which requires stderr to be a terminal), and an editor
+ * drawing into run.log would leave the user editing blind.
+ */
+export function editorStdio(stdout: { isTTY?: boolean }): ['inherit', 'inherit' | 2, 'inherit'] {
+  return ['inherit', stdout.isTTY ? 'inherit' : 2, 'inherit']
 }
 
 export type ConfirmChoice = 'yes' | 'no' | 'edit'
