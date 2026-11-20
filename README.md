@@ -166,8 +166,8 @@ groups and weights the remaining filenames. Renames and copies include both
 paths; additions, deletions, binary files and mode changes are included.
 If every staged file is ignored, generation still stops with an error.
 
-`models.summary`, `maxChunkTokens`, `charsPerToken` and `skipArmored` have no
-effect in this mode. `--verbose` reports that the summariser was skipped;
+`models.summary`, `maxChunkTokens`, `charsPerToken`, `skipArmored` and
+`armorAlphabets` have no effect in this mode. `--verbose` reports that the summariser was skipped;
 library results have an empty `summaries` array and `chunkCount: 0`.
 
 ## Interactive mode
@@ -382,11 +382,11 @@ redacted when it is at least 40 characters of one alphabet listed in
 `armorAlphabets` and sits in a run of three or more such lines. Pick the
 alphabets for what your repo stores:
 
-| Alphabet           | Characters                                   | Use it for                                                                                                    |
-| ------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `base64` (default) | `A-Z`, `a-z`, `0-9`, `+`, `/`, `=`, `-`, `_` | age, gpg and PEM armor, SSH keys and base64 blobs: chezmoi with age, `.asc` files, certificates               |
-| `base85`           | git's binary-patch set (RFC 1924)            | git binary patches inside committed `.patch` files                                                            |
-| `hex`              | `0-9`, `a-f`, `A-F`                          | hex dumps, hex-encoded keys and compiled bytecode, when you want only those dropped (`base64` covers hex too) |
+| Alphabet           | Characters                                   | Use it for                                                                                                                            |
+| ------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `base64` (default) | `A-Z`, `a-z`, `0-9`, `+`, `/`, `=`, `-`, `_` | age, gpg and PEM armor, SSH keys and base64 blobs: chezmoi with age, `.asc` files, certificates                                       |
+| `base85`           | git's binary-patch set (RFC 1924)            | git binary patches inside committed `.patch` files                                                                                    |
+| `hex`              | `0-9`, `a-f`, `A-F`                          | plain hex such as `xxd -p` output, hex-encoded keys and compiled bytecode, when you want only those dropped (`base64` covers hex too) |
 
 ```json
 { "skipArmored": true, "armorAlphabets": ["base64", "base85"] }
@@ -394,7 +394,8 @@ alphabets for what your repo stores:
 
 Add `base85` only if you commit patch files. Its alphabet includes most
 punctuation, so a long line of dense code with no space, `.`, `,`, `:` or
-quote can match it. An empty list drops nothing. Token estimates for chunking
+quote can match it. A formatted dump (`xxd`, `hexdump -C`) has offsets and
+spaces, so no alphabet matches it. An empty list drops nothing. Token estimates for chunking
 still treat any long space-free line as dense; that only over-reserves room, so
 it never loses content.
 
@@ -409,12 +410,16 @@ run, overriding a config layer that turns it on. `"textconv": true` or
 
 Why you might want it off (the default):
 
-- **Decrypting drivers.** git-crypt, transcrypt and sops set up textconv
-  drivers so that `git diff` shows plaintext. With textconv on, `cco` would
-  send that plaintext to Claude, and the summaries written from it to TypeSafe
-  when the [candidate check](#typesafe-candidate-check) is on. With it off, the
-  model sees what git stores: ciphertext, which `skipArmored` can drop, or
-  `Binary files ... differ`.
+- **Decrypting drivers.** git-crypt and transcrypt set up textconv drivers so
+  that `git diff` shows plaintext, and the sops docs show how to add one. With
+  textconv on, `cco` would send that plaintext to Claude, and the summaries
+  written from it to TypeSafe when the
+  [candidate check](#typesafe-candidate-check) is on. With it off, the model
+  sees what git stores. For git-crypt that is `Binary files ... differ`. For
+  transcrypt it is base64 ciphertext, which `skipArmored` drops. For sops it
+  is the file with each value replaced by `ENC[AES256_GCM,...]`: no secrets,
+  but not dropped either, because its brackets, commas and colons match no
+  alphabet.
 - **Cost.** A driver runs for both versions of every matching staged file on
   every `cco` run, and whatever it prints is paid for as tokens.
 

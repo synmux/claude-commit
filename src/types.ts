@@ -109,15 +109,16 @@ export interface Config {
    * or more characters of one listed alphabet and sits in a run of at least
    * three such lines, so space-free prose and URLs survive. Defaults to
    * `["base64"]`: age, gpg, PEM and SSH armor. Add `base85` for git binary
-   * patches inside committed patch files; use `hex` alone to drop only hex
-   * dumps and hex-encoded keys.
+   * patches inside committed patch files; use `hex` alone to drop only plain
+   * hex (`xxd -p` output) and hex-encoded keys.
    */
   armorAlphabets: ArmorAlphabet[]
   /**
    * Let git run `textconv` drivers (`diff.<driver>.textconv` for a
    * gitattributes `diff=<driver>`) when reading the staged diff. Off by
-   * default: git-crypt, transcrypt and sops register decrypting drivers, and
-   * their output - plaintext secrets - would be sent to the model. Turn it on
+   * default: git-crypt and transcrypt set up decrypting drivers (and sops
+   * documents one), and their output - plaintext secrets - would be sent to
+   * the model. Turn it on
    * when your drivers only make binary formats readable (documents, images,
    * databases) and you want the model to see that text.
    */
