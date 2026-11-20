@@ -206,13 +206,17 @@ export async function runPrompt(
   let model: string | undefined
   let structured: unknown
   let assistantError: string | undefined
-  // A `success` result with `is_error` carries the API error text, not an answer.
+  // What a failed result reported: the API error text of a `success` result
+  // with `is_error`, or the errors (else the subtype) of an error result.
   let errorResultText: string | undefined
   // The error the stream reported, if any. It outranks a later SDK failure:
   // after an error result the CLI exits non-zero, and the SDK's message for
   // that may drop both the advice for a known code and "Prompt is too long".
-  const reportedFailure = (): ClaudeCommitError | undefined => {
-    if (assistantError) return new ClaudeCommitError(describeAssistantError(assistantError, errorResultText))
+  // `sdkDetail` stands in for the error text when no failed result arrived.
+  const reportedFailure = (sdkDetail?: string): ClaudeCommitError | undefined => {
+    if (assistantError) {
+      return new ClaudeCommitError(describeAssistantError(assistantError, errorResultText ?? sdkDetail))
+    }
     if (errorResultText !== undefined) {
       return new ClaudeCommitError(`Model run failed: ${errorResultText || 'the API reported an error'}`)
     }
@@ -250,8 +254,7 @@ export async function runPrompt(
             resultText = message.result
             structured = message.structured_output
           } else {
-            const detail = 'errors' in message && message.errors.length ? message.errors.join('; ') : message.subtype
-            throw new ClaudeCommitError(`Model run failed: ${detail}`)
+            errorResultText = 'errors' in message && message.errors.length ? message.errors.join('; ') : message.subtype
           }
           break
         }
@@ -260,11 +263,11 @@ export async function runPrompt(
       }
     }
   } catch (err) {
-    if (err instanceof ClaudeCommitError) throw err
     if (opts.abortController?.signal.aborted) {
       throw new ClaudeCommitError('Generation was cancelled.')
     }
-    throw reportedFailure() ?? new ClaudeCommitError(`Failed to call the Claude Agent SDK: ${(err as Error).message}`)
+    const sdkDetail = (err as Error).message
+    throw reportedFailure(sdkDetail) ?? new ClaudeCommitError(`Failed to call the Claude Agent SDK: ${sdkDetail}`)
   }
 
   const failure = reportedFailure()

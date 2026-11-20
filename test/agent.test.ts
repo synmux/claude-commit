@@ -94,6 +94,44 @@ describe('runPrompt', () => {
     await expect(runPrompt('prompt', options, stream)).rejects.toThrow(/claude login/)
   })
 
+  test('a known error code keeps its advice when the run ends on a failed result', async () => {
+    const stream = sdkStream([
+      assistantError('authentication_failed', 'Invalid API key'),
+      {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        errors: ['request failed'],
+        total_cost_usd: 0,
+        modelUsage: {}
+      }
+    ])
+    await expect(runPrompt('prompt', options, stream)).rejects.toThrow(/claude login/)
+  })
+
+  test('a failed result without an error code reports its errors', async () => {
+    const stream = sdkStream([
+      {
+        type: 'result',
+        subtype: 'error_max_turns',
+        is_error: true,
+        errors: [],
+        total_cost_usd: 0,
+        modelUsage: {}
+      }
+    ])
+    await expect(runPrompt('prompt', options, stream)).rejects.toThrow('Model run failed: error_max_turns')
+  })
+
+  test("the SDK's text is kept when an error code arrives without an error result", async () => {
+    const stream = sdkStreamThenThrow(
+      [assistantError('invalid_request', 'Prompt is too long')],
+      new Error('Claude Code returned an error result: Prompt is too long')
+    )
+    const failure = await runPrompt('prompt', options, stream).catch((error: unknown) => error)
+    expect(isPromptTooLongError(failure)).toBe(true)
+  })
+
   test('an error result is never returned as the model text', async () => {
     const stream = sdkStream([errorResult('API Error: 500 Internal server error')])
     await expect(runPrompt('prompt', options, stream)).rejects.toThrow(/API Error: 500/)
