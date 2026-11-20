@@ -148,6 +148,26 @@ index aaa..bbb 100644
     }
   })
 
+  test('splits again a piece cut from the middle of a hunk', () => {
+    const header = `diff --git a/huge.txt b/huge.txt
+--- a/huge.txt
++++ b/huge.txt`
+    const bigHunk =
+      `@@ -1,100 +1,100 @@\n` + Array.from({ length: 100 }, (_, i) => `+a very long added line number ${i}`).join('\n')
+    const [, tail] = splitDiff(`${header}\n${bigHunk}`, header.length + 400)
+    if (tail === undefined) throw new Error('expected the hunk to be split')
+    // Only the first piece keeps the `@@` line; the rest carry just the file header.
+    expect(tail.split('\n').some((line) => line.startsWith('@@'))).toBe(false)
+
+    const budget = Math.floor(tail.length / 2)
+    const pieces = splitDiff(tail, budget)
+    expect(pieces.length).toBeGreaterThan(1)
+    for (const piece of pieces) {
+      expect(piece.startsWith(header)).toBe(true)
+      expect(piece.length).toBeLessThanOrEqual(budget)
+    }
+  })
+
   test('keeps an unsplittable binary section whole even if oversized', () => {
     const binary = `diff --git a/img.png b/img.png
 index 000..fff 100644
@@ -200,6 +220,28 @@ describe('splitDiffToFit', () => {
     }
     // The plain-text file survives intact in exactly one chunk.
     expect(chunks.filter((chunk) => chunk.includes('a/a.txt')).length).toBe(1)
+  })
+
+  test('fits armor that a prose-weighted first pass cut too coarsely', () => {
+    // The prose lowers the blended density, so the first pass cuts the armor
+    // hunk into pieces whose estimate is over budget, and all but the first
+    // of those pieces lack an `@@` line.
+    const prose = [
+      'diff --git a/notes.md b/notes.md',
+      '--- a/notes.md',
+      '+++ b/notes.md',
+      '@@ -0,0 +1,300 @@',
+      ...Array.from({ length: 300 }, (_, i) => `+prose line ${i} with ordinary english words in it`)
+    ].join('\n')
+    const chunks = splitDiffToFit(`${prose}\n${armorFile(200)}`, 2_000, 3.5)
+    for (const chunk of chunks) {
+      expect(estimateDiffTokens(chunk, 3.5)).toBeLessThanOrEqual(2_000)
+    }
+    const armorCount = chunks
+      .join('\n')
+      .split('\n')
+      .filter((line) => line.includes('Ab9Xy')).length
+    expect(armorCount).toBe(200)
   })
 
   test('keeps an unsplittable oversized section whole for the runtime backstop', () => {

@@ -100,20 +100,20 @@ function breakSection(section: string, maxChars: number): string[] {
   if (section.length <= maxChars) return [section]
 
   const lines = section.split('\n')
-  const firstHunk = lines.findIndex((l) => l.startsWith(HUNK_HEADER))
-  if (firstHunk === -1) {
+  const bodyStart = findBodyStart(lines)
+  if (bodyStart === -1) {
     // No hunks to split on (binary patch, pure rename, mode change): keep whole.
     return [section]
   }
 
-  const header = lines.slice(0, firstHunk).join('\n')
+  const header = lines.slice(0, bodyStart).join('\n')
   const headerLen = header.length + 1 // account for the joining newline
 
   // If there isn't room for a meaningful piece after repeating the header,
   // keep the section whole rather than exploding it into tiny fragments.
   if (maxChars - headerLen < MIN_SPLIT_BUDGET) return [section]
 
-  const hunks = groupHunks(lines.slice(firstHunk))
+  const hunks = groupHunks(lines.slice(bodyStart))
   const units: string[] = []
 
   for (const hunk of hunks) {
@@ -126,6 +126,20 @@ function breakSection(section: string, maxChars: number): string[] {
     }
   }
   return units
+}
+
+/**
+ * Index of a section's first body line, or -1 when it has no body to split.
+ * That is normally the first `@@` line. A piece {@link breakByLines} cut from
+ * the middle of a hunk repeats the file header but has no `@@` line, so its
+ * body starts after the `+++` marker - without this, such a piece could never
+ * be split again, by the token refit or by the overflow retry.
+ */
+function findBodyStart(lines: string[]): number {
+  const firstHunk = lines.findIndex((line) => line.startsWith(HUNK_HEADER))
+  if (firstHunk !== -1) return firstHunk
+  const marker = lines.findIndex((line) => line.startsWith('+++ '))
+  return marker === -1 || marker === lines.length - 1 ? -1 : marker + 1
 }
 
 /** Greedily pack pre-fitted units into as few chunks as possible. */

@@ -304,6 +304,23 @@ describe('generateCommit', () => {
     expect(summaryPrompts.join('').includes(armorLine(0).slice(1))).toBe(true)
   })
 
+  test('a rejected piece from the middle of a hunk is re-split and retried', async () => {
+    let rejected = false
+    const { runner, summaryPrompts } = stubRunner((_prompt, index) => {
+      // The second chunk is a tail piece of the single armor hunk: no `@@` line.
+      if (index === 1 && !rejected) {
+        rejected = true
+        throw promptTooLong()
+      }
+    })
+    const config: Config = { ...baseConfig, maxChunkTokens: 20_000 }
+    const result = await generateCommit(armorDiff(1_000), config, { runner })
+    expect(rejected).toBe(true)
+    expect(result.messages).toEqual(['fix: stubbed message'])
+    const delivered = summaryPrompts.join('\n')
+    expect(delivered.split(armorLine(0).slice(1)).length - 1).toBe(100)
+  })
+
   test('other model errors propagate unchanged', async () => {
     const boom = new ClaudeCommitError('Rate limited by the Claude API.')
     const { runner } = stubRunner(() => {
