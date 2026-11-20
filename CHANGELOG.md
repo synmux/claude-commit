@@ -29,11 +29,11 @@ carrying the same notes at greater length.
   default (see Security).
 - **`armorAlphabets`.** Choose which encodings `skipArmored` drops:
   `base64` (the default), `base85` or `hex`. The README suggests which to
-  use for which kind of repo.
+  use for which kind of repo. The library exports the `ArmorAlphabet` type.
 
 ### [Unreleased] - Changed
 
-- **Requires Node.js 26** (26.11 or later), up from 24. `engines`, CI and
+- **Requires Node.js 26** (26.12 or later), up from 24. `engines`, CI and
   the publish workflow all run on 26.
 - **Textconv drivers no longer run by default.** If you relied on one
   (`pandoc`, `exiftool`, ...) for readable binary diffs, set
@@ -46,6 +46,10 @@ carrying the same notes at greater length.
   the picker, and `cco 2> err.log` commits without asking because it cannot
   show the question. `-i --verbose` prints the same report as a
   non-interactive run.
+- **A repository's config can no longer turn on `allowApiKey` or
+  `textconv`.** `package.json` and project config files may only turn them
+  off; set them in your global config or a `--config` file instead. `cco`
+  prints a note for each repository value it ignores.
 
 ### [Unreleased] - Removed
 
@@ -99,6 +103,11 @@ carrying the same notes at greater length.
   textconv drivers, which git ran for `git diff --cached`. `cco` sent the
   decrypted secrets to Claude, and summaries of them to TypeSafe when the
   check was on.
+- **A cloned repository can no longer switch billing or re-enable
+  textconv.** Its `package.json` or `.claude-commit.json` could set
+  `"allowApiKey": true`, moving an exported `ANTHROPIC_API_KEY` onto
+  pay-as-you-go, or `"textconv": true`, feeding your decrypting drivers'
+  output to the model.
 
 ## [1.1.0] - 2026-09-13
 
