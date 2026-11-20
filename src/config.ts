@@ -264,12 +264,17 @@ async function findConfigFile(startDir: string, rootDir: string): Promise<string
  * discovery; the global and `package.json` layers still apply beneath it. `env`
  * supplies `XDG_CONFIG_HOME` for locating the global config (defaults to
  * `process.env`).
+ *
+ * `package.json` and a discovered project file belong to the repository, so
+ * they cannot turn on `textconv` or `allowApiKey` (see
+ * {@link USER_ONLY_SETTINGS}); `onNote` hears about each value ignored.
  */
 export async function loadFileConfig(
   cwd: string,
   repoRoot: string,
   configPath?: string,
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
+  onNote?: (message: string) => void
 ): Promise<PartialConfig> {
   let result: PartialConfig = {}
 
@@ -285,14 +290,16 @@ export async function loadFileConfig(
   // project config files). A malformed package.json is not cco's concern to
   // enforce - skip it rather than blocking the commit (the user may even be
   // committing its fix).
+  const packagePath = join(repoRoot, 'package.json')
   let pkg: unknown
   try {
-    pkg = await readJsonIfExists(join(repoRoot, 'package.json'))
+    pkg = await readJsonIfExists(packagePath)
   } catch {
     pkg = undefined
   }
   if (pkg && typeof pkg === 'object' && 'claude-commit' in (pkg as object)) {
-    result = mergePartial(result, sanitizePartial((pkg as Record<string, unknown>)['claude-commit']))
+    const layer = sanitizePartial((pkg as Record<string, unknown>)['claude-commit'])
+    result = mergePartial(result, restrictRepositoryLayer(layer, packagePath, onNote))
   }
 
   const filePath = configPath ? resolve(cwd, configPath) : await findConfigFile(cwd, repoRoot)
@@ -301,10 +308,42 @@ export async function loadFileConfig(
     if (raw === undefined && configPath) {
       throw new ClaudeCommitError(`Config file not found: ${filePath}`)
     }
-    result = mergePartial(result, sanitizePartial(raw))
+    // A file the user named with --config is theirs; a discovered one is the repository's.
+    const layer = sanitizePartial(raw)
+    result = mergePartial(result, configPath ? layer : restrictRepositoryLayer(layer, filePath, onNote))
   }
 
   return result
+}
+
+/**
+ * Settings a repository's own config may turn off but never on, each with
+ * what can turn it on instead. Turning one on sends something the user did
+ * not agree to send: `textconv` feeds the output of the user's diff drivers,
+ * decrypting ones included, to the model, and `allowApiKey` moves billing
+ * from the subscription to API credits.
+ */
+const USER_ONLY_SETTINGS = {
+  textconv: 'the global config, --config or --textconv',
+  allowApiKey: 'the global config or --config'
+} as const
+
+/** A repository config layer without the user-only settings it tried to turn on. */
+function restrictRepositoryLayer(
+  layer: PartialConfig,
+  source: string,
+  onNote?: (message: string) => void
+): PartialConfig {
+  const restricted = { ...layer }
+  for (const [key, enablers] of Object.entries(USER_ONLY_SETTINGS) as Array<
+    [keyof typeof USER_ONLY_SETTINGS, string]
+  >) {
+    if (restricted[key] === true) {
+      delete restricted[key]
+      onNote?.(`Ignoring "${key}": true from ${source}: only ${enablers} can turn it on.`)
+    }
+  }
+  return restricted
 }
 
 /**

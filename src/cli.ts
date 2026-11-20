@@ -2,10 +2,11 @@
  * Command-line interface: argument parsing (Commander) and orchestration of the
  * non-interactive and interactive flows.
  */
+import { join } from 'node:path'
 import { Command } from 'commander'
 import { presentCredentialVars } from './agent.ts'
 import { setupCommitStyle } from './commit-style.ts'
-import { loadFileConfig, resolveConfig, textOption } from './config.ts'
+import { globalConfigDir, loadFileConfig, resolveConfig, textOption } from './config.ts'
 import { ClaudeCommitError } from './errors.ts'
 import {
   describeCheckNotices,
@@ -104,8 +105,9 @@ export function buildProgram(): Command {
         'Authentication:',
         '  cco uses the Claude Agent SDK with your Claude Code',
         '  subscription (run `claude login`). ANTHROPIC_API_KEY /',
-        '  ANTHROPIC_AUTH_TOKEN are ignored unless the config sets',
-        '  "allowApiKey": true (pay-as-you-go billing).',
+        '  ANTHROPIC_AUTH_TOKEN are ignored unless your global config',
+        '  (or a --config file) sets "allowApiKey": true (pay-as-you-go',
+        '  billing). A repository config cannot turn it on.',
         '',
         'TypeSafe check:',
         '  With "typesafe": { "enable": true } in config (or --typesafe),',
@@ -215,7 +217,9 @@ export async function run(argv: string[]): Promise<number> {
       throw new ClaudeCommitError('Not a git repository (or any parent). Run `cco` inside a repo.')
     }
     const repoRoot = await getRepoRoot()
-    const fileConfig = await loadFileConfig(process.cwd(), repoRoot, opts.config)
+    const fileConfig = await loadFileConfig(process.cwd(), repoRoot, opts.config, process.env, (note) =>
+      process.stderr.write(color('90', note) + '\n')
+    )
     const config = resolveConfig(fileConfig, flagsToConfig(opts))
 
     // Surface the credential gate: the actual stripping happens in the agent
@@ -227,7 +231,7 @@ export async function run(argv: string[]): Promise<number> {
           color(
             '90',
             `Ignoring ${ignored.join(' and ')}: using subscription auth. Set ` +
-              `"allowApiKey": true in your claude-commit config to use API credentials.`
+              `"allowApiKey": true in ${join(globalConfigDir(), 'config.json')} to use API credentials.`
           ) + '\n'
         )
       }
