@@ -254,13 +254,18 @@ Configuration is layered, from lowest to highest precedence:
 So a global config sets your personal defaults and any project further down the
 tree can override them. Note that the `config.json` name is recognised **only** in
 the global directory; inside a project, use one of the dotted filenames.
-`--config <path>` replaces layer 4 with the file you name.
 
-Layers 3 and 4 belong to the repository, so they can turn `textconv` and
-`allowApiKey` off but never on: either one, turned on, sends something you have
-not agreed to send. `cco` prints a note for each repository value it ignores.
-Turn them on in your global config, a `--config` file, or (for textconv) with
-`--textconv`. Apart from that, the same keys are valid at every level:
+`package.json` and a discovered project file (layers 3 and 4) belong to the
+repository, so they can turn `textconv` and `allowApiKey` off but never on:
+either one, turned on, sends something you have not agreed to send. `cco`
+prints a note for each repository value it ignores. Turn them on in your global
+config, a `--config` file, or (for textconv) with `--textconv`.
+
+`--config <path>` takes layer 4's place, and `cco` trusts the file you name like
+your global config, wherever it lives. Point it only at a file you control:
+`--config .claude-commit.json` would hand a repository's own file that trust.
+
+Apart from that, the same keys are valid at every level:
 
 ```json
 {
