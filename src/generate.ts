@@ -41,7 +41,14 @@
  */
 import type { Fetch } from '@typesafe-ai/sdk'
 import { runPrompt } from './agent.ts'
-import { applyIgnorePatterns, diffPaths, partitionDiff, redactOpaqueRuns, splitDiffToFit } from './diff.ts'
+import {
+  applyIgnorePatterns,
+  DEFAULT_ARMOR_ALPHABETS,
+  diffPaths,
+  partitionDiff,
+  redactOpaqueRuns,
+  splitDiffToFit
+} from './diff.ts'
 import { ClaudeCommitError, isPromptTooLongError } from './errors.ts'
 import { gitmojiConflictsWithType } from './gitmoji.ts'
 import { createPathMatcher } from './paths.ts'
@@ -240,7 +247,8 @@ export function prepareCommitDiff(diff: string, config: Config) {
 
   const effectiveDiff =
     config.skipArmored && !config.filenamesOnly
-      ? redactOpaqueRuns(ignoreResult.diff, config.armorAlphabets)
+      ? // `??`: a JavaScript caller's hand-built Config may predate the key.
+        redactOpaqueRuns(ignoreResult.diff, config.armorAlphabets ?? DEFAULT_ARMOR_ALPHABETS)
       : ignoreResult.diff
   const partition = partitionDiff(effectiveDiff, createPathMatcher(config.lowPriorityPaths))
   if (partition.primary.trim() === '') {

@@ -471,6 +471,16 @@ describe('generateCommit', () => {
     expect(summaryPrompts[0]).toContain('a/secret.age')
   })
 
+  test('a config built without armorAlphabets falls back to the default alphabet', () => {
+    // A JavaScript caller that predates the key, building its own Config.
+    const { armorAlphabets: _omitted, ...older } = {
+      ...baseConfig,
+      skipArmored: true
+    }
+    const prepared = prepareCommitDiff(armorDiff(50), older as Config)
+    expect(prepared.partition.primary).toContain('[cco: 50 armored/encoded lines omitted]')
+  })
+
   test('armorAlphabets decides which runs skipArmored drops', async () => {
     const { runner, summaryPrompts } = stubRunner()
     const config: Config = {

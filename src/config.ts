@@ -10,7 +10,7 @@
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import { isArmorAlphabet } from './diff.ts'
+import { DEFAULT_ARMOR_ALPHABETS, isArmorAlphabet } from './diff.ts'
 import { ClaudeCommitError } from './errors.ts'
 import type { Config, ModelConfig, PartialConfig, TypeSafeConfig } from './types.ts'
 import { DEFAULT_SPINNER, isSpinnerName } from './ui/spinner.ts'
@@ -33,7 +33,7 @@ export const DEFAULT_CONFIG: Config = {
   charsPerToken: 3.5,
   filenamesOnly: false,
   skipArmored: false,
-  armorAlphabets: ['base64'],
+  armorAlphabets: [...DEFAULT_ARMOR_ALPHABETS],
   textconv: false,
   lowPriorityPaths: [],
   ignore: [],

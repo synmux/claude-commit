@@ -206,6 +206,9 @@ const ARMOR_ALPHABET_CHARS: Record<ArmorAlphabet, string> = {
   hex: '0-9A-Fa-f'
 }
 
+/** The alphabets `skipArmored` drops unless `armorAlphabets` says otherwise. */
+export const DEFAULT_ARMOR_ALPHABETS: readonly ArmorAlphabet[] = ['base64']
+
 /** Whether `name` is an alphabet `skipArmored` recognises. */
 export function isArmorAlphabet(name: string): name is ArmorAlphabet {
   return Object.hasOwn(ARMOR_ALPHABET_CHARS, name)
