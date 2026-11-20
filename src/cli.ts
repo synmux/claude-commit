@@ -5,16 +5,14 @@
 import { Command } from 'commander'
 import { presentCredentialVars } from './agent.ts'
 import { setupCommitStyle } from './commit-style.ts'
-import { loadFileConfig, resolveConfig } from './config.ts'
+import { loadFileConfig, resolveConfig, textOption } from './config.ts'
 import { ClaudeCommitError } from './errors.ts'
 import {
-  describeCandidateCheck,
   describeCheckNotices,
+  describeVerboseRun,
   type GenerateOptions,
   type GenerateResult,
   generateCommit,
-  type IgnoreStats,
-  type LowPriorityStats,
   prepareCommitDiff
 } from './generate.ts'
 import { commit, getRepoRoot, getStagedDiff, getStagedStat, isGitRepo, stageAll } from './git.ts'
@@ -92,7 +90,7 @@ export function buildProgram(): Command {
       'ignore the "lowPriorityPaths" config for this run, so every change ' + 'weighs the same'
     )
     .option('--no-ignore', 'disregard the "ignore" config for this run, so every staged change is ' + 'read')
-    .option('--typesafe', 'check and rank interactive options with TypeSafe (needs an API key)')
+    .option('--typesafe', 'check generated messages with TypeSafe before you see them (needs an API key)')
     .option('--no-typesafe', 'skip the TypeSafe check even when "typesafe.enable" is set in config')
     .option('-d, --dry-run', 'print the message to stdout without committing')
     .option('-y, --yes', 'commit without asking for confirmation')
@@ -111,8 +109,8 @@ export function buildProgram(): Command {
         '',
         'TypeSafe check:',
         '  With "typesafe": { "enable": true } in config (or --typesafe),',
-        "  interactive options are checked by TypeSafe's Jev model: best",
-        '  first, doubtful ones flagged, near-duplicates dropped. The key is',
+        "  every generated message is checked by TypeSafe's Jev model:",
+        '  doubtful ones are flagged and moved last, near-duplicates dropped. The key is',
         '  read from $TYPESAFE_API_KEY, or the variable "typesafe.env" names.',
         '',
         'Examples:',
@@ -135,8 +133,8 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
   if (opts.gitmoji !== undefined) cfg.gitmoji = opts.gitmoji
   if (opts.multiline !== undefined) cfg.multiline = opts.multiline
   if (opts.interactive !== undefined) cfg.interactive = opts.interactive
-  if (opts.template !== undefined) cfg.template = opts.template
-  if (opts.prompt !== undefined) cfg.customPrompt = opts.prompt
+  if (opts.template !== undefined) cfg.template = textOption(opts.template)
+  if (opts.prompt !== undefined) cfg.customPrompt = textOption(opts.prompt)
   if (opts.skipArmored !== undefined) cfg.skipArmored = opts.skipArmored
   if (opts.textconv !== undefined) cfg.textconv = opts.textconv
   if (opts.filenamesOnly !== undefined) cfg.filenamesOnly = opts.filenamesOnly
@@ -332,26 +330,7 @@ async function runNonInteractive(
   spinner.stop()
 
   if (verbose) {
-    process.stderr.write(
-      color(
-        '90',
-        `${config.filenamesOnly ? 'filenames only (summariser skipped)' : `${result.chunkCount} chunk(s)`}, cost $${result.costUsd.toFixed(4)}`
-      ) + '\n'
-    )
-    if (result.candidateCheck?.status === 'checked') {
-      process.stderr.write(color('90', describeCandidateCheck(result.candidateCheck)) + '\n')
-    }
-    if (config.ignore.length > 0) {
-      process.stderr.write(color('90', describeIgnoreStats(result.ignored)) + '\n')
-    }
-    if (config.lowPriorityPaths.length > 0) {
-      process.stderr.write(color('90', describeLowPriorityStats(result.lowPriority)) + '\n')
-    }
-    for (const [index, summary] of result.summaries.entries()) {
-      const label =
-        summary.priority === 'low' ? `--- summary ${index + 1} (low priority) ---` : `--- summary ${index + 1} ---`
-      process.stderr.write(color('90', `${label}\n${summary.text}`) + '\n')
-    }
+    for (const line of describeVerboseRun(result, config)) process.stderr.write(color('90', line) + '\n')
   }
 
   const chosen = result.messages[0]
@@ -390,34 +369,6 @@ async function runNonInteractive(
   process.stderr.write(color('90', firstLine(message)) + '\n')
   if (stat) process.stderr.write(color('90', stat) + '\n')
   return 0
-}
-
-/**
- * One verbose line saying how the low-priority patterns applied. Without it
- * a pattern that matched nothing and one that matched everything (and was
- * promoted) are indistinguishable from the message alone.
- */
-export function describeLowPriorityStats(stats: LowPriorityStats): string {
-  const files = `${stats.totalFiles} file${stats.totalFiles === 1 ? '' : 's'}`
-  if (stats.matchedFiles === 0) {
-    return `low-priority paths: matched none of ${files}`
-  }
-  if (stats.promoted) {
-    return `low-priority paths: matched all ${files} - nothing else changed, so treated as primary`
-  }
-  return `low-priority paths: matched ${stats.matchedFiles} of ${files}`
-}
-
-/**
- * One verbose line saying how the ignore patterns applied. The counts are
- * the only way to tell a pattern that quietly matched nothing from one that
- * quietly removed half the commit.
- */
-export function describeIgnoreStats(stats: IgnoreStats): string {
-  const files = `${stats.totalFiles} file${stats.totalFiles === 1 ? '' : 's'}`
-  return stats.ignoredFiles === 0
-    ? `ignore: matched none of ${files}`
-    : `ignore: dropped ${stats.ignoredFiles} of ${files} before reading`
 }
 
 function firstLine(text: string): string {

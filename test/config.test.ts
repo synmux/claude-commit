@@ -79,6 +79,19 @@ describe('filenamesOnly', () => {
   })
 })
 
+describe('blank and fractional values', () => {
+  test('a blank customPrompt or template means none', () => {
+    expect(sanitizePartial({ customPrompt: '   ' }).customPrompt).toBeNull()
+    expect(sanitizePartial({ template: '' }).template).toBeNull()
+    expect(sanitizePartial({ customPrompt: 'Mention the ticket.' }).customPrompt).toBe('Mention the ticket.')
+  })
+
+  test('a maxChunkTokens below one token is rejected, not floored to zero', () => {
+    expect(sanitizePartial({ maxChunkTokens: 0.5 }).maxChunkTokens).toBeUndefined()
+    expect(sanitizePartial({ maxChunkTokens: 1.9 }).maxChunkTokens).toBe(1)
+  })
+})
+
 describe('textconv', () => {
   test('is off by default and accepts only booleans', () => {
     expect(DEFAULT_CONFIG.textconv).toBe(false)

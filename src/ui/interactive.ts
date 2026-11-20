@@ -25,8 +25,8 @@ import {
   S_STEP_SUBMIT
 } from '@clack/prompts'
 import {
-  describeCandidateCheck,
   describeCheckNotices,
+  describeVerboseRun,
   type GenerateOptions,
   type GenerateResult,
   generateCommit
@@ -69,6 +69,9 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
   spinner.stop()
 
   const { messages, warnings, candidateCheck } = result
+  if (opts.verbose) {
+    for (const line of describeVerboseRun(result, config)) process.stderr.write(color('90', line) + '\n')
+  }
   for (const notice of describeCheckNotices(candidateCheck)) {
     process.stderr.write(`${color('33', `⚠ ${notice}`)}\n`)
   }
@@ -99,12 +102,6 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
 
   await commit(message)
   process.stderr.write(`${color('32', '✔')} Committed\n${color('90', firstLine(message))}\n`)
-  if (opts.verbose) {
-    process.stderr.write(color('90', `cost $${result.costUsd.toFixed(4)}`) + '\n')
-    if (candidateCheck?.status === 'checked') {
-      process.stderr.write(color('90', describeCandidateCheck(candidateCheck)) + '\n')
-    }
-  }
   return 0
 }
 

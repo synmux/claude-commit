@@ -2,7 +2,13 @@ import { describe, expect, test, vi } from 'vitest'
 import type { runPrompt } from '../src/agent.ts'
 import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
-import { describeCheckNotices, generateCommit, prepareCommitDiff } from '../src/generate.ts'
+import {
+  describeCheckNotices,
+  describeVerboseRun,
+  type GenerateResult,
+  generateCommit,
+  prepareCommitDiff
+} from '../src/generate.ts'
 import { availableContextTokens, estimateDiffTokens } from '../src/tokens.ts'
 import type { Config, ModelResult } from '../src/types.ts'
 import { answeringJevFetch, fakeJevFetch, jevAnswers } from './typesafe-fixtures.ts'
@@ -1146,6 +1152,44 @@ describe('gitmoji format check', () => {
   })
 })
 
+describe('describeVerboseRun', () => {
+  const result: GenerateResult = {
+    messages: ['fix: x'],
+    warnings: [[]],
+    candidateCheck: null,
+    summaries: [
+      { priority: 'primary', text: 'Changed the parser.' },
+      { priority: 'low', text: 'Regenerated docs.' }
+    ],
+    chunkCount: 2,
+    costUsd: 0.0123,
+    lowPriority: { matchedFiles: 1, totalFiles: 2, promoted: false },
+    ignored: { ignoredFiles: 0, totalFiles: 2 }
+  }
+
+  test('reports chunks, cost, pattern stats and every summary', () => {
+    const config: Config = {
+      ...baseConfig,
+      ignore: ['vendor/**'],
+      lowPriorityPaths: ['docs/**']
+    }
+    expect(describeVerboseRun(result, config)).toEqual([
+      '2 chunk(s), cost $0.0123',
+      'ignore: matched none of 2 files',
+      'low-priority paths: matched 1 of 2 files',
+      '--- summary 1 ---\nChanged the parser.',
+      '--- summary 2 (low priority) ---\nRegenerated docs.'
+    ])
+  })
+
+  test('leaves out what did not run', () => {
+    const config: Config = { ...baseConfig, filenamesOnly: true }
+    expect(describeVerboseRun({ ...result, summaries: [] }, config)).toEqual([
+      'filenames only (summariser skipped), cost $0.0123'
+    ])
+  })
+})
+
 describe('describeCheckNotices', () => {
   test('says nothing when the check passed or did not run', () => {
     expect(describeCheckNotices(null)).toEqual([])
@@ -1162,7 +1206,7 @@ describe('describeCheckNotices', () => {
 
   test('names the error when the check failed', () => {
     expect(describeCheckNotices({ status: 'failed', error: '401 bad key' })).toEqual([
-      'TypeSafe check failed (401 bad key); nothing was flagged or reordered.'
+      'TypeSafe check failed (401 bad key); the options were not checked against the changes.'
     ])
   })
 })

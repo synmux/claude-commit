@@ -119,7 +119,7 @@ error or is killed by a signal aborts the commit too.
 | `--textconv` / `--no-textconv`           | Let git run [textconv drivers](#textconv-drivers), or never run them (the default)         |
 | `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                    |
 | `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                            |
-| `--typesafe` / `--no-typesafe`           | Check and rank interactive options with TypeSafe, or skip the check when enabled in config |
+| `--typesafe` / `--no-typesafe`           | Check generated messages with TypeSafe, or skip the check when enabled in config           |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                             |
 | `-y, --yes`                              | Commit without asking for confirmation                                                     |
 | `--no-spinner`                           | Disable the progress spinner                                                               |

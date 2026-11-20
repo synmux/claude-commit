@@ -113,6 +113,15 @@ export function mergeConfig(base: Config, override: PartialConfig): Config {
   return merged
 }
 
+/**
+ * A `template` or `customPrompt` value: blank means none. The prompt builder
+ * already skips a blank one, so `null` makes every other reader - the
+ * TypeSafe check above all - agree that nothing was asked.
+ */
+export function textOption(value: string): string | null {
+  return value.trim() === '' ? null : value
+}
+
 /** Validate and normalize a parsed partial config, ignoring unknown keys. */
 export function sanitizePartial(raw: unknown): PartialConfig {
   if (raw === null || typeof raw !== 'object') return {}
@@ -134,10 +143,11 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   bool('filenamesOnly')
   bool('allowApiKey')
 
-  if (typeof obj.template === 'string') out.template = obj.template
-  else if (obj.template === null) out.template = null
-  if (typeof obj.customPrompt === 'string') out.customPrompt = obj.customPrompt
-  else if (obj.customPrompt === null) out.customPrompt = null
+  for (const key of ['template', 'customPrompt'] as const) {
+    const value = obj[key]
+    if (typeof value === 'string') out[key] = textOption(value)
+    else if (value === null) out[key] = null
+  }
 
   if (typeof obj.interactiveCount === 'number' && Number.isFinite(obj.interactiveCount)) {
     out.interactiveCount = Math.max(1, Math.floor(obj.interactiveCount))
@@ -145,7 +155,7 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   if (typeof obj.spinner === 'string' && isSpinnerName(obj.spinner)) {
     out.spinner = obj.spinner
   }
-  if (typeof obj.maxChunkTokens === 'number' && obj.maxChunkTokens > 0) {
+  if (typeof obj.maxChunkTokens === 'number' && obj.maxChunkTokens >= 1) {
     out.maxChunkTokens = Math.floor(obj.maxChunkTokens)
   }
   if (typeof obj.charsPerToken === 'number' && obj.charsPerToken > 0) {
