@@ -1,6 +1,12 @@
 import { expect, expectTypeOf, test } from 'vitest'
+import type { ArmorAlphabet as PackageArmorAlphabet, Config as PackageConfig } from '../index.ts'
 import { DEFAULT_CONFIG } from '../src/config.ts'
 import type { Config, ModelConfig } from '../src/types.ts'
+
+test('the package entry names the type armorAlphabets takes', () => {
+  expectTypeOf<PackageConfig['armorAlphabets']>().toEqualTypeOf<PackageArmorAlphabet[]>()
+  expectTypeOf<PackageArmorAlphabet>().toEqualTypeOf<'base64' | 'base85' | 'hex'>()
+})
 
 test('legacy model configuration without a commits field remains assignable', () => {
   const models: ModelConfig = { summary: 'sonnet', final: 'haiku' }
