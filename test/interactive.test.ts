@@ -1,5 +1,10 @@
+import { execFile } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { PassThrough, Writable } from 'node:stream'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { promisify } from 'node:util'
 import { S_RADIO_ACTIVE, S_RADIO_INACTIVE, S_STEP_ACTIVE, S_STEP_CANCEL, S_STEP_SUBMIT } from '@clack/prompts'
 import { describe, expect, test, vi } from 'vitest'
 import { DEFAULT_CONFIG } from '../src/config.ts'
@@ -37,6 +42,62 @@ test('interactive generation forwards prepared diff and resolved key', async () 
     )
   } finally {
     generate.mockRestore()
+  }
+})
+
+test('--verbose prints the stat of what the picker committed', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'cco-interactive-commit-'))
+  const original = process.cwd()
+  const git = promisify(execFile)
+  const stdinDescriptor = Object.getOwnPropertyDescriptor(process, 'stdin')
+  const input = new PassThrough()
+  Object.defineProperty(process, 'stdin', { configurable: true, value: input })
+  const written: string[] = []
+  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  })
+  const result: generation.GenerateResult = {
+    messages: [first],
+    warnings: [[]],
+    candidateCheck: null,
+    summaries: [],
+    chunkCount: 1,
+    costUsd: 0,
+    lowPriority: { matchedFiles: 0, totalFiles: 1, promoted: false },
+    ignored: { ignoredFiles: 0, totalFiles: 1 }
+  }
+  const generate = vi.spyOn(generation, 'generateCommit').mockResolvedValue(result)
+  try {
+    await git('git', ['init', '-q', root])
+    for (const [key, value] of [
+      ['user.name', 'cco'],
+      ['user.email', 'cco@example.invalid'],
+      ['commit.gpgsign', 'false']
+    ] as const) {
+      await git('git', ['-C', root, 'config', key, value])
+    }
+    await writeFile(join(root, 'change.txt'), 'change\n')
+    await git('git', ['-C', root, 'add', 'change.txt'])
+    process.chdir(root)
+
+    const pending = runInteractive('', DEFAULT_CONFIG, {
+      verbose: true,
+      spinner: false,
+      abortController: new AbortController()
+    })
+    await vi.waitFor(() => expect(written.join('')).toContain('Pick a commit message'))
+    input.write('\r')
+
+    await expect(pending).resolves.toBe(0)
+    const report = written.join('').split('Committed').at(-1) ?? ''
+    expect(report).toContain('change.txt | 1 +')
+  } finally {
+    process.chdir(original)
+    if (stdinDescriptor) Object.defineProperty(process, 'stdin', stdinDescriptor)
+    stderr.mockRestore()
+    generate.mockRestore()
+    await rm(root, { recursive: true, force: true })
   }
 })
 

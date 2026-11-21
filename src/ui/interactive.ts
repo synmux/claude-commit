@@ -31,7 +31,7 @@ import {
   type GenerateResult,
   generateCommit
 } from '../generate.ts'
-import { commit } from '../git.ts'
+import { commit, getStagedStat } from '../git.ts'
 import type { Config } from '../types.ts'
 import { color } from './colors.ts'
 import { askLine, editInEditor, type PromptIo } from './editor.ts'
@@ -100,8 +100,10 @@ export async function runInteractive(diff: string, config: Config, opts: Interac
     }
   }
 
+  const stat = opts.verbose ? await getStagedStat({ textconv: config.textconv }).catch(() => '') : ''
   await commit(message)
   process.stderr.write(`${color('32', '✔')} Committed\n${color('90', firstLine(message))}\n`)
+  if (stat) process.stderr.write(color('90', stat) + '\n')
   return 0
 }
 

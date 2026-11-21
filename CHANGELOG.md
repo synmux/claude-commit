@@ -95,6 +95,8 @@ carrying the same notes at greater length.
   instead of into the redirect.
 - A failed TypeSafe check no longer claims that nothing was flagged, and
   the `--typesafe` help describes what the check does.
+- `cco -i --verbose` prints the stat of what it committed, as `cco --verbose`
+  already did.
 
 ### [Unreleased] - Security
 
