@@ -1226,7 +1226,7 @@ describe('describeCheckNotices', () => {
 
   test('names the error when the check failed', () => {
     expect(describeCheckNotices({ status: 'failed', error: '401 bad key' })).toEqual([
-      'TypeSafe check failed (401 bad key); the options were not checked against the changes.'
+      'TypeSafe check failed (401 bad key); nothing was checked against the staged changes.'
     ])
   })
 })

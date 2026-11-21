@@ -504,7 +504,7 @@ function filenameEvidence(
  */
 export function describeCheckNotices(check: CandidateCheckReport | null): string[] {
   if (check?.status === 'failed') {
-    return [`TypeSafe check failed (${check.error}); the options were not checked against the changes.`]
+    return [`TypeSafe check failed (${check.error}); nothing was checked against the staged changes.`]
   }
   if (check?.mixedCommit) {
     return ['These staged changes look like more than one commit. Consider splitting them.']
