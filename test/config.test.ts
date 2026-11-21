@@ -79,6 +79,68 @@ describe('filenamesOnly', () => {
   })
 })
 
+describe('blank and fractional values', () => {
+  test('a blank customPrompt or template means none', () => {
+    expect(sanitizePartial({ customPrompt: '   ' }).customPrompt).toBeNull()
+    expect(sanitizePartial({ template: '' }).template).toBeNull()
+    expect(sanitizePartial({ customPrompt: 'Mention the ticket.' }).customPrompt).toBe('Mention the ticket.')
+  })
+
+  test('a maxChunkTokens below one token is rejected, not floored to zero', () => {
+    expect(sanitizePartial({ maxChunkTokens: 0.5 }).maxChunkTokens).toBeUndefined()
+    expect(sanitizePartial({ maxChunkTokens: 1.9 }).maxChunkTokens).toBe(1)
+  })
+})
+
+describe('textconv', () => {
+  test('is off by default and accepts only booleans', () => {
+    expect(DEFAULT_CONFIG.textconv).toBe(false)
+    expect(sanitizePartial({ textconv: true }).textconv).toBe(true)
+    expect(sanitizePartial({ textconv: false }).textconv).toBe(false)
+    for (const invalid of ['true', 1, null, {}]) {
+      expect(sanitizePartial({ textconv: invalid }).textconv).toBeUndefined()
+    }
+  })
+
+  test('a higher layer can turn an inherited setting off', () => {
+    expect(resolveConfig({ textconv: true }, {}).textconv).toBe(true)
+    expect(resolveConfig({ textconv: true }, { textconv: false }).textconv).toBe(false)
+  })
+})
+
+describe('armorAlphabets', () => {
+  test('defaults to base64', () => {
+    expect(DEFAULT_CONFIG.armorAlphabets).toEqual(['base64'])
+  })
+
+  test('keeps known alphabets once each and drops anything else', () => {
+    expect(sanitizePartial({ armorAlphabets: ['hex', 'base85', 'hex', 'rot13', 7] }).armorAlphabets).toEqual([
+      'hex',
+      'base85'
+    ])
+    expect(sanitizePartial({ armorAlphabets: 'base64' }).armorAlphabets).toBeUndefined()
+  })
+
+  test('matches names regardless of case and surrounding space', () => {
+    expect(sanitizePartial({ armorAlphabets: ['Base64', ' HEX '] }).armorAlphabets).toEqual(['base64', 'hex'])
+  })
+
+  test('a list with no recognised name is a mistake: the layer below is kept', () => {
+    expect(sanitizePartial({ armorAlphabets: ['b85'] }).armorAlphabets).toBeUndefined()
+    const fileConfig = mergePartial(
+      sanitizePartial({ armorAlphabets: ['base64', 'base85'] }),
+      sanitizePartial({ armorAlphabets: ['b85'] })
+    )
+    expect(resolveConfig(fileConfig, {}).armorAlphabets).toEqual(['base64', 'base85'])
+  })
+
+  test('an explicit empty list is kept and replaces the inherited one', () => {
+    expect(sanitizePartial({ armorAlphabets: [] }).armorAlphabets).toEqual([])
+    expect(resolveConfig({ armorAlphabets: ['hex'] }, {}).armorAlphabets).toEqual(['hex'])
+    expect(resolveConfig({ armorAlphabets: ['hex'] }, { armorAlphabets: [] }).armorAlphabets).toEqual([])
+  })
+})
+
 describe('skipArmored', () => {
   test('sanitizes to booleans only and defaults to false', () => {
     expect(sanitizePartial({ skipArmored: true }).skipArmored).toBe(true)
@@ -237,10 +299,10 @@ describe('loadFileConfig', () => {
     expect((await loadFileConfig(dir, dir)).filenamesOnly).toBe(true)
   })
 
-  test('reads allowApiKey from a config file', async () => {
-    await writeFile(join(dir, '.claude-commit.json'), JSON.stringify({ allowApiKey: true }))
+  test('reads allowApiKey: false from a config file (only user config can turn it on)', async () => {
+    await writeFile(join(dir, '.claude-commit.json'), JSON.stringify({ allowApiKey: false }))
     const cfg = await loadFileConfig(dir, dir)
-    expect(cfg.allowApiKey).toBe(true)
+    expect(cfg.allowApiKey).toBe(false)
   })
 
   test('reads lowPriorityPaths from a config file', async () => {
@@ -350,6 +412,34 @@ describe('global config (XDG)', () => {
     await writeFile(join(projectDir, 'config.json'), JSON.stringify({ gitmoji: true }))
     const cfg = await loadFileConfig(projectDir, projectDir, undefined, env())
     expect(cfg.gitmoji).toBeUndefined()
+  })
+
+  test('repository config cannot turn on textconv or allowApiKey', async () => {
+    const notes: string[] = []
+    await writeFile(join(projectDir, 'package.json'), JSON.stringify({ 'claude-commit': { allowApiKey: true } }))
+    await writeFile(join(projectDir, '.claude-commit.json'), JSON.stringify({ textconv: true }))
+    const cfg = await loadFileConfig(projectDir, projectDir, undefined, env(), (note) => notes.push(note))
+    expect(cfg.allowApiKey).toBeUndefined()
+    expect(cfg.textconv).toBeUndefined()
+    expect(notes).toHaveLength(2)
+    expect(notes.join('\n')).toMatch(/"allowApiKey": true.*package\.json/)
+    expect(notes.join('\n')).toMatch(/"textconv": true.*\.claude-commit\.json/)
+  })
+
+  test('repository config can still turn them off', async () => {
+    await writeFile(join(globalDir(), 'config.json'), JSON.stringify({ allowApiKey: true, textconv: true }))
+    await writeFile(join(projectDir, '.claude-commit.json'), JSON.stringify({ allowApiKey: false, textconv: false }))
+    const cfg = await loadFileConfig(projectDir, projectDir, undefined, env())
+    expect(cfg.allowApiKey).toBe(false)
+    expect(cfg.textconv).toBe(false)
+  })
+
+  test('the global config and a file named with --config can turn them on', async () => {
+    await writeFile(join(globalDir(), 'config.json'), JSON.stringify({ allowApiKey: true }))
+    await writeFile(join(projectDir, 'mine.json'), JSON.stringify({ textconv: true }))
+    const cfg = await loadFileConfig(projectDir, projectDir, 'mine.json', env())
+    expect(cfg.allowApiKey).toBe(true)
+    expect(cfg.textconv).toBe(true)
   })
 
   test('a malformed global config throws', async () => {

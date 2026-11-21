@@ -46,6 +46,9 @@ export interface TypeSafeConfig {
   timeout: number
 }
 
+/** An encoding `skipArmored` can recognise (see `src/diff.ts`). */
+export type ArmorAlphabet = 'base64' | 'base85' | 'hex'
+
 /** Fully-resolved configuration after merging defaults, file config and CLI flags. */
 export interface Config {
   /** Format the subject line as a Conventional Commit (`type(scope): description`). */
@@ -97,9 +100,29 @@ export interface Config {
    * before summarizing. Ciphertext is unreadable to the model and tokenizes
    * at roughly one token per character, so skipping it makes commits in
    * encrypted-file repos (e.g. chezmoi with age) fast and cheap without
-   * losing anything a summary could actually use.
+   * losing anything a summary could actually use. `armorAlphabets` decides
+   * which encodings count.
    */
   skipArmored: boolean
+  /**
+   * The encodings `skipArmored` drops. A line is redacted only when it is 40
+   * or more characters of one listed alphabet and sits in a run of at least
+   * three such lines, so space-free prose and URLs survive. Defaults to
+   * `["base64"]`: age, gpg, PEM and SSH armor. Add `base85` for git binary
+   * patches inside committed patch files; use `hex` alone to drop only plain
+   * hex (`xxd -p` output) and hex-encoded keys.
+   */
+  armorAlphabets: ArmorAlphabet[]
+  /**
+   * Let git run `textconv` drivers (`diff.<driver>.textconv` for a
+   * gitattributes `diff=<driver>`) when reading the staged diff. Off by
+   * default: git-crypt and transcrypt set up decrypting drivers (and sops
+   * documents one), and their output - plaintext secrets - would be sent to
+   * the model. Turn it on
+   * when your drivers only make binary formats readable (documents, images,
+   * databases) and you want the model to see that text.
+   */
+  textconv: boolean
   /**
    * Gitignore-style patterns for paths whose changes matter less than the
    * rest of the commit: generated docs, lockfiles, vendored snapshots, build

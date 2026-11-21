@@ -15,7 +15,8 @@
  */
 
 import type { PathMatcher } from './paths.ts'
-import { estimateDiffTokens, isOpaqueLine } from './tokens.ts'
+import { estimateDiffTokens } from './tokens.ts'
+import type { ArmorAlphabet } from './types.ts'
 
 const FILE_HEADER = 'diff --git '
 const HUNK_HEADER = '@@'
@@ -100,20 +101,20 @@ function breakSection(section: string, maxChars: number): string[] {
   if (section.length <= maxChars) return [section]
 
   const lines = section.split('\n')
-  const firstHunk = lines.findIndex((l) => l.startsWith(HUNK_HEADER))
-  if (firstHunk === -1) {
+  const bodyStart = findBodyStart(lines)
+  if (bodyStart === -1) {
     // No hunks to split on (binary patch, pure rename, mode change): keep whole.
     return [section]
   }
 
-  const header = lines.slice(0, firstHunk).join('\n')
+  const header = lines.slice(0, bodyStart).join('\n')
   const headerLen = header.length + 1 // account for the joining newline
 
   // If there isn't room for a meaningful piece after repeating the header,
   // keep the section whole rather than exploding it into tiny fragments.
   if (maxChars - headerLen < MIN_SPLIT_BUDGET) return [section]
 
-  const hunks = groupHunks(lines.slice(firstHunk))
+  const hunks = groupHunks(lines.slice(bodyStart))
   const units: string[] = []
 
   for (const hunk of hunks) {
@@ -126,6 +127,20 @@ function breakSection(section: string, maxChars: number): string[] {
     }
   }
   return units
+}
+
+/**
+ * Index of a section's first body line, or -1 when it has no body to split.
+ * That is normally the first `@@` line. A piece {@link breakByLines} cut from
+ * the middle of a hunk repeats the file header but has no `@@` line, so its
+ * body starts after the `+++` marker - without this, such a piece could never
+ * be split again, by the token refit or by the overflow retry.
+ */
+function findBodyStart(lines: string[]): number {
+  const firstHunk = lines.findIndex((line) => line.startsWith(HUNK_HEADER))
+  if (firstHunk !== -1) return firstHunk
+  const marker = lines.findIndex((line) => line.startsWith('+++ '))
+  return marker === -1 || marker === lines.length - 1 ? -1 : marker + 1
 }
 
 /** Greedily pack pre-fitted units into as few chunks as possible. */
@@ -179,13 +194,47 @@ function charBudgetFor(text: string, maxTokens: number, charsPerToken: number): 
 const MIN_REDACT_RUN = 3
 
 /**
- * Replace each run of opaque (armored/encoded) lines with a single marker
- * line. The marker keeps the surrounding diff structure interpretable and
- * tells the summary model what was elided, so it can still report that an
+ * The characters of each encoding `skipArmored` recognises, as regex
+ * character-class bodies. None of them contains a space, `.`, `,`, `:` or a
+ * quote - what prose, code and URLs lean on - which is what keeps those out.
+ */
+const ARMOR_ALPHABET_CHARS: Record<ArmorAlphabet, string> = {
+  // RFC 4648, standard and URL-safe, with padding: age, gpg, PEM, SSH armor.
+  base64: 'A-Za-z0-9+/=_\\-',
+  // RFC 1924, the alphabet of git binary patches.
+  base85: '0-9A-Za-z!#$%&()*+;<=>?@^_`{|}~\\-',
+  hex: '0-9A-Fa-f'
+}
+
+/** The alphabets `skipArmored` drops unless `armorAlphabets` says otherwise. */
+export const DEFAULT_ARMOR_ALPHABETS: readonly ArmorAlphabet[] = ['base64']
+
+/** Whether `name` is an alphabet `skipArmored` recognises. */
+export function isArmorAlphabet(name: string): name is ArmorAlphabet {
+  return Object.hasOwn(ARMOR_ALPHABET_CHARS, name)
+}
+
+/** Shortest line content, after the diff marker, that can count as encoded. */
+const MIN_ENCODED_CHARS = 40
+
+/** A diff line that is one long run of `alphabet`, CRLF's trailing `\r` allowed. */
+function encodedLinePattern(alphabet: ArmorAlphabet): RegExp {
+  return new RegExp(`^[+\\- ]?[${ARMOR_ALPHABET_CHARS[alphabet]}]{${MIN_ENCODED_CHARS},}\\r?$`)
+}
+
+/**
+ * Replace each run of encoded lines in one of `alphabets` with a single
+ * marker line. The marker keeps the surrounding diff structure interpretable
+ * and tells the summary model what was elided, so it can still report that an
  * encrypted file changed - without paying ~1 token per character to send
  * ciphertext the model cannot read anyway.
+ *
+ * Token estimation (`isOpaqueLine`) is deliberately broader: over-counting a
+ * long space-free line only over-reserves, but redacting one deletes content.
  */
-export function redactOpaqueRuns(diff: string): string {
+export function redactOpaqueRuns(diff: string, alphabets: readonly ArmorAlphabet[]): string {
+  const patterns = alphabets.map(encodedLinePattern)
+  const isEncoded = (line: string) => patterns.some((pattern) => pattern.test(line))
   const out: string[] = []
   let run: string[] = []
   const flush = () => {
@@ -197,7 +246,7 @@ export function redactOpaqueRuns(diff: string): string {
     run = []
   }
   for (const line of diff.split('\n')) {
-    if (isOpaqueLine(line)) {
+    if (isEncoded(line)) {
       run.push(line)
     } else {
       flush()

@@ -41,7 +41,14 @@
  */
 import type { Fetch } from '@typesafe-ai/sdk'
 import { runPrompt } from './agent.ts'
-import { applyIgnorePatterns, diffPaths, partitionDiff, redactOpaqueRuns, splitDiffToFit } from './diff.ts'
+import {
+  applyIgnorePatterns,
+  DEFAULT_ARMOR_ALPHABETS,
+  diffPaths,
+  partitionDiff,
+  redactOpaqueRuns,
+  splitDiffToFit
+} from './diff.ts'
 import { ClaudeCommitError, isPromptTooLongError } from './errors.ts'
 import { gitmojiConflictsWithType } from './gitmoji.ts'
 import { createPathMatcher } from './paths.ts'
@@ -239,7 +246,10 @@ export function prepareCommitDiff(diff: string, config: Config) {
   }
 
   const effectiveDiff =
-    config.skipArmored && !config.filenamesOnly ? redactOpaqueRuns(ignoreResult.diff) : ignoreResult.diff
+    config.skipArmored && !config.filenamesOnly
+      ? // `??`: a JavaScript caller's hand-built Config may predate the key.
+        redactOpaqueRuns(ignoreResult.diff, config.armorAlphabets ?? DEFAULT_ARMOR_ALPHABETS)
+      : ignoreResult.diff
   const partition = partitionDiff(effectiveDiff, createPathMatcher(config.lowPriorityPaths))
   if (partition.primary.trim() === '') {
     throw new ClaudeCommitError('There are no staged changes to summarize.')
@@ -494,7 +504,7 @@ function filenameEvidence(
  */
 export function describeCheckNotices(check: CandidateCheckReport | null): string[] {
   if (check?.status === 'failed') {
-    return [`TypeSafe check failed (${check.error}); nothing was flagged or reordered.`]
+    return [`TypeSafe check failed (${check.error}); the options were not checked against the changes.`]
   }
   if (check?.mixedCommit) {
     return ['These staged changes look like more than one commit. Consider splitting them.']
@@ -511,6 +521,55 @@ export function describeCandidateCheck(check: {
   const dropped = `${check.droppedDuplicates} near-duplicate${check.droppedDuplicates === 1 ? '' : 's'} dropped`
   const tokens = check.inputTokens === null ? 'input tokens not reported' : `${check.inputTokens} input tokens`
   return `TypeSafe check (${check.model}): ${tokens}, ${dropped}`
+}
+
+/**
+ * One verbose line saying how the low-priority patterns applied. Without it
+ * a pattern that matched nothing and one that matched everything (and was
+ * promoted) are indistinguishable from the message alone.
+ */
+export function describeLowPriorityStats(stats: LowPriorityStats): string {
+  const files = `${stats.totalFiles} file${stats.totalFiles === 1 ? '' : 's'}`
+  if (stats.matchedFiles === 0) {
+    return `low-priority paths: matched none of ${files}`
+  }
+  if (stats.promoted) {
+    return `low-priority paths: matched all ${files} - nothing else changed, so treated as primary`
+  }
+  return `low-priority paths: matched ${stats.matchedFiles} of ${files}`
+}
+
+/**
+ * One verbose line saying how the ignore patterns applied. The counts are
+ * the only way to tell a pattern that quietly matched nothing from one that
+ * quietly removed half the commit.
+ */
+export function describeIgnoreStats(stats: IgnoreStats): string {
+  const files = `${stats.totalFiles} file${stats.totalFiles === 1 ? '' : 's'}`
+  return stats.ignoredFiles === 0
+    ? `ignore: matched none of ${files}`
+    : `ignore: dropped ${stats.ignoredFiles} of ${files} before reading`
+}
+
+/**
+ * The `--verbose` report for a finished generation, one entry per line
+ * written: work done and cost, the TypeSafe check, how each configured path
+ * list applied, then every summary. Both CLI flows print this, so `-i -v`
+ * reports what `-v` does.
+ */
+export function describeVerboseRun(result: GenerateResult, config: Config): string[] {
+  const work = config.filenamesOnly ? 'filenames only (summariser skipped)' : `${result.chunkCount} chunk(s)`
+  return [
+    `${work}, cost $${result.costUsd.toFixed(4)}`,
+    ...(result.candidateCheck?.status === 'checked' ? [describeCandidateCheck(result.candidateCheck)] : []),
+    ...(config.ignore.length > 0 ? [describeIgnoreStats(result.ignored)] : []),
+    ...(config.lowPriorityPaths.length > 0 ? [describeLowPriorityStats(result.lowPriority)] : []),
+    ...result.summaries.map((summary, index) => {
+      const label =
+        summary.priority === 'low' ? `--- summary ${index + 1} (low priority) ---` : `--- summary ${index + 1} ---`
+      return `${label}\n${summary.text}`
+    })
+  ]
 }
 
 function dedupe(items: string[]): string[] {

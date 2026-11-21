@@ -10,6 +10,7 @@
 import { readFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { DEFAULT_ARMOR_ALPHABETS, isArmorAlphabet } from './diff.ts'
 import { ClaudeCommitError } from './errors.ts'
 import type { Config, ModelConfig, PartialConfig, TypeSafeConfig } from './types.ts'
 import { DEFAULT_SPINNER, isSpinnerName } from './ui/spinner.ts'
@@ -32,6 +33,8 @@ export const DEFAULT_CONFIG: Config = {
   charsPerToken: 3.5,
   filenamesOnly: false,
   skipArmored: false,
+  armorAlphabets: [...DEFAULT_ARMOR_ALPHABETS],
+  textconv: false,
   lowPriorityPaths: [],
   ignore: [],
   typesafe: {
@@ -97,15 +100,26 @@ export function mergeConfig(base: Config, override: PartialConfig): Config {
   const typesafe: TypeSafeConfig = { ...base.typesafe, ...override.typesafe }
   const lowPriorityPaths = [...(override.lowPriorityPaths ?? base.lowPriorityPaths)]
   const ignore = [...(override.ignore ?? base.ignore)]
+  const armorAlphabets = [...(override.armorAlphabets ?? base.armorAlphabets)]
   const merged: Config = {
     ...base,
     ...override,
     models,
     typesafe,
     lowPriorityPaths,
-    ignore
+    ignore,
+    armorAlphabets
   }
   return merged
+}
+
+/**
+ * A `template` or `customPrompt` value: blank means none. The prompt builder
+ * already skips a blank one, so `null` makes every other reader - the
+ * TypeSafe check above all - agree that nothing was asked.
+ */
+export function textOption(value: string): string | null {
+  return value.trim() === '' ? null : value
 }
 
 /** Validate and normalize a parsed partial config, ignoring unknown keys. */
@@ -125,13 +139,15 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   }
   bool('interactive')
   bool('skipArmored')
+  bool('textconv')
   bool('filenamesOnly')
   bool('allowApiKey')
 
-  if (typeof obj.template === 'string') out.template = obj.template
-  else if (obj.template === null) out.template = null
-  if (typeof obj.customPrompt === 'string') out.customPrompt = obj.customPrompt
-  else if (obj.customPrompt === null) out.customPrompt = null
+  for (const key of ['template', 'customPrompt'] as const) {
+    const value = obj[key]
+    if (typeof value === 'string') out[key] = textOption(value)
+    else if (value === null) out[key] = null
+  }
 
   if (typeof obj.interactiveCount === 'number' && Number.isFinite(obj.interactiveCount)) {
     out.interactiveCount = Math.max(1, Math.floor(obj.interactiveCount))
@@ -139,7 +155,7 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   if (typeof obj.spinner === 'string' && isSpinnerName(obj.spinner)) {
     out.spinner = obj.spinner
   }
-  if (typeof obj.maxChunkTokens === 'number' && obj.maxChunkTokens > 0) {
+  if (typeof obj.maxChunkTokens === 'number' && obj.maxChunkTokens >= 1) {
     out.maxChunkTokens = Math.floor(obj.maxChunkTokens)
   }
   if (typeof obj.charsPerToken === 'number' && obj.charsPerToken > 0) {
@@ -153,6 +169,17 @@ export function sanitizePartial(raw: unknown): PartialConfig {
   }
   if (Array.isArray(obj.ignore)) {
     out.ignore = cleanPatternList(obj.ignore)
+  }
+  if (Array.isArray(obj.armorAlphabets)) {
+    const known = obj.armorAlphabets
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(isArmorAlphabet)
+    // `[]` deliberately redacts nothing, but a list of only typos is a
+    // mistake, not that choice: keep the layer below, as for other values.
+    if (known.length > 0 || obj.armorAlphabets.length === 0) {
+      out.armorAlphabets = [...new Set(known)]
+    }
   }
 
   if (obj.models && typeof obj.models === 'object') {
@@ -237,12 +264,17 @@ async function findConfigFile(startDir: string, rootDir: string): Promise<string
  * discovery; the global and `package.json` layers still apply beneath it. `env`
  * supplies `XDG_CONFIG_HOME` for locating the global config (defaults to
  * `process.env`).
+ *
+ * `package.json` and a discovered project file belong to the repository, so
+ * they cannot turn on `textconv` or `allowApiKey` (see
+ * {@link USER_ONLY_SETTINGS}); `onNote` hears about each value ignored.
  */
 export async function loadFileConfig(
   cwd: string,
   repoRoot: string,
   configPath?: string,
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
+  onNote?: (message: string) => void
 ): Promise<PartialConfig> {
   let result: PartialConfig = {}
 
@@ -258,14 +290,16 @@ export async function loadFileConfig(
   // project config files). A malformed package.json is not cco's concern to
   // enforce - skip it rather than blocking the commit (the user may even be
   // committing its fix).
+  const packagePath = join(repoRoot, 'package.json')
   let pkg: unknown
   try {
-    pkg = await readJsonIfExists(join(repoRoot, 'package.json'))
+    pkg = await readJsonIfExists(packagePath)
   } catch {
     pkg = undefined
   }
   if (pkg && typeof pkg === 'object' && 'claude-commit' in (pkg as object)) {
-    result = mergePartial(result, sanitizePartial((pkg as Record<string, unknown>)['claude-commit']))
+    const layer = sanitizePartial((pkg as Record<string, unknown>)['claude-commit'])
+    result = mergePartial(result, restrictRepositoryLayer(layer, packagePath, onNote))
   }
 
   const filePath = configPath ? resolve(cwd, configPath) : await findConfigFile(cwd, repoRoot)
@@ -274,10 +308,42 @@ export async function loadFileConfig(
     if (raw === undefined && configPath) {
       throw new ClaudeCommitError(`Config file not found: ${filePath}`)
     }
-    result = mergePartial(result, sanitizePartial(raw))
+    // A file the user named with --config is theirs; a discovered one is the repository's.
+    const layer = sanitizePartial(raw)
+    result = mergePartial(result, configPath ? layer : restrictRepositoryLayer(layer, filePath, onNote))
   }
 
   return result
+}
+
+/**
+ * Settings a repository's own config may turn off but never on, each with
+ * what can turn it on instead. Turning one on sends something the user did
+ * not agree to send: `textconv` feeds the output of the user's diff drivers,
+ * decrypting ones included, to the model, and `allowApiKey` moves billing
+ * from the subscription to API credits.
+ */
+const USER_ONLY_SETTINGS = {
+  textconv: 'the global config, --config or --textconv',
+  allowApiKey: 'the global config or --config'
+} as const
+
+/** A repository config layer without the user-only settings it tried to turn on. */
+function restrictRepositoryLayer(
+  layer: PartialConfig,
+  source: string,
+  onNote?: (message: string) => void
+): PartialConfig {
+  const restricted = { ...layer }
+  for (const [key, enablers] of Object.entries(USER_ONLY_SETTINGS) as Array<
+    [keyof typeof USER_ONLY_SETTINGS, string]
+  >) {
+    if (restricted[key] === true) {
+      delete restricted[key]
+      onNote?.(`Ignoring "${key}": true from ${source}: only ${enablers} can turn it on.`)
+    }
+  }
+  return restricted
 }
 
 /**
@@ -297,6 +363,8 @@ export function mergePartial(base: PartialConfig, override: PartialConfig): Part
   if (lowPriorityPaths) out.lowPriorityPaths = [...lowPriorityPaths]
   const ignore = override.ignore ?? base.ignore
   if (ignore) out.ignore = [...ignore]
+  const armorAlphabets = override.armorAlphabets ?? base.armorAlphabets
+  if (armorAlphabets) out.armorAlphabets = [...armorAlphabets]
   return out
 }
 

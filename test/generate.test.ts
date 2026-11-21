@@ -2,7 +2,13 @@ import { describe, expect, test, vi } from 'vitest'
 import type { runPrompt } from '../src/agent.ts'
 import { DEFAULT_CONFIG } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
-import { describeCheckNotices, generateCommit, prepareCommitDiff } from '../src/generate.ts'
+import {
+  describeCheckNotices,
+  describeVerboseRun,
+  type GenerateResult,
+  generateCommit,
+  prepareCommitDiff
+} from '../src/generate.ts'
 import { availableContextTokens, estimateDiffTokens } from '../src/tokens.ts'
 import type { Config, ModelResult } from '../src/types.ts'
 import { answeringJevFetch, fakeJevFetch, jevAnswers } from './typesafe-fixtures.ts'
@@ -304,6 +310,33 @@ describe('generateCommit', () => {
     expect(summaryPrompts.join('').includes(armorLine(0).slice(1))).toBe(true)
   })
 
+  test('a rejected piece from the middle of a hunk is re-split and retried', async () => {
+    let rejected = false
+    const { runner, summaryPrompts } = stubRunner((_prompt, index) => {
+      // The second chunk is a tail piece of the single armor hunk: no `@@` line.
+      if (index === 1 && !rejected) {
+        rejected = true
+        throw promptTooLong()
+      }
+    })
+    // Unique lines, so a dropped or repeated one cannot hide behind a duplicate.
+    const lines = Array.from({ length: 1_000 }, (_, index) => `+${'Ab9Xy'.repeat(12)}${String(index).padStart(6, '0')}`)
+    const diff = [
+      'diff --git a/secret.age b/secret.age',
+      '--- a/secret.age',
+      '+++ b/secret.age',
+      '@@ -0,0 +1,1000 @@',
+      ...lines
+    ].join('\n')
+    const config: Config = { ...baseConfig, maxChunkTokens: 20_000 }
+    const result = await generateCommit(diff, config, { runner })
+    expect(rejected).toBe(true)
+    expect(result.messages).toEqual(['fix: stubbed message'])
+    // Every line reached the model exactly once across the successful calls.
+    const delivered = summaryPrompts.flatMap((prompt) => prompt.split('\n')).filter((line) => line.includes('Ab9Xy'))
+    expect(delivered).toEqual(lines)
+  })
+
   test('other model errors propagate unchanged', async () => {
     const boom = new ClaudeCommitError('Rate limited by the Claude API.')
     const { runner } = stubRunner(() => {
@@ -446,6 +479,28 @@ describe('generateCommit', () => {
     expect(summaryPrompts[0]).toContain('[cco: 400 armored/encoded lines omitted]')
     expect(summaryPrompts[0]).not.toContain('Ab9Xy')
     expect(summaryPrompts[0]).toContain('a/secret.age')
+  })
+
+  test('a config built without armorAlphabets falls back to the default alphabet', () => {
+    // A JavaScript caller that predates the key, building its own Config.
+    const { armorAlphabets: _omitted, ...older } = {
+      ...baseConfig,
+      skipArmored: true
+    }
+    const prepared = prepareCommitDiff(armorDiff(50), older as Config)
+    expect(prepared.partition.primary).toContain('[cco: 50 armored/encoded lines omitted]')
+  })
+
+  test('armorAlphabets decides which runs skipArmored drops', async () => {
+    const { runner, summaryPrompts } = stubRunner()
+    const config: Config = {
+      ...baseConfig,
+      skipArmored: true,
+      armorAlphabets: ['hex']
+    }
+    await generateCommit(armorDiff(400), config, { runner })
+    expect(summaryPrompts.join('\n')).not.toContain('armored/encoded lines omitted')
+    expect(summaryPrompts.join('\n')).toContain('Ab9Xy')
   })
 })
 
@@ -1117,6 +1172,44 @@ describe('gitmoji format check', () => {
   })
 })
 
+describe('describeVerboseRun', () => {
+  const result: GenerateResult = {
+    messages: ['fix: x'],
+    warnings: [[]],
+    candidateCheck: null,
+    summaries: [
+      { priority: 'primary', text: 'Changed the parser.' },
+      { priority: 'low', text: 'Regenerated docs.' }
+    ],
+    chunkCount: 2,
+    costUsd: 0.0123,
+    lowPriority: { matchedFiles: 1, totalFiles: 2, promoted: false },
+    ignored: { ignoredFiles: 0, totalFiles: 2 }
+  }
+
+  test('reports chunks, cost, pattern stats and every summary', () => {
+    const config: Config = {
+      ...baseConfig,
+      ignore: ['vendor/**'],
+      lowPriorityPaths: ['docs/**']
+    }
+    expect(describeVerboseRun(result, config)).toEqual([
+      '2 chunk(s), cost $0.0123',
+      'ignore: matched none of 2 files',
+      'low-priority paths: matched 1 of 2 files',
+      '--- summary 1 ---\nChanged the parser.',
+      '--- summary 2 (low priority) ---\nRegenerated docs.'
+    ])
+  })
+
+  test('leaves out what did not run', () => {
+    const config: Config = { ...baseConfig, filenamesOnly: true }
+    expect(describeVerboseRun({ ...result, summaries: [] }, config)).toEqual([
+      'filenames only (summariser skipped), cost $0.0123'
+    ])
+  })
+})
+
 describe('describeCheckNotices', () => {
   test('says nothing when the check passed or did not run', () => {
     expect(describeCheckNotices(null)).toEqual([])
@@ -1133,7 +1226,7 @@ describe('describeCheckNotices', () => {
 
   test('names the error when the check failed', () => {
     expect(describeCheckNotices({ status: 'failed', error: '401 bad key' })).toEqual([
-      'TypeSafe check failed (401 bad key); nothing was flagged or reordered.'
+      'TypeSafe check failed (401 bad key); the options were not checked against the changes.'
     ])
   })
 })

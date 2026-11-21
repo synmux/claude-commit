@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, test } from 'vitest'
-import { confirmCommit, editInEditor } from '../src/ui/editor.ts'
+import { canPrompt, confirmCommit, editInEditor, editorStdio } from '../src/ui/editor.ts'
 import { selectWithReadline } from '../src/ui/interactive.ts'
 
 /** Streams standing in for stdin/stderr; `tty` makes readline treat them as a terminal. */
@@ -32,6 +32,36 @@ describe('editInEditor', () => {
     // was open: the editor dies from the signal with the file untouched.
     process.env.GIT_EDITOR = `exec sh -c 'kill -TERM $$'`
     await expect(editInEditor('original')).rejects.toThrow(/SIGTERM.*nothing was committed/i)
+  })
+})
+
+describe('editorStdio', () => {
+  test('the editor shares the terminal when stdout is one', () => {
+    expect(editorStdio({ isTTY: true })).toEqual(['inherit', 'inherit', 'inherit'])
+  })
+
+  test('the editor draws on stderr when stdout is redirected, so `cco > log` is not edited blind', () => {
+    expect(editorStdio({ isTTY: false })).toEqual(['inherit', 2, 'inherit'])
+  })
+})
+
+describe('canPrompt', () => {
+  const streams = (stdin: boolean, stdout: boolean, stderr: boolean) => ({
+    stdin: { isTTY: stdin },
+    stdout: { isTTY: stdout },
+    stderr: { isTTY: stderr }
+  })
+
+  test('ignores stdout: a redirected or piped stdout still leaves a prompt usable', () => {
+    expect(canPrompt(streams(true, false, true))).toBe(true)
+  })
+
+  test('needs stdin to read the answer', () => {
+    expect(canPrompt(streams(false, true, true))).toBe(false)
+  })
+
+  test('needs stderr to show the question', () => {
+    expect(canPrompt(streams(true, true, false))).toBe(false)
   })
 })
 

@@ -5,18 +5,12 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, test, vi } from 'vitest'
 import * as agent from '../src/agent.ts'
-import {
-  buildProgram,
-  describeIgnoreStats,
-  describeLowPriorityStats,
-  flagsToConfig,
-  resolveInteractiveMode,
-  run
-} from '../src/cli.ts'
+import { buildProgram, flagsToConfig, resolveInteractiveMode, run } from '../src/cli.ts'
 import * as commitStyle from '../src/commit-style.ts'
 import { resolveConfig } from '../src/config.ts'
 import { ClaudeCommitError } from '../src/errors.ts'
 import * as generation from '../src/generate.ts'
+import { describeIgnoreStats, describeLowPriorityStats } from '../src/generate.ts'
 import * as typesafe from '../src/typesafe.ts'
 import * as interactive from '../src/ui/interactive.ts'
 
@@ -24,7 +18,8 @@ describe('commit style flags', () => {
   test.each([false, true])('passes preflight results into generation (interactive=%s)', async (isInteractive) => {
     const root = await mkdtemp(join(tmpdir(), 'cco-preflight-reuse-'))
     const original = process.cwd()
-    const streams = [process.stdin, process.stdout]
+    // A prompt-capable terminal: stdin and stderr (stdout plays no part).
+    const streams = [process.stdin, process.stderr]
     const descriptors = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'))
     streams.forEach((stream) => {
       Object.defineProperty(stream, 'isTTY', {
@@ -226,6 +221,43 @@ describe('commit style flags', () => {
       final: 'haiku',
       commits: 'fable'
     })
+  })
+})
+
+describe('blank text flags', () => {
+  test('-p "" and -t "" mean no custom prompt and no template', () => {
+    const program = buildProgram()
+    program.parse(['-p', '', '-t', ' '], { from: 'user' })
+    const flags = flagsToConfig(program.opts())
+    expect(flags.customPrompt).toBeNull()
+    expect(flags.template).toBeNull()
+  })
+})
+
+describe('textconv flags', () => {
+  const parse = (args: string[]) => {
+    const program = buildProgram()
+    program.parse(args, { from: 'user' })
+    return flagsToConfig(program.opts())
+  }
+
+  test('--no-textconv has the effect of "textconv": false', () => {
+    const flags = parse(['--no-textconv'])
+    expect(flags.textconv).toBe(false)
+    expect(resolveConfig({ textconv: true }, flags).textconv).toBe(false)
+  })
+
+  test('--textconv has the effect of "textconv": true', () => {
+    const flags = parse(['--textconv'])
+    expect(flags.textconv).toBe(true)
+    expect(resolveConfig({ textconv: false }, flags).textconv).toBe(true)
+  })
+
+  test('omitting both keeps the configured setting', () => {
+    const flags = parse([])
+    expect(flags.textconv).toBeUndefined()
+    expect(resolveConfig({ textconv: true }, flags).textconv).toBe(true)
+    expect(resolveConfig({}, flags).textconv).toBe(false)
   })
 })
 

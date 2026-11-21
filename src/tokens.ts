@@ -64,9 +64,11 @@ export const OPAQUE_CHARS_PER_TOKEN = 1.0
  * A diff line whose content (after an optional one-character diff marker) is
  * one long unbroken run with no whitespace - the signature of encoded blobs
  * rather than prose or code. Misclassifying dense text (e.g. minified JS) as
- * opaque merely over-reserves, which is the safe direction.
+ * opaque merely over-reserves, which is the safe direction. A file with CRLF
+ * line endings leaves a `\r` on every diff line; it is whitespace to `\S`, so
+ * it is allowed at the end explicitly.
  */
-const OPAQUE_LINE = /^[+\- ]?\S{40,}$/
+const OPAQUE_LINE = /^[+\- ]?\S{40,}\r?$/
 
 /** Whether a single diff line should be estimated at the opaque ratio. */
 export function isOpaqueLine(line: string): boolean {

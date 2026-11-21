@@ -1,6 +1,142 @@
 import type { query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { buildQueryOptions, buildSubprocessEnv, presentCredentialVars, validateCommitStyleModel } from '../src/agent.ts'
+import {
+  buildQueryOptions,
+  buildSubprocessEnv,
+  presentCredentialVars,
+  runPrompt,
+  validateCommitStyleModel
+} from '../src/agent.ts'
+import { isPromptTooLongError } from '../src/errors.ts'
+
+describe('runPrompt', () => {
+  /** A `query` stand-in whose stream yields `messages` and then ends cleanly. */
+  function sdkStream(messages: unknown[]) {
+    return vi.fn(
+      (_params: Parameters<typeof query>[0]) =>
+        (async function* () {
+          yield* messages
+        })() as unknown as ReturnType<typeof query>
+    )
+  }
+  const options = { model: 'haiku', system: 'system prompt' }
+  const errorResult = (text: string) => ({
+    type: 'result',
+    subtype: 'success',
+    is_error: true,
+    result: text,
+    total_cost_usd: 0,
+    modelUsage: {}
+  })
+
+  test('returns the text of a successful run', async () => {
+    const stream = sdkStream([
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: ' fix: x \n',
+        total_cost_usd: 0.5,
+        modelUsage: {}
+      }
+    ])
+    expect(await runPrompt('prompt', options, stream)).toEqual({
+      text: 'fix: x',
+      costUsd: 0.5
+    })
+  })
+
+  test('an oversized prompt stays recognisable when the stream ends cleanly', async () => {
+    const stream = sdkStream([
+      {
+        type: 'assistant',
+        error: 'invalid_request',
+        parent_tool_use_id: null,
+        message: { content: [{ type: 'text', text: 'Prompt is too long' }] }
+      },
+      errorResult('Prompt is too long')
+    ])
+    const failure = await runPrompt('prompt', options, stream).catch((error: unknown) => error)
+    expect(isPromptTooLongError(failure)).toBe(true)
+  })
+
+  /** A `query` stand-in that yields `messages`, then fails as the SDK does on a non-zero CLI exit. */
+  function sdkStreamThenThrow(messages: unknown[], failure: Error) {
+    return vi.fn(
+      (_params: Parameters<typeof query>[0]) =>
+        (async function* () {
+          yield* messages
+          throw failure
+        })() as unknown as ReturnType<typeof query>
+    )
+  }
+  const assistantError = (code: string, text: string) => ({
+    type: 'assistant',
+    error: code,
+    parent_tool_use_id: null,
+    message: { content: [{ type: 'text', text }] }
+  })
+
+  test('an oversized prompt stays recognisable when the CLI then exits non-zero', async () => {
+    const stream = sdkStreamThenThrow(
+      [assistantError('invalid_request', 'Prompt is too long'), errorResult('Prompt is too long')],
+      new Error('Claude Code process exited with code 1')
+    )
+    const failure = await runPrompt('prompt', options, stream).catch((error: unknown) => error)
+    expect(isPromptTooLongError(failure)).toBe(true)
+  })
+
+  test('a known error code keeps its advice when the CLI then exits non-zero', async () => {
+    const stream = sdkStreamThenThrow(
+      [assistantError('authentication_failed', 'Invalid API key'), errorResult('Invalid API key')],
+      new Error('Claude Code returned an error result: Invalid API key')
+    )
+    await expect(runPrompt('prompt', options, stream)).rejects.toThrow(/claude login/)
+  })
+
+  test('a known error code keeps its advice when the run ends on a failed result', async () => {
+    const stream = sdkStream([
+      assistantError('authentication_failed', 'Invalid API key'),
+      {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        errors: ['request failed'],
+        total_cost_usd: 0,
+        modelUsage: {}
+      }
+    ])
+    await expect(runPrompt('prompt', options, stream)).rejects.toThrow(/claude login/)
+  })
+
+  test('a failed result without an error code reports its errors', async () => {
+    const stream = sdkStream([
+      {
+        type: 'result',
+        subtype: 'error_max_turns',
+        is_error: true,
+        errors: [],
+        total_cost_usd: 0,
+        modelUsage: {}
+      }
+    ])
+    await expect(runPrompt('prompt', options, stream)).rejects.toThrow('Model run failed: error_max_turns')
+  })
+
+  test("the SDK's text is kept when an error code arrives without an error result", async () => {
+    const stream = sdkStreamThenThrow(
+      [assistantError('invalid_request', 'Prompt is too long')],
+      new Error('Claude Code returned an error result: Prompt is too long')
+    )
+    const failure = await runPrompt('prompt', options, stream).catch((error: unknown) => error)
+    expect(isPromptTooLongError(failure)).toBe(true)
+  })
+
+  test('an error result is never returned as the model text', async () => {
+    const stream = sdkStream([errorResult('API Error: 500 Internal server error')])
+    await expect(runPrompt('prompt', options, stream)).rejects.toThrow(/API Error: 500/)
+  })
+})
 
 describe('commit style model catalog', () => {
   afterEach(() => vi.unstubAllEnvs())

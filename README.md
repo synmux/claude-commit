@@ -48,7 +48,7 @@ For less model work at the cost of less useful messages, enable
 
 ## Install
 
-Requires [Node.js](https://nodejs.org) 26.11 or later.
+Requires [Node.js](https://nodejs.org) 26.12 or later.
 
 ```sh
 npm install -g @synmux/claude-commit   # `cco` and `claude-commit` on your PATH
@@ -78,11 +78,16 @@ To protect you from surprise pay-as-you-go charges, API credentials in your
 environment (`ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`) are **ignored by
 default**: they are stripped from the environment passed to the model
 subprocess, and a one-line notice is printed to stderr. To bill an API key
-instead (pay-as-you-go), opt in explicitly in your configuration:
+instead (pay-as-you-go), opt in explicitly in your global config
+(`~/.config/claude-commit/config.json`) or a file you pass with `--config`:
 
 ```json
 { "allowApiKey": true }
 ```
+
+A repository's `package.json` or `.claude-commit.json` cannot turn this on, so
+a repo you clone cannot move your billing. It can still turn it off, and `cco`
+prints a note when it ignores a repository's `"allowApiKey": true`.
 
 ## Usage
 
@@ -116,14 +121,16 @@ error or is killed by a signal aborts the commit too.
 | `--model-commits <model>`                | Enable repository commit styles; model used to analyze history (recommended `fable`)       |
 | `--no-conventional` / `--no-gitmoji`     | Explicitly disable these conventions, including when COMMITS.md requests them              |
 | `--skip-armored`                         | Omit armored/encoded lines (age/gpg armor, base64 blobs) from the summarized diff          |
+| `--textconv` / `--no-textconv`           | Let git run [textconv drivers](#textconv-drivers), or never run them (the default)         |
 | `--no-low-priority-paths`                | Ignore `lowPriorityPaths` for this run, so every change weighs the same                    |
 | `--no-ignore`                            | Disregard `ignore` for this run, so every staged change is read                            |
-| `--typesafe` / `--no-typesafe`           | Check and rank interactive options with TypeSafe, or skip the check when enabled in config |
+| `--typesafe` / `--no-typesafe`           | Check generated messages with TypeSafe, or skip the check when enabled in config           |
 | `-d, --dry-run`                          | Print the message to stdout without committing                                             |
 | `-y, --yes`                              | Commit without asking for confirmation                                                     |
 | `--no-spinner`                           | Disable the progress spinner                                                               |
-| `--config <path>`                        | Path to a config file                                                                      |
+| `--config <path>`                        | Use this config file instead of the nearest project one, trusted like your global config   |
 | `-v, --verbose`                          | Print summaries, cost and debug output                                                     |
+| `-V, --version`                          | Print the version number                                                                   |
 
 ### Examples
 
@@ -137,8 +144,13 @@ cco --dry-run | cat      # print a message without committing (no picker, pipe-s
 git commit -F <(cco -d)  # use the message with your own git invocation
 ```
 
-In a pipe (no TTY) there is no spinner and no confirmation prompt - `cco` just
-generates and commits (or prints, with `--dry-run`).
+Every prompt (the confirmation, the picker and the `COMMITS.md` question)
+reads stdin and draws on stderr, so `cco` prompts whenever both are terminals.
+Redirecting stdout does not change that: `cco > run.log` still asks before
+committing, and choosing `e` opens the editor on the terminal rather than in
+the log. Without a terminal on stdin or stderr, as in CI or when piping input
+in, there is no prompt - `cco` just generates and commits (or prints, with
+`--dry-run`). The spinner needs only stderr to be a terminal.
 
 ## Filenames-only mode
 
@@ -161,9 +173,10 @@ groups and weights the remaining filenames. Renames and copies include both
 paths; additions, deletions, binary files and mode changes are included.
 If every staged file is ignored, generation still stops with an error.
 
-`models.summary`, `maxChunkTokens`, `charsPerToken` and `skipArmored` have no
-effect in this mode. `--verbose` reports that the summariser was skipped;
-library results have an empty `summaries` array and `chunkCount: 0`.
+`models.summary`, `maxChunkTokens`, `charsPerToken`, `skipArmored` and
+`armorAlphabets` have no effect in this mode. `--verbose` reports that the
+summariser was skipped; library results have an empty `summaries` array and
+`chunkCount: 0`.
 
 ## Interactive mode
 
@@ -175,9 +188,10 @@ stderr, so stdout stays clean.
 
 To make interactive mode the default without typing `-i` every time, set
 `"interactive": true` in your config (see below); opt out of a single run with
-`--no-interactive`. When there is no interactive terminal - in a pipe, a CI job,
-or with `--dry-run` - `cco` ignores the setting and falls back to the
-non-interactive flow rather than failing.
+`--no-interactive`. When stdin or stderr is not a terminal (a CI job, piped
+input), or with `--dry-run`, `cco` ignores the setting and falls back to the
+non-interactive flow rather than failing. An explicit `-i` without a terminal
+is an error.
 
 ### TypeSafe candidate check
 
@@ -209,8 +223,8 @@ request. In a non-interactive run, every warning prints on stderr before
 you confirm. With TypeSafe off, none of this runs.
 
 One check costs a fraction of a cent and takes under a second. If it
-fails, cco says why and shows the options in the model's order. A failed
-check never blocks a commit.
+fails, cco says why and keeps the model's order, apart from the gitmoji
+check above, which still runs. A failed check never blocks a commit.
 
 The check needs a TypeSafe API key in `$TYPESAFE_API_KEY`. To read it from
 another variable, set `"typesafe.env"`, for example
@@ -239,8 +253,19 @@ Configuration is layered, from lowest to highest precedence:
 
 So a global config sets your personal defaults and any project further down the
 tree can override them. Note that the `config.json` name is recognised **only** in
-the global directory; inside a project, use one of the dotted filenames. The same
-keys are valid at every level:
+the global directory; inside a project, use one of the dotted filenames.
+
+`package.json` and a discovered project file (layers 3 and 4) belong to the
+repository, so they can turn `textconv` and `allowApiKey` off but never on:
+either one, turned on, sends something you have not agreed to send. `cco`
+prints a note for each repository value it ignores. Turn them on in your global
+config, a `--config` file, or (for textconv) with `--textconv`.
+
+`--config <path>` takes layer 4's place, and `cco` trusts the file you name like
+your global config, wherever it lives. Point it only at a file you control:
+`--config .claude-commit.json` would hand a repository's own file that trust.
+
+Apart from that, the same keys are valid at every level:
 
 ```json
 {
@@ -261,6 +286,8 @@ keys are valid at every level:
   "charsPerToken": 3.5,
   "filenamesOnly": false,
   "skipArmored": false,
+  "armorAlphabets": ["base64"],
+  "textconv": false,
   "lowPriorityPaths": [],
   "ignore": [],
   "typesafe": {
@@ -272,6 +299,9 @@ keys are valid at every level:
   "allowApiKey": false
 }
 ```
+
+A blank `customPrompt` or `template` means none, so `"customPrompt": ""` in a
+project clears a global one.
 
 ### Repository commit styles
 
@@ -349,16 +379,18 @@ The `material` spinner is chosen because it's fucking cool. Fight me.
 `maxChunkTokens` is a cap, not a promise: at run time it is clamped to the
 summary model's context window minus a fixed reserve (1M-window models such as
 current Sonnet/Opus keep the full budget; Haiku, older pinned model ids, and
-unrecognised models are floored at 200k), so a single chunk can never overflow
-the model.
+unrecognised models are floored at 200k), so a chunk fits the model by its
+estimate. Values below 1 are ignored.
 
 Chunk sizes come from a content-classified token estimate, not a flat
 `charsPerToken` ratio: armored or encoded lines (age/gpg armor, base64 blobs,
 git binary patches) tokenize at roughly **one token per character** on current
 Claude models, so they are budgeted at that rate while ordinary text keeps the
-configured ratio. If the backend still rejects a chunk as too long, cco
+configured ratio. A hunk too big for one chunk is cut by lines, and every piece
+can be cut again. If the backend still rejects a chunk as too long, cco
 re-splits just that chunk with a halved budget and retries - the rejection is
-free, so the API is the final arbiter.
+free, so the API is the final arbiter. Below an 8k-token budget it stops
+halving and reports the error.
 
 `skipArmored` (or the `--skip-armored` flag) goes further and replaces each
 run of armored lines with a one-line `[cco: N armored/encoded lines omitted]`
@@ -368,6 +400,66 @@ this is the recommended setting for encrypted-file repos - for example a
 every `chezmoi re-add` re-encrypts nondeterministically and produces megabytes
 of churned armor. Drop a `.claude-commit.json` with `{ "skipArmored": true }`
 in the repo root to enable it per-repo.
+
+Only lines written in an encoding alphabet are dropped, so a run of long URLs
+or space-free prose (Japanese, Chinese) is never mistaken for armor. A line is
+redacted when it is at least 40 characters of one alphabet listed in
+`armorAlphabets` and sits in a run of three or more such lines. Pick the
+alphabets for what your repo stores:
+
+| Alphabet           | Characters                                   | Use it for                                                                                                                            |
+| ------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `base64` (default) | `A-Z`, `a-z`, `0-9`, `+`, `/`, `=`, `-`, `_` | age, gpg and PEM armor, SSH keys and base64 blobs: chezmoi with age, `.asc` files, certificates                                       |
+| `base85`           | git's binary-patch set (RFC 1924)            | git binary patches inside committed `.patch` files                                                                                    |
+| `hex`              | `0-9`, `a-f`, `A-F`                          | plain hex such as `xxd -p` output, hex-encoded keys and compiled bytecode, when you want only those dropped (`base64` covers hex too) |
+
+```json
+{ "skipArmored": true, "armorAlphabets": ["base64", "base85"] }
+```
+
+Add `base85` only if you commit patch files. Its alphabet includes most
+punctuation, so a long line of dense code with no space, `.`, `,`, `:` or
+quote can match it. A formatted dump (`xxd`, `hexdump -C`) has offsets and
+spaces, so no alphabet matches it. Names are matched regardless of case, a list
+with no recognised name is ignored (the layer below stays in force), and an
+empty list drops nothing. Token estimates for chunking still treat any long
+space-free line as dense; that only over-reserves room, so it never loses
+content.
+
+### Textconv drivers
+
+A gitattributes `diff=<driver>` line plus a `diff.<driver>.textconv` command
+tells git to run that command on both versions of a file and diff its output
+instead of the stored bytes. `cco` does not run these drivers unless you ask.
+`"textconv": false` is the default, and `--no-textconv` does the same for one
+run, overriding a config layer that turns it on. `"textconv": true` in your
+global config or a `--config` file, or `--textconv`, lets git run them. A
+repository's own config cannot turn them on (see [Configuration](#configuration)).
+
+Why you might want it off (the default):
+
+- **Decrypting drivers.** git-crypt and transcrypt set up textconv drivers so
+  that `git diff` shows plaintext, and the sops docs show how to add one. With
+  textconv on, `cco` would send that plaintext to Claude, and the summaries
+  written from it to TypeSafe when the
+  [candidate check](#typesafe-candidate-check) is on. With it off, the model
+  sees what git stores. For git-crypt that is `Binary files ... differ`. For
+  transcrypt it is base64 ciphertext, which `skipArmored` drops. For sops it
+  is the file with each value replaced by `ENC[AES256_GCM,...]`: no secrets,
+  but not dropped either, because its brackets, commas and colons match no
+  alphabet.
+- **Cost.** A driver runs for both versions of every matching staged file on
+  every `cco` run, and whatever it prints is paid for as tokens.
+
+Why you might want it on:
+
+- **Drivers that make binary formats readable**, such as `pandoc` for `.docx`,
+  `exiftool` for images or `sqlite3 .dump` for databases. Without them the
+  model sees only `Binary files a/x and b/x differ` and can describe the change
+  by its filename alone.
+
+The setting changes only what `cco` reads. `git diff` and `git log -p` in your
+terminal still use your drivers.
 
 ### Low-priority paths
 
@@ -482,7 +574,9 @@ pnpm run build       # bundle bin/ and index.ts into dist/ (only needed to publi
 
 The sources run directly on Node's native type stripping, so there is no build
 step during development: `node bin/cco.js` picks up `dist/` when it exists and
-falls back to the TypeScript entry otherwise.
+falls back to the TypeScript entry otherwise. A `dist/` left by an earlier build
+therefore runs instead of your changes, and a linked `cco` with it; run
+`node bin/cco.ts`, rebuild, or delete `dist/`.
 
 What changed between versions is in [CHANGELOG.md](CHANGELOG.md), and at
 greater length on the

@@ -135,6 +135,9 @@ export async function getRecentCommitMessages(): Promise<string[]> {
  * - The `a/`/`b/` prefixes are forced so `diff.noprefix` /
  *   `diff.mnemonicPrefix` cannot change the header format the diff parser
  *   (`sectionPaths` in `src/diff.ts`) expects.
+ *
+ * `textconv` is not pinned here: the readers that emit diff content pass
+ * `--no-textconv` or `--textconv` explicitly (see {@link StagedDiffOptions}).
  */
 const STAGED_DIFF_FLAGS = [
   '--cached',
@@ -147,9 +150,22 @@ const STAGED_DIFF_FLAGS = [
   '--dst-prefix=b/'
 ]
 
+/** How a staged-diff reader treats gitattributes `textconv` drivers. */
+export interface StagedDiffOptions {
+  /**
+   * Run `textconv` drivers. Defaults to false, because a decrypting driver
+   * (git-crypt, transcrypt, sops) turns the diff into plaintext secrets.
+   */
+  textconv?: boolean
+}
+
+function textconvFlag(options: StagedDiffOptions): string {
+  return options.textconv ? '--textconv' : '--no-textconv'
+}
+
 /** The unified diff of staged changes (`git diff --cached`), repository-root-relative. */
-export async function getStagedDiff(): Promise<string> {
-  return git(['diff', ...STAGED_DIFF_FLAGS])
+export async function getStagedDiff(options: StagedDiffOptions = {}): Promise<string> {
+  return git(['diff', ...STAGED_DIFF_FLAGS, textconvFlag(options)])
 }
 
 /** Parsed list of staged files with their status codes. */
@@ -174,8 +190,8 @@ export async function stageAll(): Promise<void> {
 }
 
 /** A short one-line stat summary of staged changes (for display). */
-export async function getStagedStat(): Promise<string> {
-  return (await git(['diff', ...STAGED_DIFF_FLAGS, '--stat'])).trimEnd()
+export async function getStagedStat(options: StagedDiffOptions = {}): Promise<string> {
+  return (await git(['diff', ...STAGED_DIFF_FLAGS, textconvFlag(options), '--stat'])).trimEnd()
 }
 
 /**

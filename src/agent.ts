@@ -64,15 +64,20 @@ export function buildSubprocessEnv(opts: SubprocessEnvOptions): Record<string, s
   return env
 }
 
-/** Map a known SDK assistant error code to a friendlier, actionable message. */
-function describeAssistantError(code: string): string {
+/**
+ * Map a known SDK assistant error code to a friendlier, actionable message.
+ * An unrecognised code - `invalid_request` among them - keeps the CLI's own
+ * error text as `detail`, since that is the only place "Prompt is too long"
+ * survives for the overflow retry to see.
+ */
+function describeAssistantError(code: string, detail?: string): string {
   switch (code) {
     case 'authentication_failed':
     case 'oauth_org_not_allowed':
       return (
         'Authentication failed. Run `claude login` to sign in with your Claude ' +
         'subscription, or set ANTHROPIC_API_KEY and enable `allowApiKey` in ' +
-        'your claude-commit config.'
+        'your global claude-commit config.'
       )
     case 'billing_error':
       return 'Billing error from the Claude API. Check your plan or API credits.'
@@ -85,7 +90,7 @@ function describeAssistantError(code: string): string {
     case 'max_output_tokens':
       return 'The model hit its output limit before finishing.'
     default:
-      return `Model request failed (${code}).`
+      return detail ? `Model request failed (${code}): ${detail}` : `Model request failed (${code}).`
   }
 }
 
@@ -180,11 +185,16 @@ export async function validateCommitStyleModel(
  *
  * This is the single seam every caller uses; `generate.ts` accepts a
  * replacement of exactly this shape so the pipeline can be tested without a
- * model.
+ * model. `queryRunner` stands in for the SDK's `query` in this module's own
+ * tests.
  *
  * Throws {@link ClaudeCommitError} on any model/authentication/quota failure.
  */
-export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise<ModelResult> {
+export async function runPrompt(
+  prompt: string,
+  opts: RunPromptOptions,
+  queryRunner: typeof query = query
+): Promise<ModelResult> {
   const subprocessEnv = buildSubprocessEnv({
     baseEnv: process.env,
     allowApiKey: opts.allowApiKey ?? false
@@ -196,9 +206,25 @@ export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise
   let model: string | undefined
   let structured: unknown
   let assistantError: string | undefined
+  // What a failed result reported: the API error text of a `success` result
+  // with `is_error`, or the errors (else the subtype) of an error result.
+  let errorResultText: string | undefined
+  // The error the stream reported, if any. It outranks a later SDK failure:
+  // after an error result the CLI exits non-zero, and the SDK's message for
+  // that may drop both the advice for a known code and "Prompt is too long".
+  // `sdkDetail` stands in for the error text when no failed result arrived.
+  const reportedFailure = (sdkDetail?: string): ClaudeCommitError | undefined => {
+    if (assistantError) {
+      return new ClaudeCommitError(describeAssistantError(assistantError, errorResultText ?? sdkDetail))
+    }
+    if (errorResultText !== undefined) {
+      return new ClaudeCommitError(`Model run failed: ${errorResultText || 'the API reported an error'}`)
+    }
+    return undefined
+  }
 
   try {
-    const response = query({ prompt, options })
+    const response = queryRunner({ prompt, options })
     for await (const message of response as AsyncIterable<SDKMessage>) {
       switch (message.type) {
         case 'stream_event': {
@@ -222,12 +248,13 @@ export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise
           // The served model is the (only) key of modelUsage, when present.
           const usedModels = Object.keys(message.modelUsage ?? {})
           if (usedModels.length > 0) model = usedModels[0]
-          if (message.subtype === 'success') {
+          if (message.subtype === 'success' && message.is_error) {
+            errorResultText = message.result.trim()
+          } else if (message.subtype === 'success') {
             resultText = message.result
             structured = message.structured_output
           } else {
-            const detail = 'errors' in message && message.errors.length ? message.errors.join('; ') : message.subtype
-            throw new ClaudeCommitError(`Model run failed: ${detail}`)
+            errorResultText = 'errors' in message && message.errors.length ? message.errors.join('; ') : message.subtype
           }
           break
         }
@@ -236,16 +263,15 @@ export async function runPrompt(prompt: string, opts: RunPromptOptions): Promise
       }
     }
   } catch (err) {
-    if (err instanceof ClaudeCommitError) throw err
     if (opts.abortController?.signal.aborted) {
       throw new ClaudeCommitError('Generation was cancelled.')
     }
-    throw new ClaudeCommitError(`Failed to call the Claude Agent SDK: ${(err as Error).message}`)
+    const sdkDetail = (err as Error).message
+    throw reportedFailure(sdkDetail) ?? new ClaudeCommitError(`Failed to call the Claude Agent SDK: ${sdkDetail}`)
   }
 
-  if (assistantError) {
-    throw new ClaudeCommitError(describeAssistantError(assistantError))
-  }
+  const failure = reportedFailure()
+  if (failure) throw failure
   if (resultText === null) {
     throw new ClaudeCommitError('The model returned no result.')
   }

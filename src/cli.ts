@@ -2,26 +2,25 @@
  * Command-line interface: argument parsing (Commander) and orchestration of the
  * non-interactive and interactive flows.
  */
+import { join } from 'node:path'
 import { Command } from 'commander'
 import { presentCredentialVars } from './agent.ts'
 import { setupCommitStyle } from './commit-style.ts'
-import { loadFileConfig, resolveConfig } from './config.ts'
+import { globalConfigDir, loadFileConfig, resolveConfig, textOption } from './config.ts'
 import { ClaudeCommitError } from './errors.ts'
 import {
-  describeCandidateCheck,
   describeCheckNotices,
+  describeVerboseRun,
   type GenerateOptions,
   type GenerateResult,
   generateCommit,
-  type IgnoreStats,
-  type LowPriorityStats,
   prepareCommitDiff
 } from './generate.ts'
 import { commit, getRepoRoot, getStagedDiff, getStagedStat, isGitRepo, stageAll } from './git.ts'
 import type { ModelConfig, PartialConfig } from './types.ts'
 import { resolveTypeSafeKey } from './typesafe.ts'
 import { color } from './ui/colors.ts'
-import { confirmCommit, editInEditor } from './ui/editor.ts'
+import { canPrompt, confirmCommit, editInEditor } from './ui/editor.ts'
 import { playParty } from './ui/party.ts'
 import { Spinner, spinnerEnabled } from './ui/spinner.ts'
 import { getVersion } from './utils.ts'
@@ -46,6 +45,8 @@ interface CliOptions {
   config?: string
   verbose?: boolean
   skipArmored?: boolean
+  /** `true` for `--textconv`, `false` for `--no-textconv`, unset otherwise. */
+  textconv?: boolean
   filenamesOnly?: boolean
   /** `false` when `--no-low-priority-paths` was passed (Commander's negated-flag shape). */
   lowPriorityPaths?: boolean
@@ -83,12 +84,14 @@ export function buildProgram(): Command {
       'omit armored/encoded lines (age/gpg armor, base64 blobs) from the ' +
         'summarized diff; recommended for chezmoi-style encrypted repos'
     )
+    .option('--textconv', 'let git run textconv diff drivers (sends their output, e.g. decrypted files, to the model)')
+    .option('--no-textconv', 'never run textconv diff drivers, even when "textconv" is set in config')
     .option(
       '--no-low-priority-paths',
       'ignore the "lowPriorityPaths" config for this run, so every change ' + 'weighs the same'
     )
     .option('--no-ignore', 'disregard the "ignore" config for this run, so every staged change is ' + 'read')
-    .option('--typesafe', 'check and rank interactive options with TypeSafe (needs an API key)')
+    .option('--typesafe', 'check generated messages with TypeSafe before you see them (needs an API key)')
     .option('--no-typesafe', 'skip the TypeSafe check even when "typesafe.enable" is set in config')
     .option('-d, --dry-run', 'print the message to stdout without committing')
     .option('-y, --yes', 'commit without asking for confirmation')
@@ -102,13 +105,14 @@ export function buildProgram(): Command {
         'Authentication:',
         '  cco uses the Claude Agent SDK with your Claude Code',
         '  subscription (run `claude login`). ANTHROPIC_API_KEY /',
-        '  ANTHROPIC_AUTH_TOKEN are ignored unless the config sets',
-        '  "allowApiKey": true (pay-as-you-go billing).',
+        '  ANTHROPIC_AUTH_TOKEN are ignored unless your global config',
+        '  (or a --config file) sets "allowApiKey": true (pay-as-you-go',
+        '  billing). A repository config cannot turn it on.',
         '',
         'TypeSafe check:',
         '  With "typesafe": { "enable": true } in config (or --typesafe),',
-        "  interactive options are checked by TypeSafe's Jev model: best",
-        '  first, doubtful ones flagged, near-duplicates dropped. The key is',
+        "  every generated message is checked by TypeSafe's Jev model:",
+        '  doubtful ones are flagged and moved last, near-duplicates dropped. The key is',
         '  read from $TYPESAFE_API_KEY, or the variable "typesafe.env" names.',
         '',
         'Examples:',
@@ -131,9 +135,10 @@ export function flagsToConfig(opts: CliOptions): PartialConfig {
   if (opts.gitmoji !== undefined) cfg.gitmoji = opts.gitmoji
   if (opts.multiline !== undefined) cfg.multiline = opts.multiline
   if (opts.interactive !== undefined) cfg.interactive = opts.interactive
-  if (opts.template !== undefined) cfg.template = opts.template
-  if (opts.prompt !== undefined) cfg.customPrompt = opts.prompt
+  if (opts.template !== undefined) cfg.template = textOption(opts.template)
+  if (opts.prompt !== undefined) cfg.customPrompt = textOption(opts.prompt)
   if (opts.skipArmored !== undefined) cfg.skipArmored = opts.skipArmored
+  if (opts.textconv !== undefined) cfg.textconv = opts.textconv
   if (opts.filenamesOnly !== undefined) cfg.filenamesOnly = opts.filenamesOnly
   // A negated flag arrives as `false`; an empty list overrides any
   // configured patterns because lists replace rather than merge.
@@ -212,7 +217,9 @@ export async function run(argv: string[]): Promise<number> {
       throw new ClaudeCommitError('Not a git repository (or any parent). Run `cco` inside a repo.')
     }
     const repoRoot = await getRepoRoot()
-    const fileConfig = await loadFileConfig(process.cwd(), repoRoot, opts.config)
+    const fileConfig = await loadFileConfig(process.cwd(), repoRoot, opts.config, process.env, (note) =>
+      process.stderr.write(color('90', note) + '\n')
+    )
     const config = resolveConfig(fileConfig, flagsToConfig(opts))
 
     // Surface the credential gate: the actual stripping happens in the agent
@@ -224,7 +231,7 @@ export async function run(argv: string[]): Promise<number> {
           color(
             '90',
             `Ignoring ${ignored.join(' and ')}: using subscription auth. Set ` +
-              `"allowApiKey": true in your claude-commit config to use API credentials.`
+              `"allowApiKey": true in ${join(globalConfigDir(), 'config.json')} to use API credentials.`
           ) + '\n'
         )
       }
@@ -232,7 +239,7 @@ export async function run(argv: string[]): Promise<number> {
 
     if (opts.all) await stageAll()
 
-    const diff = await getStagedDiff()
+    const diff = await getStagedDiff({ textconv: config.textconv })
     if (diff.trim() === '') {
       throw new ClaudeCommitError(
         opts.all
@@ -245,7 +252,7 @@ export async function run(argv: string[]): Promise<number> {
       configInteractive: config.interactive,
       interactiveFlag: opts.interactive,
       dryRun: Boolean(opts.dryRun),
-      hasTty: Boolean(process.stdin.isTTY && process.stdout.isTTY)
+      hasTty: canPrompt()
     })
     if (interactiveMode === 'no-tty-error') {
       throw new ClaudeCommitError('Interactive mode (-i) requires an interactive terminal.')
@@ -261,7 +268,7 @@ export async function run(argv: string[]): Promise<number> {
         model: config.models.commits,
         allowApiKey: config.allowApiKey,
         yes: Boolean(opts.yes),
-        hasTty: Boolean(process.stdin.isTTY && process.stderr.isTTY),
+        hasTty: canPrompt(),
         abortController,
         onPhase: (label) => styleSpinner.start(label),
         onNote: (message) => {
@@ -327,26 +334,7 @@ async function runNonInteractive(
   spinner.stop()
 
   if (verbose) {
-    process.stderr.write(
-      color(
-        '90',
-        `${config.filenamesOnly ? 'filenames only (summariser skipped)' : `${result.chunkCount} chunk(s)`}, cost $${result.costUsd.toFixed(4)}`
-      ) + '\n'
-    )
-    if (result.candidateCheck?.status === 'checked') {
-      process.stderr.write(color('90', describeCandidateCheck(result.candidateCheck)) + '\n')
-    }
-    if (config.ignore.length > 0) {
-      process.stderr.write(color('90', describeIgnoreStats(result.ignored)) + '\n')
-    }
-    if (config.lowPriorityPaths.length > 0) {
-      process.stderr.write(color('90', describeLowPriorityStats(result.lowPriority)) + '\n')
-    }
-    for (const [index, summary] of result.summaries.entries()) {
-      const label =
-        summary.priority === 'low' ? `--- summary ${index + 1} (low priority) ---` : `--- summary ${index + 1} ---`
-      process.stderr.write(color('90', `${label}\n${summary.text}`) + '\n')
-    }
+    for (const line of describeVerboseRun(result, config)) process.stderr.write(color('90', line) + '\n')
   }
 
   const chosen = result.messages[0]
@@ -363,8 +351,7 @@ async function runNonInteractive(
     return 0
   }
 
-  const canPrompt = process.stdin.isTTY && process.stdout.isTTY
-  if (!opts.yes && canPrompt) {
+  if (!opts.yes && canPrompt()) {
     printMessage(message)
     const choice = await confirmCommit()
     if (choice === 'no') {
@@ -380,40 +367,12 @@ async function runNonInteractive(
     }
   }
 
-  const stat = verbose ? await getStagedStat().catch(() => '') : ''
+  const stat = verbose ? await getStagedStat({ textconv: config.textconv }).catch(() => '') : ''
   await commit(message)
   spinner.succeed('Committed')
   process.stderr.write(color('90', firstLine(message)) + '\n')
   if (stat) process.stderr.write(color('90', stat) + '\n')
   return 0
-}
-
-/**
- * One verbose line saying how the low-priority patterns applied. Without it
- * a pattern that matched nothing and one that matched everything (and was
- * promoted) are indistinguishable from the message alone.
- */
-export function describeLowPriorityStats(stats: LowPriorityStats): string {
-  const files = `${stats.totalFiles} file${stats.totalFiles === 1 ? '' : 's'}`
-  if (stats.matchedFiles === 0) {
-    return `low-priority paths: matched none of ${files}`
-  }
-  if (stats.promoted) {
-    return `low-priority paths: matched all ${files} - nothing else changed, so treated as primary`
-  }
-  return `low-priority paths: matched ${stats.matchedFiles} of ${files}`
-}
-
-/**
- * One verbose line saying how the ignore patterns applied. The counts are
- * the only way to tell a pattern that quietly matched nothing from one that
- * quietly removed half the commit.
- */
-export function describeIgnoreStats(stats: IgnoreStats): string {
-  const files = `${stats.totalFiles} file${stats.totalFiles === 1 ? '' : 's'}`
-  return stats.ignoredFiles === 0
-    ? `ignore: matched none of ${files}`
-    : `ignore: dropped ${stats.ignoredFiles} of ${files} before reading`
 }
 
 function firstLine(text: string): string {

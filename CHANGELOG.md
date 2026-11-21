@@ -24,11 +24,32 @@ carrying the same notes at greater length.
   `conventionalCommits`, an option that pairs a gitmoji with a type it
   does not fit (such as `🔧 feat:`) is flagged and moved down. It runs in
   code without a request, so non-interactive runs get it too.
+- **`textconv`, `--textconv` and `--no-textconv`.** Choose whether git runs
+  gitattributes textconv drivers when `cco` reads the staged diff. Off by
+  default (see Security).
+- **`armorAlphabets`.** Choose which encodings `skipArmored` drops:
+  `base64` (the default), `base85` or `hex`. The README suggests which to
+  use for which kind of repo. The library exports the `ArmorAlphabet` type.
 
 ### [Unreleased] - Changed
 
-- **Requires Node.js 26** (26.11 or later), up from 24. `engines`, CI and
+- **Requires Node.js 26** (26.12 or later), up from 24. `engines`, CI and
   the publish workflow all run on 26.
+- **Textconv drivers no longer run by default.** If you relied on one
+  (`pandoc`, `exiftool`, ...) for readable binary diffs, set
+  `"textconv": true`; without it the model sees `Binary files ... differ`.
+- **`skipArmored` drops only encoded lines.** A dropped line must be a run
+  of one `armorAlphabets` alphabet, so space-free prose and lists of URLs
+  reach the model.
+- **Prompts depend on stdin and stderr, not stdout.** `cco > run.log` now
+  asks before committing (it used to commit silently), `cco -i | cat` opens
+  the picker, and `cco 2> err.log` commits without asking because it cannot
+  show the question. `-i --verbose` prints the same report as a
+  non-interactive run.
+- **A repository's config can no longer turn on `allowApiKey` or
+  `textconv`.** `package.json` and project config files may only turn them
+  off; set them in your global config or a `--config` file instead. `cco`
+  prints a note for each repository value it ignores.
 
 ### [Unreleased] - Removed
 
@@ -53,6 +74,40 @@ carrying the same notes at greater length.
   successful edit and committed the unedited message. It is now an error,
   as it is for git itself.
 - `cco -i --no-spinner` now disables the spinner in interactive mode too.
+- **Oversized hunks split all the way down.** A hunk larger than the chunk
+  budget is cut by lines, and every piece after the first lost its `@@`
+  line and could never be split again. A mixed text and armor diff left
+  chunks over budget, and a "prompt is too long" rejection of one of those
+  pieces failed the run.
+- Armor lines from files with CRLF endings count as dense content when
+  chunks are sized, and `skipArmored` drops them.
+- **Model errors keep their text.** An error result is never returned as
+  the commit message, "Prompt is too long" always reaches the overflow
+  retry, and an authentication failure keeps its `claude login` advice
+  when the CLI exits non-zero afterwards.
+- A blank `customPrompt` or `template` (`-p ""`) means none, so TypeSafe no
+  longer checks options against empty custom instructions.
+- `maxChunkTokens` below 1 is ignored instead of rounding down to 0.
+- An `armorAlphabets` list with no recognised name keeps the inherited
+  list instead of turning `skipArmored` off; names match regardless of
+  case.
+- Choosing to edit while stdout is redirected draws the editor on stderr
+  instead of into the redirect.
+- A failed TypeSafe check no longer claims that nothing was flagged, and
+  the `--typesafe` help describes what the check does.
+
+### [Unreleased] - Security
+
+- **Decrypting textconv drivers no longer feed plaintext to the model.**
+  git-crypt and transcrypt (and sops, when set up as its docs show) use
+  textconv drivers, which git ran for `git diff --cached`. `cco` sent the
+  decrypted secrets to Claude, and summaries of them to TypeSafe when the
+  check was on.
+- **A cloned repository can no longer switch billing or re-enable
+  textconv.** Its `package.json` or `.claude-commit.json` could set
+  `"allowApiKey": true`, moving an exported `ANTHROPIC_API_KEY` onto
+  pay-as-you-go, or `"textconv": true`, feeding your decrypting drivers'
+  output to the model.
 
 ## [1.1.0] - 2026-09-13
 

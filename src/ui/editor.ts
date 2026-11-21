@@ -48,7 +48,7 @@ function runEditor(editor: string, file: string): Promise<void> {
     // does rather than naively splitting on whitespace. The file path is our
     // own (tmpdir + UUID), so double-quoting it is safe.
     const child = spawn(`${editor} "${file}"`, {
-      stdio: 'inherit',
+      stdio: editorStdio(process.stdout),
       shell: true
     })
     child.on('error', reject)
@@ -64,12 +64,39 @@ function runEditor(editor: string, file: string): Promise<void> {
   })
 }
 
+/**
+ * The editor's stdio: the terminal, except that its screen goes to stderr
+ * (fd 2) when stdout is redirected. `cco > run.log` still prompts (see
+ * {@link canPrompt}, which requires stderr to be a terminal), and an editor
+ * drawing into run.log would leave the user editing blind.
+ */
+export function editorStdio(stdout: { isTTY?: boolean }): ['inherit', 'inherit' | 2, 'inherit'] {
+  return ['inherit', stdout.isTTY ? 'inherit' : 2, 'inherit']
+}
+
 export type ConfirmChoice = 'yes' | 'no' | 'edit'
 
 /** The streams a readline prompt talks to; defaults to stdin and stderr. */
 export interface PromptIo {
   input?: Readable
   output?: Writable
+}
+
+/** The process streams whose terminal status decides whether cco can prompt. */
+export interface PromptStreams {
+  stdin: { isTTY?: boolean }
+  stderr: { isTTY?: boolean }
+}
+
+/**
+ * Whether cco can ask the user anything. Every prompt - the commit
+ * confirmation, the picker, the COMMITS.md question - reads stdin and draws
+ * on stderr, so both must be terminals. stdout plays no part: it carries
+ * `--dry-run` output and may be piped or redirected while the user is still
+ * at the keyboard.
+ */
+export function canPrompt(streams: PromptStreams = process): boolean {
+  return Boolean(streams.stdin.isTTY && streams.stderr.isTTY)
 }
 
 /**

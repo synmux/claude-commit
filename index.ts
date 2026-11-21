@@ -45,6 +45,7 @@ export {
   parseOptions
 } from './src/prompts.ts'
 export type {
+  ArmorAlphabet,
   ChangePriority,
   Config,
   DiffSummary,
